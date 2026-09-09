@@ -12,41 +12,20 @@ namespace WebMap.Patches
         internal static Dictionary<string, int> stablehashLookup = new Dictionary<string, int>();
         internal static Dictionary<string, int> stablehashLookupAnim = new Dictionary<string, int>();
 
+        // Record hash->name for debug output only. This MUST NOT replace the game's
+        // own GetStableHashCode: clients compute routed-RPC method hashes with the
+        // vanilla implementation, so a reimplementation here desynchronises the
+        // server's comparisons (chat and !pin commands silently stop matching).
         [HarmonyPatch(typeof(StringExtensionMethods), "GetStableHashCode")]
-        [HarmonyPrefix]
-        public static bool GetStableHashCode(string str, ref int __result)
+        [HarmonyPostfix]
+        public static void GetStableHashCode(string str, int __result)
         {
-            if (stablehashLookup.TryGetValue(str, out __result))
+            if (str == null) return;
+            if (!stablehashNames.ContainsKey(__result))
             {
-                return false;
+                stablehashNames[__result] = str;
             }
-
-            /////////////////////////////////////////////////////////////////
-            /// COPY PASTA THE ORIGINAL, ReversePatch wasn't working, 
-            /// cant be bothered to figure out why
-            int num = 5381;
-            int num2 = num;
-            for (int i = 0; i < str.Length && str[i] != 0; i += 2)
-            {
-                num = ((num << 5) + num) ^ str[i];
-                if (i == str.Length - 1 || str[i + 1] == '\0')
-                {
-                    break;
-                }
-                num2 = ((num2 << 5) + num2) ^ str[i + 1];
-            }
-            __result = num + num2 * 1566083941;
-            /////////////////////////////////////////////////////////////////
-
-            stablehashNames[__result] = str;
             stablehashLookup[str] = __result;
-
-            if (WebMapConfig.DEBUG)
-            {
-                ZLog.Log($"First GetStableHashCode: {str} -> {__result}");
-            }
-
-            return false;
         }
 
         [HarmonyPatch(typeof(ZSyncAnimation), "GetHash")]
