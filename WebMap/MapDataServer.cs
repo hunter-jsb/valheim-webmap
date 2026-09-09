@@ -188,6 +188,49 @@ namespace WebMap
             return dataString.Trim();
         }
 
+        // Same data the websocket "players" frame carries, as JSON, so plain HTTP
+        // clients don't have to speak websocket. Position is omitted for players
+        // who chose to be hidden (unless ALWAYS_VISIBLE), matching the map's own
+        // behaviour -- a hidden player must not leak coordinates over HTTP either.
+        public string MakePlayersJson()
+        {
+            var entries = new List<string>();
+            players.ForEach(player =>
+            {
+                ZDO zdoData = null;
+                try { zdoData = ZDOMan.instance.GetZDO(player.m_characterID); } catch { }
+                if (zdoData == null) return;
+
+                Vector3 pos = zdoData.GetPosition();
+                int maxHealth = (int)Math.Ceiling(zdoData.GetFloat("max_health", 25));
+                int health = (int)Math.Ceiling(zdoData.GetFloat("health", maxHealth));
+                maxHealth = Math.Max(maxHealth, health);
+                bool hidden = !player.m_publicRefPos;
+                bool showPos = player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"name\":\"").Append(JsonEscape(player.m_playerName)).Append("\"");
+                sb.Append(",\"health\":").Append(health);
+                sb.Append(",\"maxHealth\":").Append(maxHealth);
+                sb.Append(",\"dead\":").Append(zdoData.GetBool("dead") ? "true" : "false");
+                sb.Append(",\"inBed\":").Append(zdoData.GetBool("inBed") ? "true" : "false");
+                sb.Append(",\"hidden\":").Append(hidden ? "true" : "false");
+                if (showPos)
+                {
+                    sb.Append(FormattableString.Invariant($",\"x\":{pos.x:0.##},\"z\":{pos.z:0.##}"));
+                }
+                sb.Append("}");
+                entries.Add(sb.ToString());
+            });
+            return "{\"count\":" + entries.Count + ",\"players\":[" + string.Join(",", entries) + "]}";
+        }
+
+        private static string JsonEscape(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", " ").Replace("\r", " ").Replace("\t", " ");
+        }
+
         public static MapDataServer getInstance()
         {
             return __instance;
@@ -296,6 +339,14 @@ namespace WebMap
                         tosend.Add(message.ToJson());
                     });
                     textBytes = Encoding.UTF8.GetBytes("[" + string.Join(", ", tosend) + "]");
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
+                case "/players":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(MakePlayersJson());
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;

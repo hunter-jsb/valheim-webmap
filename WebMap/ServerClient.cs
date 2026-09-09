@@ -13,26 +13,44 @@ namespace WebMap
 {
     public class ServerClient
     {
-        public static ZNet.PlayerInfo Client => client ??= CreatePlayerInfo();
+        // Built once. On a crossplay/PlayFab server the Steam identity is unavailable,
+        // and this used to throw on every SendPlayerList tick; now a failure is recorded
+        // once and the injection is simply skipped.
+        public static ZNet.PlayerInfo? Client
+        {
+            get
+            {
+                if (client != null || clientFailed) return client;
+                try { client = CreatePlayerInfo(); }
+                catch (Exception e)
+                {
+                    clientFailed = true;
+                    ZLog.LogWarning("WebMap: server chat client unavailable, !pin disabled: " + e.Message);
+                }
+                return client;
+            }
+        }
         private static ZNet.PlayerInfo? client;
+        private static bool clientFailed;
 
         // Server client is only sent to clients, so this is needed for the server to recognize it.
-        // Disabled for Valheim 1.0 / crossplay: the fake server-client is Steam-based and
-        // NPEs on a PlayFab crossplay server. Web-map chat display is off; map/pins/players work.
-        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
+        // This is what makes chat reach the server at all: without a server entry in the
+        // player list, clients never route Say to us and !pin can never fire.
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
         public class RecognizeServerClient
         {
             static bool Postfix(bool result, PlatformUserID platformUserID, ref ZNet.PlayerInfo playerInfo)
             {
                 if (result) return result;
-                if (platformUserID != Client.m_userInfo.m_id) return result;
+                var c = Client;
+                if (c == null || platformUserID != c.Value.m_userInfo.m_id) return result;
 
-                playerInfo = Client;
+                playerInfo = c.Value;
                 return true;
             }
         }
 
-        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
         public class AddExtraPlayer
         {
             static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
@@ -47,18 +65,29 @@ namespace WebMap
 
             static void AddServer(ZNet net, ZPackage pkg)
             {
-                // This is needed in case multiple mods are adding extra players.
+                if (Client == null) return;          // nothing to inject; leave the list alone
                 var prev = pkg.GetPos();
-                pkg.SetPos(0);
-                if (IsExtraPlayerAdded(net, pkg.ReadInt()))
+                try
                 {
-                  pkg.SetPos(prev);
+                    // This is needed in case multiple mods are adding extra players.
+                    pkg.SetPos(0);
+                    if (IsExtraPlayerAdded(net, pkg.ReadInt()))
+                    {
+                        pkg.SetPos(prev);
+                    }
+                    else
+                    {
+                        pkg.SetPos(0);
+                        pkg.Write(net.m_players.Count + 1);
+                        Write(pkg);
+                    }
                 }
-                else
+                catch (Exception e)
                 {
-                  pkg.SetPos(0);
-                  pkg.Write(net.m_players.Count + 1);
-                  Write(pkg);
+                    // Never let this break SendPlayerList: restore and stop trying.
+                    try { pkg.SetPos(prev); } catch { }
+                    clientFailed = true; client = null;
+                    ZLog.LogWarning("WebMap: disabling server chat client after error: " + e.Message);
                 }
             }
 
@@ -81,18 +110,22 @@ namespace WebMap
             {
                 return SteamGameServer.GetSteamID().ToString();
             }
-            catch (InvalidOperationException)
+            catch (Exception)
             {
+                // Crossplay/PlayFab servers have no Steam game server identity at all.
                 return "0";
             }
         }
 
         public static void Write(ZPackage pkg)
         {
-            pkg.Write(Client.m_name);
-            pkg.Write(Client.m_characterID);
-            pkg.Write(Client.m_userInfo.m_id.ToString());
-            pkg.Write(Client.m_userInfo.m_displayName);
+            var c = Client;
+            if (c == null) return;
+            var info = c.Value;
+            pkg.Write(info.m_name);
+            pkg.Write(info.m_characterID);
+            pkg.Write(info.m_userInfo.m_id.ToString());
+            pkg.Write(info.m_userInfo.m_displayName);
             // Server position is never public.
             pkg.Write(false);
         }
