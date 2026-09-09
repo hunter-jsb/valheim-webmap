@@ -282,7 +282,7 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
-                    byte[] fogBytes = fogTexture.EncodeToPNG();
+                    byte[] fogBytes = ImageConv.EncodeToPNG(fogTexture);
                     res.ContentLength64 = fogBytes.Length;
                     res.Close(fogBytes, true);
                     return true;

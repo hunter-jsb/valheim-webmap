@@ -5,86 +5,39 @@
     <OutputType>Library</OutputType>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>9.0</LangVersion>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <Copyright>(c) 2025 Various Authors</Copyright>
+    <AssemblyName>WebMap</AssemblyName>
     <AssemblyTitle>Valheim WebMap</AssemblyTitle>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>x64</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>portable</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+    <Copyright>(c) 2025 Various Authors</Copyright>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)' == 'Release' ">
-    <PlatformTarget>x64</PlatformTarget>
-    <DebugType>portable</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>portable</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NuGetAudit>false</NuGetAudit>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
-  <PropertyGroup>
-    <TempDir>$([System.IO.Path]::GetTempPath())</TempDir>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="0Harmony">
-      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\0Harmony.dll</HintPath>
-    </Reference>
-    <Reference Include="BepInEx">
-      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\BepInEx.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\BepInEx.dll</HintPath>
-    </Reference>
-    <Reference Include="BepInEx.Harmony">
-      <HintPath Condition="Exists('\opt\BepInEx')">\opt\BepInEx\core\BepInEx.Harmony.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\BepInEx')">..\libs\BepInEx\core\BepInEx.Harmony.dll</HintPath>
-    </Reference>
-    <Reference Include="assembly_valheim">
-      <HintPath Condition="Exists('$(TempDir)assembly_valheim.public.dll')">$(TempDir)assembly_valheim.public.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\assembly_valheim.public.dll</HintPath>
-    </Reference>
-    <Reference Include="assembly_utils">
-      <HintPath Condition="Exists('$(TempDir)assembly_utils.public.dll')">$(TempDir)assembly_utils.public.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\assembly_utils.public.dll</HintPath>
-    </Reference>
-    <Reference Include="Mono.Security">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\Mono.Security.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\Mono.Security.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.CoreModule.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.CoreModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.ImageConversionModule">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.ImageConversionModule.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.ImageConversionModule.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.JSONSerializeModule">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\UnityEngine.JSONSerializeModule.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\UnityEngine.JSONSerializeModule.dll</HintPath>
-    </Reference>
-    <Reference Include="Splatform">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\Splatform.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\Splatform.dll</HintPath>
-    </Reference>
-    <Reference Include="steamworks">
-      <HintPath Condition="Exists('\opt\steam\libs')">\opt\steam\libs\com.rlabrecque.steamworks.net.dll</HintPath>
-      <HintPath Condition="Exists('..\libs\valheim')">..\libs\valheim\com.rlabrecque.steamworks.net.dll</HintPath>
-    </Reference>
-    <Reference Include="WebsocketSharp">
-      <HintPath>..\libs\websocket-sharp.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.CSharp" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <PackageReference Include="Krafs.Publicizer" Version="2.2.1"><PrivateAssets>all</PrivateAssets></PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Publicize Include="assembly_valheim" />
+    <Publicize Include="assembly_utils" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>..\libs\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx"><HintPath>..\libs\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx.Harmony"><HintPath>..\libs\BepInEx\core\BepInEx.Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_valheim"><HintPath>..\libs\valheim\assembly_valheim.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="assembly_utils"><HintPath>..\libs\valheim\assembly_utils.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Mono.Security"><HintPath>..\libs\valheim\Mono.Security.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>..\libs\valheim\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>..\libs\valheim\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>..\libs\valheim\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Splatform"><HintPath>..\libs\valheim\Splatform.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="steamworks"><HintPath>..\libs\valheim\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="WebsocketSharp"><HintPath>..\libs\websocket-sharp.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

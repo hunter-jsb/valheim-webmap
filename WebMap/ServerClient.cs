@@ -17,7 +17,9 @@ namespace WebMap
         private static ZNet.PlayerInfo? client;
 
         // Server client is only sent to clients, so this is needed for the server to recognize it.
-        [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
+        // Disabled for Valheim 1.0 / crossplay: the fake server-client is Steam-based and
+        // NPEs on a PlayFab crossplay server. Web-map chat display is off; map/pins/players work.
+        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
         public class RecognizeServerClient
         {
             static bool Postfix(bool result, PlatformUserID platformUserID, ref ZNet.PlayerInfo playerInfo)
@@ -30,7 +32,7 @@ namespace WebMap
             }
         }
 
-        [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
+        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
         public class AddExtraPlayer
         {
             static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
@@ -69,7 +71,6 @@ namespace WebMap
             // Receiving chat messages requires a valid character ID.
             m_characterID = new ZDOID(ZDOMan.GetSessionID(), uint.MaxValue),
             m_userInfo = new() { m_id = new(ZNet.instance.m_steamPlatform, GetId()), m_displayName = "Server" },
-            m_serverAssignedDisplayName = "Server",
             m_publicPosition = false,
             m_position = Vector3.zero,
         };
@@ -92,7 +93,6 @@ namespace WebMap
             pkg.Write(Client.m_characterID);
             pkg.Write(Client.m_userInfo.m_id.ToString());
             pkg.Write(Client.m_userInfo.m_displayName);
-            pkg.Write(Client.m_serverAssignedDisplayName);
             // Server position is never public.
             pkg.Write(false);
         }

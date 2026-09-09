@@ -89,7 +89,7 @@ namespace WebMap
 
         public void NotifyOnline()
         {
-            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** is *online* 🟢\n💻 {AccessTools.Method(typeof(ZNet), "GetServerIP").Invoke(ZNet.instance, new object[] { })}:{ZNet.instance.m_hostPort}\n🔑 {serverInfo["password"]}\n🗺 {WebMapConfig.URL}");
+            discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** is *online* 🟢\n💻 {AccessTools.Method(typeof(ZNet), "GetServerIP").Invoke(ZNet.instance, new object[] { })}:{ZNet.instance.GetHostPort()}\n🔑 {serverInfo["password"]}\n🗺 {WebMapConfig.URL}");
         }
 
         public void NotifyOffline()
@@ -147,7 +147,7 @@ namespace WebMap
             {
                 Texture2D fogTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE);
                 byte[] fogBytes = File.ReadAllBytes(fogImagePath);
-                fogTexture.LoadImage(fogBytes);
+                ImageConv.LoadImage(fogTexture, fogBytes);
                 mapDataServer.fogTexture = fogTexture;
             }
             catch (Exception e)
@@ -159,7 +159,7 @@ namespace WebMap
                 for (int t = 0; t < fogColors.Length; t++) fogColors[t] = Color.black;
 
                 fogTexture.SetPixels32(fogColors);
-                byte[] fogPngBytes = fogTexture.EncodeToPNG();
+                byte[] fogPngBytes = ImageConv.EncodeToPNG(fogTexture);
 
                 mapDataServer.fogTexture = fogTexture;
                 try
@@ -259,7 +259,7 @@ namespace WebMap
         {
             if (mapDataServer.players.Count > 0 && fogTextureNeedsSaving)
             {
-                byte[] pngBytes = mapDataServer.fogTexture.EncodeToPNG();
+                byte[] pngBytes = ImageConv.EncodeToPNG(mapDataServer.fogTexture);
 
                 if (WebMapConfig.DEBUG) ZLog.Log("Saving Fog");
 
@@ -435,7 +435,7 @@ namespace WebMap
                 Texture2D newTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE,
                     TextureFormat.RGBA32, false);
                 newTexture.SetPixels(newColors);
-                byte[] pngBytes = newTexture.EncodeToPNG();
+                byte[] pngBytes = ImageConv.EncodeToPNG(newTexture);
 
                 mapDataServer.mapImageData = pngBytes;
                 try
