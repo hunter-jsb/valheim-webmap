@@ -1,5 +1,7 @@
 # Valheim WebMap
 
+<img width="1912" height="848" alt="image" src="https://github.com/user-attachments/assets/981287f3-f5fa-4e09-878e-e2c94f6cc19c" />
+
 This server side mod creates a web based map that shows live players and allows shared exploration. After port forwarding the correct port, you can share `http://your_ip:port` to anyone else and they can see the map too. **Clients do not need to have any mods installed!**
 
 For players to show up on the map, they must set **visible to other players** in the in-game map screen. Press `m` to bring up the map settings.
