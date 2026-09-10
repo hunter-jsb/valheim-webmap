@@ -10,8 +10,8 @@ namespace WebMap
     // retroactive, no baseline snapshot needed. Naturally-spawned meadow stumps
     // are named "Stubbe" with no underscore, which is how they stay out of it.
     //
-    // Standing trees are drawn too: a clearing only reads as a clearing next to
-    // the canopy it was cut out of.
+    // Standing trees are counted but not drawn: they set how complete a cut was,
+    // and a canopy layer turned out to just restate the fog shape.
     //
     // Fed from the structures sweep so the world's ZDOs are only walked once.
     internal static class ForestMap
@@ -77,31 +77,43 @@ namespace WebMap
             cells[idx] = c;
         }
 
-        // Canopy sits low and dark so it reads as texture on the terrain render;
-        // worked ground is pale and opaque so a logged-out patch stands out of it.
+        // Only worked ground is drawn. Canopy was tried and dropped: nearly every
+        // explored pixel holds trees, so it just restated the fog shape in green.
+        // Standing trees still count -- they set how complete a cut was.
         public static void Finish()
         {
             if (texture == null) return;
             System.Array.Clear(buf, 0, buf.Length);
+            int size = WebMapConfig.TEXTURE_SIZE;
+
+            // bone, not the browns the structure layer uses: cut ground should never
+            // be mistaken for a building
             foreach (var kv in cells)
             {
                 var c = kv.Value;
-                if (c.stumps > 0)
-                {
-                    // fully cleared ground goes pale; a few stumps under standing
-                    // trees only tint it, so selective logging still shows
-                    float cut = c.stumps / (float)(c.stumps + c.trees);
-                    byte a = (byte)Mathf.Clamp(90 + c.stumps * 18 + cut * 60f, 90, 245);
-                    buf[kv.Key] = new Color32(
-                        (byte)Mathf.Lerp(150, 214, cut),
-                        (byte)Mathf.Lerp(132, 190, cut),
-                        (byte)Mathf.Lerp(96, 150, cut), a);
-                }
-                else
-                {
-                    byte a = (byte)Mathf.Clamp(18 + c.trees * 4, 18, 105);
-                    buf[kv.Key] = new Color32(24, 58, 30, a);
-                }
+                if (c.stumps <= 0) continue;
+                float cut = c.stumps / (float)(c.stumps + c.trees);
+                byte a = (byte)Mathf.Clamp(110 + c.stumps * 22 + cut * 70f, 110, 250);
+                buf[kv.Key] = new Color32(228, 219, 196, a);
+            }
+            // one pixel is 12m of forest floor; a cleared patch needs mass to read
+            var spill = new List<KeyValuePair<int, byte>>();
+            foreach (var kv in cells)
+            {
+                if (kv.Value.stumps <= 0) continue;
+                byte a = (byte)Mathf.Clamp(45 + kv.Value.stumps * 12, 45, 130);
+                int idx = kv.Key;
+                spill.Add(new KeyValuePair<int, byte>(idx - 1, a));
+                spill.Add(new KeyValuePair<int, byte>(idx + 1, a));
+                spill.Add(new KeyValuePair<int, byte>(idx - size, a));
+                spill.Add(new KeyValuePair<int, byte>(idx + size, a));
+            }
+            foreach (var kv in spill)
+            {
+                int idx = kv.Key;
+                if (idx < 0 || idx >= buf.Length) continue;
+                if (buf[idx].a >= kv.Value) continue;
+                buf[idx] = new Color32(228, 219, 196, kv.Value);
             }
             texture.SetPixels32(buf);
             texture.Apply();
