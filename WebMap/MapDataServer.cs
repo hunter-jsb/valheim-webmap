@@ -358,6 +358,22 @@ namespace WebMap
                     res.ContentLength64 = structureBytes.Length;
                     res.Close(structureBytes, true);
                     return true;
+                case "/forest":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "image/png";
+                    res.StatusCode = 200;
+                    byte[] forestBytes = ForestMap.GetPng();
+                    res.ContentLength64 = forestBytes.Length;
+                    res.Close(forestBytes, true);
+                    return true;
+                case "/forest/stats":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(ForestMap.GetStats());
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/structures/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";

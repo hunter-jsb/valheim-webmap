@@ -104,6 +104,7 @@ namespace WebMap
             int half = size / 2;
             cells.Clear();                                    // rebuilt each sweep so demolitions vanish
             System.Array.Clear(buf, 0, buf.Length);
+            ForestMap.Begin();                                // shares this one walk of the world
 
             var byPrefab = new Dictionary<int, int>();
 
@@ -120,16 +121,16 @@ namespace WebMap
                 {
                     long creator = 0L;
                     try { creator = zdo.GetLong(ZDOVars.s_creator, 0L); } catch { }
-                    if (creator != 0L)
+                    Vector3 p = zdo.GetPosition();
+                    int x = Mathf.RoundToInt(p.x / WebMapConfig.PIXEL_SIZE + half);
+                    int y = Mathf.RoundToInt(p.z / WebMapConfig.PIXEL_SIZE + half);
+                    if (x >= 0 && y >= 0 && x < size && y < size)
                     {
-                        Vector3 p = zdo.GetPosition();
-                        int x = Mathf.RoundToInt(p.x / WebMapConfig.PIXEL_SIZE + half);
-                        int y = Mathf.RoundToInt(p.z / WebMapConfig.PIXEL_SIZE + half);
-                        if (x >= 0 && y >= 0 && x < size && y < size)
+                        int idx = y * size + x;
+                        int pref = 0;
+                        try { pref = zdo.GetPrefab(); } catch { }
+                        if (creator != 0L)
                         {
-                            int idx = y * size + x;
-                            int pref = 0;
-                            try { pref = zdo.GetPrefab(); } catch { }
                             var mat = MaterialOf(pref);
                             cells.TryGetValue(idx, out Cell cell);
                             cell.n++; cell.r += mat.r; cell.g += mat.g; cell.b += mat.b;
@@ -138,19 +139,25 @@ namespace WebMap
                             byPrefab.TryGetValue(pref, out int n);
                             byPrefab[pref] = n + 1;
                         }
+                        else
+                        {
+                            ForestMap.Observe(pref, idx);     // trees and stumps aren't placed by anyone
+                        }
                     }
                 }
                 if (seen % ZdosPerFrame == 0) yield return null;   // never stall a frame
             }
 
             yield return Render(size);
+            ForestMap.Finish();
 
             LastCount = found;
             LastScanned = seen;
             statsJson = BuildStats(byPrefab, found, seen);
             pngStale = true;
             sweeping = false;
-            ZLog.Log($"WebMap: structures sweep -> {found} placed pieces from {seen} zdos");
+            ZLog.Log($"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
+                   + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps");
         }
 
         // Each pixel takes the weighted average albedo of the pieces standing on
