@@ -350,6 +350,23 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/structures":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "image/png";
+                    res.StatusCode = 200;
+                    byte[] structureBytes = StructureMap.GetPng();
+                    res.ContentLength64 = structureBytes.Length;
+                    res.Close(structureBytes, true);
+                    return true;
+                case "/structures/refresh":
+                    // Ask for a sweep; the scan itself must happen on the main thread.
+                    StructureMap.RefreshRequested = true;
+                    res.ContentType = "application/json";
+                    res.StatusCode = 202;
+                    textBytes = Encoding.UTF8.GetBytes("{\"queued\":true}");
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/pins":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "text/csv";
