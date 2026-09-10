@@ -36,7 +36,8 @@ namespace WebMap
         // Server client is only sent to clients, so this is needed for the server to recognize it.
         // This is what makes chat reach the server at all: without a server entry in the
         // player list, clients never route Say to us and !pin can never fire.
-        [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
+        // TEMPORARILY DISABLED: suspected of blocking joins on 1.0 crossplay (2026-09-09).
+        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.TryGetPlayerByPlatformUserID))]
         public class RecognizeServerClient
         {
             static bool Postfix(bool result, PlatformUserID platformUserID, ref ZNet.PlayerInfo playerInfo)
@@ -50,7 +51,7 @@ namespace WebMap
             }
         }
 
-        [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
+        // [HarmonyPatch(typeof(ZNet), nameof(ZNet.SendPlayerList))]
         public class AddExtraPlayer
         {
             static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
