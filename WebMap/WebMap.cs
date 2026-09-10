@@ -526,21 +526,6 @@ namespace WebMap
             }
         }
 
-        // Chat reaches a dedicated server as traffic it FORWARDS, not traffic
-        // addressed to it. RouteRPC sees that; HandleRoutedRPC does not. Hooking
-        // here is what lets !pin work without the fake player-list entry that
-        // broke joining on 1.0 crossplay.
-        [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.RouteRPC))]
-        private class ZRoutedRpcRoutePatch
-        {
-            private static void Postfix(ref ZRoutedRpc __instance, RoutedRPCData rpcData)
-            {
-                if (rpcData == null) return;
-                var data = rpcData;
-                ZRoutedRpcPatch.Observe(ref __instance, ref data);
-            }
-        }
-
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
@@ -573,6 +558,7 @@ namespace WebMap
                 if (data?.m_methodHash == sayMethodHash || data?.m_methodHash == "Say".GetStableHashCode())
                 {
                     sayMethodHash = data.m_methodHash;
+                    ZLog.Log($"WebMap: chat RPC observed from peer {data.m_senderPeerID}");
                     try
                     {
                         ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);
@@ -659,7 +645,7 @@ namespace WebMap
                     }
                     catch (Exception ex)
                     {
-                        if (WebMapConfig.DEBUG) ZLog.LogError(ex.ToString());
+                        ZLog.LogWarning("WebMap: failed handling a chat message: " + ex);
                     }
                 }
                 else if (data?.m_methodHash == chatMessageMethodHash || data?.m_methodHash == "ChatMessage".GetStableHashCode())
