@@ -5,13 +5,11 @@ namespace WebMap
 {
     // Forest cover and logging, as a map overlay.
     //
-    // Chopping a tree leaves a stump ZDO behind ("Beech_Stub" and friends), so
-    // stumps are a persistent record of where the woods have been worked --
-    // retroactive, no baseline snapshot needed. Naturally-spawned meadow stumps
-    // are named "Stubbe" with no underscore, which is how they stay out of it.
-    //
-    // Standing trees are counted but not drawn: they set how complete a cut was,
-    // and a canopy layer turned out to just restate the fog shape.
+    // Standing trees shade the terrain; where they have been felled the shading
+    // stops and the bare render shows through, which is what deforestation looks
+    // like on the map. Stumps ("Beech_Stub" and friends) are counted alongside as
+    // the positive record of felling -- naturally-spawned meadow stumps are named
+    // "Stubbe" with no underscore, which is how they stay out of the count.
     //
     // Fed from the structures sweep so the world's ZDOs are only walked once.
     internal static class ForestMap
@@ -77,44 +75,71 @@ namespace WebMap
             cells[idx] = c;
         }
 
-        // Only worked ground is drawn. Canopy was tried and dropped: nearly every
-        // explored pixel holds trees, so it just restated the fog shape in green.
-        // Standing trees still count -- they set how complete a cut was.
+        // Forest darkens the terrain instead of being painted on it: the layer is
+        // multiplied over the base render, so dense woods go dark and green and a
+        // clearing is simply a hole where the real terrain shows through. Cut
+        // ground needs no colour of its own -- the missing trees are the signal.
+        //
+        // One pixel is 12m, so raw counts are one or two trees and read as noise.
+        // A box blur over the populated bounds turns them into canopy.
         public static void Finish()
         {
             if (texture == null) return;
             System.Array.Clear(buf, 0, buf.Length);
             int size = WebMapConfig.TEXTURE_SIZE;
+            if (cells.Count == 0) { texture.SetPixels32(buf); texture.Apply(); pngStale = true; return; }
 
-            // bone, not the browns the structure layer uses: cut ground should never
-            // be mistaken for a building
+            int minX = size, minY = size, maxX = 0, maxY = 0;
             foreach (var kv in cells)
             {
-                var c = kv.Value;
-                if (c.stumps <= 0) continue;
-                float cut = c.stumps / (float)(c.stumps + c.trees);
-                byte a = (byte)Mathf.Clamp(110 + c.stumps * 22 + cut * 70f, 110, 250);
-                buf[kv.Key] = new Color32(228, 219, 196, a);
+                int x = kv.Key % size, y = kv.Key / size;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
-            // one pixel is 12m of forest floor; a cleared patch needs mass to read
-            var spill = new List<KeyValuePair<int, byte>>();
+            const int R = 2;                                  // 5x5 box
+            minX = Mathf.Max(0, minX - R); minY = Mathf.Max(0, minY - R);
+            maxX = Mathf.Min(size - 1, maxX + R); maxY = Mathf.Min(size - 1, maxY + R);
+            int w = maxX - minX + 1, h = maxY - minY + 1;
+
+            var dens = new float[w * h];
             foreach (var kv in cells)
             {
-                if (kv.Value.stumps <= 0) continue;
-                byte a = (byte)Mathf.Clamp(45 + kv.Value.stumps * 12, 45, 130);
-                int idx = kv.Key;
-                spill.Add(new KeyValuePair<int, byte>(idx - 1, a));
-                spill.Add(new KeyValuePair<int, byte>(idx + 1, a));
-                spill.Add(new KeyValuePair<int, byte>(idx - size, a));
-                spill.Add(new KeyValuePair<int, byte>(idx + size, a));
+                int x = kv.Key % size - minX, y = kv.Key / size - minY;
+                if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                dens[y * w + x] = kv.Value.trees;
             }
-            foreach (var kv in spill)
-            {
-                int idx = kv.Key;
-                if (idx < 0 || idx >= buf.Length) continue;
-                if (buf[idx].a >= kv.Value) continue;
-                buf[idx] = new Color32(228, 219, 196, kv.Value);
-            }
+
+            var blur = new float[w * h];
+            float norm = (2 * R + 1) * (2 * R + 1);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float sum = 0f;
+                    for (int dy = -R; dy <= R; dy++)
+                    {
+                        int yy = y + dy; if (yy < 0 || yy >= h) continue;
+                        for (int dx = -R; dx <= R; dx++)
+                        {
+                            int xx = x + dx; if (xx < 0 || xx >= w) continue;
+                            sum += dens[yy * w + xx];
+                        }
+                    }
+                    blur[y * w + x] = sum / norm;
+                }
+
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float d = blur[y * w + x];
+                    if (d <= 0.05f) continue;                  // bare ground stays bare
+                    byte a = (byte)Mathf.Clamp(d * 90f, 12f, 170f);
+                    // multiplied, so this darkens and pulls toward green -- which also
+                    // greens the biomes that aren't green to begin with
+                    buf[(y + minY) * size + (x + minX)] = new Color32(96, 130, 84, a);
+                }
+
             texture.SetPixels32(buf);
             texture.Apply();
             pngStale = true;
