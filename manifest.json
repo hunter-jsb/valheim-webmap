@@ -1,7 +1,9 @@
 {
     "name": "WebMap",
-    "description": "A Valheim dedicated server mod to host a web accessible map.",
-    "website_url": "https://github.com/h0tw1r3/valheim-webmap",
-    "version_number": "2.7.1",
-    "dependencies": []
+    "version_number": "2.8.0",
+    "website_url": "https://github.com/hunter-jsb/valheim-webmap",
+    "description": "Dedicated-server web map for Valheim 1.0. Live players, shared fog-of-war exploration, map pings, and an overlay of player-built structures. Clients need no mods.",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2350"
+    ]
 }

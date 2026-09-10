@@ -1,70 +1,99 @@
 # Valheim WebMap
 
-<img width="1912" height="848" alt="image" src="https://github.com/user-attachments/assets/981287f3-f5fa-4e09-878e-e2c94f6cc19c" />
+A **server-side** mod that publishes a live web map of your Valheim world. Share
+`http://your_ip:port` and anyone can watch the map — **clients do not need any mods
+installed.**
 
-This server side mod creates a web based map that shows live players and allows shared exploration. After port forwarding the correct port, you can share `http://your_ip:port` to anyone else and they can see the map too. **Clients do not need to have any mods installed!**
+This is a fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**,
+with an overlay of player-built structures added.
 
-For players to show up on the map, they must set **visible to other players** in the in-game map screen. Press `m` to bring up the map settings.
+![screenshot](https://github.com/user-attachments/assets/981287f3-f5fa-4e09-878e-e2c94f6cc19c)
 
-Currently only works with Valheim dedicated server.
+For players to appear on the map they must set **visible to other players** on the
+in-game map screen (press `m`).
+
+Dedicated server only.
 
 ## Features
 
-* A explorable map of your Valheim world in your browser that you can zoom with the mousewheel or pinch zoom on mobile.
-* Players can place their own pins with chat commands (see below for more info)
-* Map pings from in game players will show up on the web map as well.
-* Connected players list.
-* Auto follow player feature.
-* Connect and chat messages.
-* Discord server status and player join/leave notifications.
-
-![screenshot](screenshot.webp)
+* An explorable map of your world in the browser — mousewheel zoom, pinch zoom on mobile.
+* Shared fog of war: the map reveals only what players have actually explored.
+* Connected players list, live positions, and auto-follow.
+* In-game map pings show up on the web map.
+* **Player-built structures overlay** — every placed piece is drawn in the colour of its
+  material (wood, stone, black marble, thatch, metal, portals), so bases read as bases
+  instead of blobs. Natural terrain and world-generated ruins are not drawn; the sweep
+  keys off the piece's creator, so only things a player placed appear.
+* Connect / chat messages and Discord server-status notifications.
 
 ## Installation
 
-1. Assuming you have [BepInEx] installed and working, place the WebMap directory in:
+1. With [BepInEx] installed and working, place the `WebMap` directory in:
 
        Steam\steamapps\common\Valheim dedicated server\BepInEx\plugins\WebMap
 
-2. After starting the server for the first time a default configuration file will be created in:
+2. Start the server once; a default config is written to:
 
        Steam\steamapps\common\Valheim dedicated server\BepInEx\config
 
-3. Stop the server, edit the configuration, start the server. Always stop the server
-   before making configuration changes, _otherwise they will be lost on shutdown_.
+3. **Stop the server**, edit the config, then start it again. BepInEx rewrites its config
+   on shutdown, so changes made while the server is running are lost.
+
+4. Open the configured port (default `8080`) and visit `http://your_ip:port`.
+
+## HTTP endpoints
+
+Besides the map UI, the server exposes:
+
+| Path | Returns |
+|------|---------|
+| `/map` | the world render (PNG) |
+| `/fog` | the explored mask (PNG) |
+| `/structures` | player-built structures overlay (PNG, transparent) |
+| `/structures/stats` | piece counts by prefab (JSON) |
+| `/structures/refresh` | queue an immediate structure sweep |
+| `/players`, `/pins`, `/messages` | live state (JSON) |
+
+The structure sweep walks every ZDO on the main thread in slices, so it runs on a slow
+cadence (2 minutes by default) rather than with the map refresh.
 
 ## Updating
 
-If you are updating, one additional thing you and anyone else using the web map might need to do is __clear your browser cache__.
+**Clear your browser cache** after updating, or hold `shift` and click reload.
 
-You may also be able to hold down the `shift` key and click the reload button in your browser.
+## Chat commands
 
-## Chat Commands
+Pins can be placed from in-game chat:
 
-This mod supports placing pins with chat commands. Press `Enter` to start chatting in game. The commands are as follows:
+* `!pin` — a dot pin where you stand.
+* `!pin my pin name` — a dot pin with a label.
+* `!pin [type] [text]` — types are `dot`, `fire`, `mine`, `house`, `cave`.
+* `!undoPin` — remove your most recent pin.
+* `!deletePin [text]` — remove the most recent pin whose text matches exactly.
 
-* `!pin` - Place a "dot" pin with no text on the map where you are currently standing.
-* `!pin my pin name` - Place a "dot" pin with "my pin name" under it on the map where you are currently standing.
-* `!pin [pin-type] [text]` - Place a pin of a certain type with optional text under it on the map where you are currently standing.
-    * Pin types are: `dot`, `fire`, `mine`, `house` and `cave`. Example command: `/pin house my awesome base`
-* `!undoPin` - Delete your most recent pin.
-* `!deletePin [text]` - Delete the most recent pin that matches the text exactly.
+Commands are not case sensitive. Past the configured limit, a player's oldest pin is dropped.
 
-If a player creates too many pins, their oldest pin will be removed. There is a setting to control how many pins a player can create.
+## Known issues on 1.0
 
-_Commands are not case sensitive._
+* **Chat commands are unverified on 1.0.** Upstream made pins work by registering a fake
+  server-side player so clients would route chat to it; on 1.0 that patch stops players
+  joining the server entirely, so it is disabled here. Chat RPCs do still reach the
+  server, but pin placement has not been confirmed working since the 1.0 update. Map
+  pings, players, fog and structures are unaffected.
+* Death notices in the feed are new and lightly tested.
 
 ## Licence
 
-Where applicable, assume stuff is under the MIT licence.
+MIT where applicable.
 
 ## Credit
 
-* Currently maintained by [Jeff Clark](https://github.com/h0tw1r3)
+* 1.0 update and structures overlay by [Hunter Boyd](https://github.com/hunterjsb)
+* Maintained upstream by [Jeff Clark](https://github.com/h0tw1r3)
 * Original work by [Kyle Paulsen](https://github.com/kylepaulsen)
 * Background by [webtreats], released under the [CC BY 2.0] license.
 
+[h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
 [BepInEx]: https://github.com/BepInEx/BepInEx
-[node]: https://nodejs.org/en/download/
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
 [CC BY 2.0]: https://creativecommons.org/licenses/by/2.0/
