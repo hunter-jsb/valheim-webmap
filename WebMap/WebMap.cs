@@ -525,12 +525,29 @@ namespace WebMap
             }
         }
 
+        // Chat reaches a dedicated server as traffic it FORWARDS, not traffic
+        // addressed to it. RouteRPC sees that; HandleRoutedRPC does not. Hooking
+        // here is what lets !pin work without the fake player-list entry that
+        // broke joining on 1.0 crossplay.
+        [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.RouteRPC))]
+        private class ZRoutedRpcRoutePatch
+        {
+            private static void Postfix(ref ZRoutedRpc __instance, RoutedRPCData rpcData)
+            {
+                if (rpcData == null) return;
+                var data = rpcData;
+                ZRoutedRpcPatch.Observe(ref __instance, ref data);
+            }
+        }
+
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
             private static string[] ignoreRpc = { "DestroyZDO", "SetEvent", "OnTargeted", "Step" };
 
-            private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data)
+            private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data) => Observe(ref __instance, ref data);
+
+            internal static void Observe(ref ZRoutedRpc __instance, ref RoutedRPCData data)
             {
                 string methodName = StringExtensionMethods_Patch.GetStableHashName(data?.m_methodHash ?? 0);
                 if (Array.Exists(ignoreRpc, x => x == methodName)) // Ignore noise
@@ -559,7 +576,9 @@ namespace WebMap
                     {
                         ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);
                         Vector3 pos = zdoData.GetPosition();
-                        var package = data.m_parameters;
+                        // A copy: RouteRPC still has to forward this packet onward,
+                        // so the original's read position must not move.
+                        ZPackage package = new ZPackage(data.m_parameters.GetArray());
                         var messageType = package.ReadInt();
                         var userInfo = new UserInfo();
                         userInfo.Deserialize(ref package);
