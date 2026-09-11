@@ -24,6 +24,11 @@ Dedicated server only.
   material (wood, stone, black marble, thatch, metal, portals), so bases read as bases
   instead of blobs. Natural terrain and world-generated ruins are not drawn; the sweep
   keys off the piece's creator, so only things a player placed appear.
+* **Forest and logging overlay** — standing trees shade the terrain, and felled ground
+  stops being shaded, so clearings show through as bare terrain. Stumps are counted as
+  the positive record of felling.
+* **Server announcements** — `POST /announce` puts a message on every player's screen,
+  for restart warnings and anything else worth saying in game.
 * Connect / chat messages and Discord server-status notifications.
 
 ## Installation
@@ -48,6 +53,10 @@ Besides the map UI, the server exposes:
 | Path | Returns |
 |------|---------|
 | `/map` | the world render (PNG) |
+| `/map.jpg` | the same render as JPEG — about a seventh the size, and the render is opaque so nothing is lost |
+| `/forest` | forest cover and logging (PNG, transparent) |
+| `/forest/stats` | tree and stump counts (JSON) |
+| `/announce` | POST a line to every player's screen (see below) |
 | `/fog` | the explored mask (PNG) |
 | `/structures` | player-built structures overlay (PNG, transparent) |
 | `/structures/stats` | piece counts by prefab (JSON) |
@@ -73,14 +82,36 @@ Pins can be placed from in-game chat:
 
 Commands are not case sensitive. Past the configured limit, a player's oldest pin is dropped.
 
-## Known issues on 1.0
+## Server announcements
 
-* **Chat commands are unverified on 1.0.** Upstream made pins work by registering a fake
-  server-side player so clients would route chat to it; on 1.0 that patch stops players
-  joining the server entirely, so it is disabled here. Chat RPCs do still reach the
-  server, but pin placement has not been confirmed working since the 1.0 update. Map
-  pings, players, fog and structures are unaffected.
-* Death notices in the feed are new and lightly tested.
+`POST /announce` with the message as the body and an `X-Announce-Token` header shows the
+text on every connected player's screen. The shared secret goes in a file named
+`announce.token` beside the DLL — not in the BepInEx config, which is rewritten on
+shutdown and would discard it. With no token file the route is closed.
+
+It deliberately uses `MessageHud`'s `ShowMessage` RPC rather than chat: `Chat` gates every
+message on `RelationsManager.CheckPermissionAsync(sender.UserId, …)`, and a server has no
+platform user id to satisfy that with, so chat sent from a server is dropped in silence.
+
+## How chat reaches the server on 1.0
+
+Worth writing down, because it is not obvious. Valheim 1.0 sends player chat **addressed
+to each permitted recipient**, never broadcast:
+
+```csharp
+Chat.SendText (shout)      -> InvokeRoutedRPC(user, "ChatMessage", headPoint, 2, userInfo, text)
+Talker.Say   (normal/whisper) -> m_nview.InvokeRPC(user, "Say", (int)type, userInfo, text)
+```
+
+The server's `RPC_RoutedRPC` only calls `HandleRoutedRPC` when the target is itself or
+Everybody, so a hook there sees pings (which *are* broadcast) and nothing else. Player
+chat instead goes down the `RouteRPC` branch, which the server runs while forwarding the
+packet — so that is where this mod observes it. A shout arrives once per recipient and is
+de-duplicated on sender, method and payload within two seconds.
+
+Upstream solved this by registering a fake server-side player so clients would address the
+server too. **On 1.0 that patch stops anyone joining at all** — the server stays healthy and
+registered but logs zero connection attempts — so it is not used here and the code is gone.
 
 ## Licence
 

@@ -612,7 +612,6 @@ namespace WebMap
                 if (data?.m_methodHash == sayMethodHash || data?.m_methodHash == "Say".GetStableHashCode())
                 {
                     sayMethodHash = data.m_methodHash;
-                    ZLog.Log($"WebMap: chat RPC observed from peer {data.m_senderPeerID}");
                     try
                     {
                         ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);

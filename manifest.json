@@ -1,8 +1,8 @@
 {
     "name": "WebMap",
-    "version_number": "2.8.0",
+    "version_number": "2.9.0",
     "website_url": "https://github.com/hunter-jsb/valheim-webmap",
-    "description": "Dedicated-server web map for Valheim 1.0. Live players, shared fog-of-war exploration, map pings, and an overlay of player-built structures. Clients need no mods.",
+    "description": "Dedicated-server web map for Valheim 1.0. Live players, shared fog-of-war exploration, player-built structures, forest and logging, and in-game server announcements. Clients need no mods.",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2350"
     ]

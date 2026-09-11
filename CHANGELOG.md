@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.9.0
+
+* Forest and logging overlay (`/forest`, `/forest/stats`): trees shade the terrain,
+  cleared ground shows through.
+* Server announcements (`POST /announce`) via `MessageHud.ShowMessage`, so they reach
+  unmodded clients; chat cannot be used for this, see the README.
+* World render also served as JPEG (`/map.jpg`), roughly a seventh of the PNG.
+* Chat is observed at `ZRoutedRpc.RouteRPC`, where 1.0 actually routes it, instead of
+  `HandleRoutedRPC`, which never sees a message addressed to another player.
+* Removed the fake server-client patches: they block joins on 1.0 and are unnecessary now.
+
 ## 2.8.0
 
 * Build for **Valheim 1.0 (Deep North)**.

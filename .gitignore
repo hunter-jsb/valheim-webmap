@@ -338,3 +338,6 @@ WebMap.zip
 
 tools/
 dist/
+
+# the announce shared secret lives beside the DLL, never in the repo
+announce.token
