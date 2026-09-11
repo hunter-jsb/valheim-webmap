@@ -14,6 +14,13 @@ namespace WebMap
     // Fed from the structures sweep so the world's ZDOs are only walked once.
     internal static class ForestMap
     {
+        // Shading curve. Trees per pixel run ~0.5 at a woodland fringe to ~8 in
+        // deep Black Forest, so the curve is tuned to spend its range there:
+        // 1 tree/px reads 75, 3 reads 135, 8 reads 180. Nothing ever pins.
+        private const float Steepness = 225f;
+        private const float HalfShade = 2f;     // density at which shading is half of Steepness
+        private const float MaxShade  = 200f;   // never pitch black
+
         private enum Kind { Other, Tree, Stump }
 
         private struct Cell { public int trees, stumps; }
@@ -133,8 +140,13 @@ namespace WebMap
                 for (int x = 0; x < w; x++)
                 {
                     float d = blur[y * w + x];
-                    if (d <= 0.05f) continue;                  // bare ground stays bare
-                    byte a = (byte)Mathf.Clamp(d * 90f, 12f, 170f);
+                    if (d <= 0.02f) continue;                  // bare ground stays bare
+                    // A straight ramp clamped, and every forest interior came out the
+                    // same flat slab: felling half a wood changed nothing on the map
+                    // because both densities were over the clamp. This saturates
+                    // smoothly instead, so there is a gradient at every density and
+                    // thinning reads as lightening long before the last tree goes.
+                    byte a = (byte)Mathf.Min(MaxShade, Steepness * d / (d + HalfShade));
                     // multiplied, so this darkens and pulls toward green -- which also
                     // greens the biomes that aren't green to begin with
                     buf[(y + minY) * size + (x + minX)] = new Color32(96, 130, 84, a);
@@ -144,7 +156,23 @@ namespace WebMap
             texture.Apply();
             pngStale = true;
             statsJson = "{\"trees\":" + LastTrees + ",\"stumps\":" + LastStumps
-                      + ",\"cells\":" + cells.Count + "}";
+                      + ",\"cells\":" + cells.Count
+                      + ",\"density\":" + Percentiles(blur) + "}";
+        }
+
+        // Where the shading curve is actually spending its range. Tuning it by
+        // eye means guessing at the tree counts behind the picture; these say so.
+        private static string Percentiles(float[] blur)
+        {
+            var v = new List<float>();
+            foreach (float f in blur) if (f > 0.02f) v.Add(f);
+            if (v.Count == 0) return "{}";
+            v.Sort();
+            System.Func<float, float> q = p => v[Mathf.Clamp((int)(p * v.Count), 0, v.Count - 1)];
+            return "{\"p50\":" + q(0.50f).ToString("0.00")
+                 + ",\"p90\":" + q(0.90f).ToString("0.00")
+                 + ",\"p99\":" + q(0.99f).ToString("0.00")
+                 + ",\"max\":" + v[v.Count - 1].ToString("0.00") + "}";
         }
 
         public static string GetStats() => statsJson;

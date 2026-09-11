@@ -105,6 +105,7 @@ namespace WebMap
             cells.Clear();                                    // rebuilt each sweep so demolitions vanish
             System.Array.Clear(buf, 0, buf.Length);
             ForestMap.Begin();                                // shares this one walk of the world
+            Vehicles.Begin();
 
             var byPrefab = new Dictionary<int, int>();
 
@@ -131,13 +132,21 @@ namespace WebMap
                         try { pref = zdo.GetPrefab(); } catch { }
                         if (creator != 0L)
                         {
-                            var mat = MaterialOf(pref);
-                            cells.TryGetValue(idx, out Cell cell);
-                            cell.n++; cell.r += mat.r; cell.g += mat.g; cell.b += mat.b;
-                            cells[idx] = cell;
-                            found++;
-                            byPrefab.TryGetValue(pref, out int n);
-                            byPrefab[pref] = n + 1;
+                            var veh = Vehicles.Classify(pref);
+                            if (veh != Vehicles.Kind.None)
+                            {
+                                Vehicles.Observe(pref, veh, p);   // a boat is not a building
+                            }
+                            else
+                            {
+                                var mat = MaterialOf(pref);
+                                cells.TryGetValue(idx, out Cell cell);
+                                cell.n++; cell.r += mat.r; cell.g += mat.g; cell.b += mat.b;
+                                cells[idx] = cell;
+                                found++;
+                                byPrefab.TryGetValue(pref, out int n);
+                                byPrefab[pref] = n + 1;
+                            }
                         }
                         else
                         {
@@ -150,6 +159,7 @@ namespace WebMap
 
             yield return Render(size);
             ForestMap.Finish();
+            Vehicles.Finish();
 
             LastCount = found;
             LastScanned = seen;
