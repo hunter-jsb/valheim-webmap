@@ -82,16 +82,15 @@ namespace WebMap
             try
             {
                 if (ZRoutedRpc.instance == null || ZNet.instance == null) return;
-                var peers = ZNet.instance.GetPeers();
+                // Target 0 is "everybody", exactly what MessageHud.MessageAll sends.
+                // Addressing each peer by m_uid instead looked equivalent and reached
+                // nobody in game while still reaching the web feed -- which is what an
+                // empty peer list looks like from the outside. Broadcast needs no list.
+                ZRoutedRpc.instance.InvokeRoutedRPC(0L, "ShowMessage",
+                    (int)MessageHud.MessageType.Center, text);
                 int sent = 0;
-                foreach (var peer in peers)
-                {
-                    if (peer == null) continue;
-                    ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage",
-                        (int)MessageHud.MessageType.Center, text);
-                    sent++;
-                }
-                ZLog.Log($"WebMap: announced to {sent} peer(s): \"{text}\"");
+                try { var ps = ZNet.instance.GetPeers(); sent = ps == null ? -1 : ps.Count; } catch { sent = -2; }
+                ZLog.Log($"WebMap: announced (peers seen: {sent}): \"{text}\"");
                 // the web feed no longer sees this via the chat observer, so add it here
                 try { WebMap.mapDataServer?.AddMessage(0L, (int)Talker.Type.Shout,
                                                        WebMapConfig.ANNOUNCE_NAME, text); } catch { }
