@@ -74,6 +74,7 @@ namespace WebMap
             StaticCoroutine.Start(SaveFogTextureLoop());
             StaticCoroutine.Start(UpdateFogTextureLoop());
             StaticCoroutine.Start(StructureMap.Loop());
+            StaticCoroutine.Start(Announce.Pump());
             NotifyOnline();
         }
 

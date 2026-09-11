@@ -139,11 +139,17 @@ namespace WebMap
 
             httpServer.OnGet += (sender, e) =>
             {
-                HttpListenerRequest req = e.Request;
-
                 if (ProcessSpecialRoutes(e)) return;
 
                 ServeStaticFiles(e);
+            };
+            // /announce is a POST; without this websocket-sharp answers 501
+            httpServer.OnPost += (sender, e) =>
+            {
+                if (ProcessSpecialRoutes(e)) return;
+
+                e.Response.StatusCode = 404;
+                e.Response.Close();
             };
         }
 
@@ -382,6 +388,42 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/announce":
+                    // Shared-secret only, and deliberately absent from the public
+                    // Worker's allowlist: this writes into everyone's chat.
+                    {
+                        string want = Announce.Token;
+                        string got = req.Headers["X-Announce-Token"] ?? "";
+                        if (want == null || got != want)
+                        {
+                            res.StatusCode = 403;
+                            textBytes = Encoding.UTF8.GetBytes("{\"error\":\"forbidden\"}");
+                            res.ContentType = "application/json";
+                            res.ContentLength64 = textBytes.Length;
+                            res.Close(textBytes, true);
+                            return true;
+                        }
+                        string body;
+                        using (var sr = new StreamReader(req.InputStream, Encoding.UTF8))
+                            body = sr.ReadToEnd();
+                        body = (body ?? "").Trim();
+                        if (body.Length == 0)
+                        {
+                            res.StatusCode = 400;
+                            textBytes = Encoding.UTF8.GetBytes("{\"error\":\"empty\"}");
+                            res.ContentType = "application/json";
+                            res.ContentLength64 = textBytes.Length;
+                            res.Close(textBytes, true);
+                            return true;
+                        }
+                        Announce.Enqueue(body);
+                        res.ContentType = "application/json";
+                        res.StatusCode = 202;
+                        textBytes = Encoding.UTF8.GetBytes("{\"queued\":true}");
+                        res.ContentLength64 = textBytes.Length;
+                        res.Close(textBytes, true);
+                        return true;
+                    }
                 case "/structures/refresh":
                     // Ask for a sweep; the scan itself must happen on the main thread.
                     StructureMap.RefreshRequested = true;

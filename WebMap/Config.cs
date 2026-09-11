@@ -29,6 +29,7 @@ namespace WebMap
         public static Vector3 WORLD_START_POS = Vector3.zero;
         public static int DEFAULT_ZOOM = 100;
 
+        public static string ANNOUNCE_NAME = "Server";
         public static string DISCORD_WEBHOOK = "";
         public static string DISCORD_INVITE_URL = "";
 
