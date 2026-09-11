@@ -63,15 +63,38 @@ namespace WebMap
             }
         }
 
+        // Sent as MessageHud's "ShowMessage", not chat.
+        //
+        // Chat is not usable from a server-only mod. Chat registers
+        //   Register<Vector3, int, UserInfo, string>("ChatMessage", RPC_ChatMessage)
+        // and Chat.OnNewChatMessage then runs
+        //   RelationsManager.CheckPermissionAsync(sender.UserId, CommunicateWithUsingText, ...)
+        // before displaying anything. The server has no platform UserId to put in
+        // that UserInfo, the permission check does not come back granted, and the
+        // message is dropped in silence.
+        //
+        // MessageHud registers Register<int, string>("ShowMessage", RPC_ShowMessage),
+        // whose body is just ShowMessage((MessageType)type, text) -- no sender check,
+        // no relations lookup, no distance filter. That is the channel a server can
+        // actually reach an unmodded client on.
         private static void Send(string text)
         {
             try
             {
-                if (ZRoutedRpc.instance == null) return;
-                var user = new UserInfo { Name = WebMapConfig.ANNOUNCE_NAME };
-                ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, "ChatMessage",
-                    Vector3.zero, (int)Talker.Type.Shout, user, text, "");
-                ZLog.Log($"WebMap: announced \"{text}\"");
+                if (ZRoutedRpc.instance == null || ZNet.instance == null) return;
+                var peers = ZNet.instance.GetPeers();
+                int sent = 0;
+                foreach (var peer in peers)
+                {
+                    if (peer == null) continue;
+                    ZRoutedRpc.instance.InvokeRoutedRPC(peer.m_uid, "ShowMessage",
+                        (int)MessageHud.MessageType.Center, text);
+                    sent++;
+                }
+                ZLog.Log($"WebMap: announced to {sent} peer(s): \"{text}\"");
+                // the web feed no longer sees this via the chat observer, so add it here
+                try { WebMap.mapDataServer?.AddMessage(0L, (int)Talker.Type.Shout,
+                                                       WebMapConfig.ANNOUNCE_NAME, text); } catch { }
             }
             catch (System.Exception ex)
             {
