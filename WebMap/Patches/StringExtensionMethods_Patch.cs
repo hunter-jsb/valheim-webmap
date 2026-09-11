@@ -1,5 +1,5 @@
 using HarmonyLib;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace WebMap.Patches
 {
@@ -7,10 +7,14 @@ namespace WebMap.Patches
     [HarmonyPatch]
     internal class StringExtensionMethods_Patch
     {
-        internal static Dictionary<int, string> stablehashNames = new Dictionary<int, string>();
-        internal static Dictionary<int, string> stablehashNamesAnim = new Dictionary<int, string>();
-        internal static Dictionary<string, int> stablehashLookup = new Dictionary<string, int>();
-        internal static Dictionary<string, int> stablehashLookupAnim = new Dictionary<string, int>();
+        // Concurrent, not plain dictionaries: these postfixes sit on GetStableHashCode
+        // and ZSyncAnimation.GetHash, both of which are called from whatever thread
+        // happens to be hashing. A plain Dictionary written from two threads throws or
+        // corrupts, and on a hot path that reads as a fast-repeating console error.
+        internal static ConcurrentDictionary<int, string> stablehashNames = new ConcurrentDictionary<int, string>();
+        internal static ConcurrentDictionary<int, string> stablehashNamesAnim = new ConcurrentDictionary<int, string>();
+        internal static ConcurrentDictionary<string, int> stablehashLookup = new ConcurrentDictionary<string, int>();
+        internal static ConcurrentDictionary<string, int> stablehashLookupAnim = new ConcurrentDictionary<string, int>();
 
         // Record hash->name for debug output only. This MUST NOT replace the game's
         // own GetStableHashCode: clients compute routed-RPC method hashes with the
@@ -21,10 +25,7 @@ namespace WebMap.Patches
         public static void GetStableHashCode(string str, int __result)
         {
             if (str == null) return;
-            if (!stablehashNames.ContainsKey(__result))
-            {
-                stablehashNames[__result] = str;
-            }
+            stablehashNames.TryAdd(__result, str);
             stablehashLookup[str] = __result;
         }
 

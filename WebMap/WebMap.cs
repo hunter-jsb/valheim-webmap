@@ -110,7 +110,9 @@ namespace WebMap
         {
             string message = $"player _{peer.m_playerName}_ left";
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
-            MessageHud.instance.MessageAll(MessageHud.MessageType.Center, message);
+            // MessageHud is a client HUD; on a dedicated server instance is null, so
+            // this threw on every disconnect. Announce.Enqueue reaches players properly.
+            Announce.Enqueue(message);
             mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
         }
 
