@@ -3,7 +3,12 @@
 ## 2.9.0
 
 * Forest and logging overlay (`/forest`, `/forest/stats`): trees shade the terrain,
-  cleared ground shows through.
+  cleared ground shows through. The shading saturates smoothly rather than clamping,
+  so thinning a wood is visible and not just clear-felling it; `/forest/stats` reports
+  the density percentiles behind the picture.
+* Boats and carts (`/vehicles`): reported with position and type rather than painted
+  into the structures layer as anonymous pieces. Detected by `Ship`/`Vagon` component,
+  so later additions are picked up without a name list.
 * Server announcements (`POST /announce`) via `MessageHud.ShowMessage`, so they reach
   unmodded clients; chat cannot be used for this, see the README.
 * World render also served as JPEG (`/map.jpg`), roughly a seventh of the PNG.
