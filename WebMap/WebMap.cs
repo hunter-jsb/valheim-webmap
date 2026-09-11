@@ -529,6 +529,57 @@ namespace WebMap
             }
         }
 
+        // Chat in 1.0 is addressed to each recipient, not broadcast, so the server's
+        // HandleRoutedRPC never sees it:
+        //     if (target == m_id || target == 0) HandleRoutedRPC(data);
+        //     if (m_server && target != m_id)    RouteRPC(data);
+        // RouteRPC is the branch a player-to-player message takes, and the server runs
+        // it while forwarding. Observing there needs no fake server player, so it stays
+        // clear of the join path that patch breaks.
+        //
+        // A shout is sent once per recipient, so the same message arrives N times and
+        // has to be de-duplicated. Everybody-targeted RPCs (pings) are skipped, since
+        // HandleRoutedRPC already reports those.
+        [HarmonyPatch(typeof(ZRoutedRpc), "RouteRPC")]
+        private class ZRoutedRpcRoutePatch
+        {
+            private static readonly Dictionary<string, float> recent = new Dictionary<string, float>();
+
+            private static void Prefix(ref ZRoutedRpc __instance, RoutedRPCData rpcData)
+            {
+                if (rpcData == null || rpcData.m_targetPeerID == 0L) return;
+                try
+                {
+                    if (IsDuplicate(rpcData)) return;
+                    RoutedRPCData data = rpcData;
+                    ZRoutedRpcPatch.Observe(ref __instance, ref data);
+                }
+                catch (Exception ex)
+                {
+                    ZLog.LogWarning("WebMap: failed observing a routed rpc: " + ex);
+                }
+            }
+
+            private static bool IsDuplicate(RoutedRPCData d)
+            {
+                byte[] body = d.m_parameters != null ? d.m_parameters.GetArray() : null;
+                uint h = 2166136261u;
+                if (body != null)
+                    foreach (byte b in body) { h ^= b; h *= 16777619u; }
+                string key = d.m_senderPeerID + ":" + d.m_methodHash + ":" + h;
+                float now = Time.realtimeSinceStartup;
+                if (recent.TryGetValue(key, out float seen) && now - seen < 2f) return true;
+                recent[key] = now;
+                if (recent.Count > 256)
+                {
+                    var stale = new List<string>();
+                    foreach (var kv in recent) if (now - kv.Value > 10f) stale.Add(kv.Key);
+                    foreach (var k in stale) recent.Remove(k);
+                }
+                return false;
+            }
+        }
+
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
