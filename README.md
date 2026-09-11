@@ -113,6 +113,29 @@ Upstream solved this by registering a fake server-side player so clients would a
 server too. **On 1.0 that patch stops anyone joining at all** — the server stays healthy and
 registered but logs zero connection attempts — so it is not used here and the code is gone.
 
+## Local test server
+
+`./testserver.sh` runs the same image the hosts do
+([indifferentbroccoli/valheim-server-docker]) in podman, so a change can be tried
+against a real server before it goes anywhere near a live one.
+
+```bash
+./testserver.sh up       # first run downloads the game, ~10 min
+./testserver.sh deploy   # build the mod, copy it in, restart
+./testserver.sh status   # container + endpoints
+./testserver.sh logs
+```
+
+Then join it in game with **Join by IP -> `127.0.0.1:2456`**, password `testpass123`.
+
+Two things it works around, both worth knowing:
+
+* The image's `install.scmd` runs `force_install_dir` **before** `login`, and steamcmd
+  then fails with `Failed to install app '896660' (Missing configuration)` having
+  downloaded nothing. The script mounts a corrected copy with the order swapped. (The
+  `-beta` argument is fine; it is only the ordering.)
+* On an SELinux host the bind mounts need `:z`, or the container silently sees nothing.
+
 ## Licence
 
 MIT where applicable.
@@ -126,5 +149,6 @@ MIT where applicable.
 
 [h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
 [BepInEx]: https://github.com/BepInEx/BepInEx
+[indifferentbroccoli/valheim-server-docker]: https://github.com/indifferentbroccoli/valheim-server-docker
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
 [CC BY 2.0]: https://creativecommons.org/licenses/by/2.0/
