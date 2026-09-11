@@ -79,6 +79,28 @@ namespace WebMap
         private readonly HttpServer httpServer;
 
         public byte[] mapImageData;
+        private byte[] mapJpgCache;          // built once; the world render never changes
+
+        // Must run on the main thread: a Texture2D cannot be created from the HTTP
+        // thread. Called right after the world render is built or loaded.
+        public void BuildMapJpg()
+        {
+            if (mapJpgCache != null) return;
+            if (mapImageData == null || mapImageData.Length == 0) return;
+            try
+            {
+                int size = WebMapConfig.TEXTURE_SIZE;
+                var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+                if (!ImageConv.LoadImage(tex, mapImageData)) return;
+                mapJpgCache = ImageConv.EncodeToJPG(tex, 85);
+                UnityEngine.Object.Destroy(tex);
+                ZLog.Log($"WebMap: world render as jpeg: {mapJpgCache.Length} bytes (png was {mapImageData.Length})");
+            }
+            catch (Exception ex)
+            {
+                ZLog.LogWarning("WebMap: jpeg encode failed: " + ex);
+            }
+        }
         public List<string> pins = new List<string>();
         public List<MapMessage> sentMessages = new List<MapMessage>();
         public List<MapMessage> newMessages = new List<MapMessage>();
@@ -319,6 +341,25 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/map.jpg":
+                    // The world render is opaque and several MB as a PNG, which is a
+                    // long transatlantic download on a cold edge. As a JPEG it is
+                    // roughly a seventh of that, and the loss is invisible on terrain.
+                    {
+                        byte[] jpg = mapJpgCache;
+                        if (jpg == null || jpg.Length == 0)
+                        {
+                            res.StatusCode = 503;
+                            res.Close();
+                            return true;
+                        }
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
+                        res.ContentType = "image/jpeg";
+                        res.StatusCode = 200;
+                        res.ContentLength64 = jpg.Length;
+                        res.Close(jpg, true);
+                        return true;
+                    }
                 case "/map":
                     // Doing things this way to make the full map harder to accidentally see.
                     res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");

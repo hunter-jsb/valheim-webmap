@@ -27,6 +27,12 @@ namespace WebMap
             return (bool)_load.Invoke(null, args);
         }
 
+        private static readonly MethodInfo _jpg =
+            T?.GetMethod("EncodeToJPG", new[] { typeof(Texture2D), typeof(int) });
+
         public static byte[] EncodeToPNG(Texture2D tex) => (byte[])_enc.Invoke(null, new object[] { tex });
+
+        public static byte[] EncodeToJPG(Texture2D tex, int quality) =>
+            (byte[])_jpg.Invoke(null, new object[] { tex, quality });
     }
 }

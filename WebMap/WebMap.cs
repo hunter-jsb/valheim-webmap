@@ -138,6 +138,7 @@ namespace WebMap
             try
             {
                 mapDataServer.mapImageData = File.ReadAllBytes(mapImagePath);
+                mapDataServer.BuildMapJpg();
             }
             catch (Exception e)
             {
@@ -440,6 +441,7 @@ namespace WebMap
                 byte[] pngBytes = ImageConv.EncodeToPNG(newTexture);
 
                 mapDataServer.mapImageData = pngBytes;
+                    mapDataServer.BuildMapJpg();
                 try
                 {
                     File.WriteAllBytes(Path.Combine(worldDataPath, "map.png"), pngBytes);
