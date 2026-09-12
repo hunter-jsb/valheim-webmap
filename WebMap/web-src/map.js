@@ -18,6 +18,10 @@ const ctx = canvas.getContext('2d');
 
 let mapImage;
 let fogImage;
+// The server has drawn these since 2.8.0; this viewer never asked for them, which
+// is why the structures heatmap looked missing even with the sweep running.
+const overlays = { forest: null, structures: null };
+const overlayHidden = { forest: false, structures: false };
 const fogCanvas = document.createElement('canvas');
 const fogCanvasCtx = fogCanvas.getContext('2d');
 
@@ -181,10 +185,33 @@ const redrawMap = () => {
     ctx.clearRect(0, 0, width, height);
     ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(mapImage, 0, 0);
+
+    // Forest multiplies, so woods darken the terrain and a clearing is simply a
+    // hole where the render shows through. Structures paint over it. Both go
+    // under the fog, so builds in unexplored land stay hidden for free.
+    if (overlays.forest && !overlayHidden.forest) {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(overlays.forest, 0, 0);
+    }
+    if (overlays.structures && !overlayHidden.structures) {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(overlays.structures, 0, 0);
+    }
+
     ctx.globalCompositeOperation = 'multiply';
     ctx.drawImage(fogCanvas, 0, 0);
 
     updateIcons();
+};
+
+const setOverlay = (name, image) => {
+    overlays[name] = image;
+    redrawMap();
+};
+
+const setOverlayHidden = (name, hidden) => {
+    overlayHidden[name] = hidden;
+    redrawMap();
 };
 
 const explore = (mapX, mapZ) => {
@@ -327,6 +354,8 @@ const init = (options) => {
 
 export default {
     init,
+    setOverlay,
+    setOverlayHidden,
     addIcon,
     removeIcon,
     removeIconById,

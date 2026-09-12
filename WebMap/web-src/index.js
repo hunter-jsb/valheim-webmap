@@ -19,6 +19,22 @@ const fetchFog = () => new Promise((res) => {
     fogImage.src = 'fog';
 });
 
+// Structures and forest change as players build and log, so they are re-pulled on
+// a timer. A server too old to serve them just leaves the layer unset.
+const loadOverlay = (name, path) => {
+    const img = document.createElement('img');
+    img.onload = () => map.setOverlay(name, img);
+    img.onerror = () => {};
+    img.src = `${path}?${Date.now()}`;
+};
+
+const startOverlays = () => {
+    loadOverlay('forest', 'forest');
+    loadOverlay('structures', 'structures');
+    setInterval(() => loadOverlay('structures', 'structures'), 60000);
+    setInterval(() => loadOverlay('forest', 'forest'), 180000);
+};
+
 const createStyleSheet = (styles = '') => {
     const style = document.createElement("style");
     style.appendChild(document.createTextNode(styles));
@@ -70,6 +86,8 @@ const setup = async () => {
         fogImage,
         zoom: constants.DEFAULT_ZOOM
     });
+
+    startOverlays();
 
     map.addIcon({
         type: 'start',
@@ -196,6 +214,11 @@ const setup = async () => {
             }
             map.updateIcons();
         });
+    });
+
+    ['forest', 'structures'].forEach(name => {
+        const el = ui[`hide_${name}`];
+        if (el) el.addEventListener('change', () => map.setOverlayHidden(name, el.checked));
     });
 
     ui.hideMessageList.addEventListener('change', () => {

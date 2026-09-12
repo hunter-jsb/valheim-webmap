@@ -35,6 +35,12 @@ Fixes that matter now that chat is actually observed:
   walk ZNet's live peer list themselves.
 * `/vehicles` only reports what is in explored territory, and `show_vehicles` turns it
   off entirely.
+* **The bundled map viewer draws the structures and forest layers.** The server has
+  produced both since 2.8.0, but the viewer never asked for them, so the structures
+  heatmap looked missing even with the sweep plainly running in the log. The menu has
+  a toggle for each.
+* `package.sh` builds the web bundle. `web/main.js` is a build product and gitignored,
+  so packaging from a fresh clone shipped a viewer with no script at all.
 
 ## 2.8.0
 
