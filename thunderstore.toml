@@ -1,0 +1,32 @@
+# Publishing metadata for the Thunderstore CLI.
+#
+# The package itself is built by package.sh, and release.yml publishes that zip
+# with `tcli publish --file`, so [build] below is unused -- manifest.json inside
+# the zip is what Thunderstore actually reads. versionNumber is likewise passed
+# on the command line from manifest.json, which stays the single source of truth.
+
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Mubs"
+name = "WebMap"
+versionNumber = "0.0.0"
+description = "Dedicated-server web map for Valheim 1.0."
+websiteUrl = "https://github.com/hunter-jsb/valheim-webmap"
+containsNsfwContent = false
+
+[package.dependencies]
+denikson-BepInExPack_Valheim = "5.4.2350"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./dist"
+
+[publish]
+repository = "https://thunderstore.io"
+communities = [ "valheim" ]
+
+[publish.categories]
+valheim = [ "server-side", "utility", "tools" ]

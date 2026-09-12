@@ -15,6 +15,13 @@
         "assembly-publicizer"
       ],
       "rollForward": false
+    },
+    "tcli": {
+      "version": "0.2.4",
+      "commands": [
+        "tcli"
+      ],
+      "rollForward": false
     }
   }
 }

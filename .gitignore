@@ -341,3 +341,6 @@ dist/
 
 # the announce shared secret lives beside the DLL, never in the repo
 announce.token
+
+# thunderstore service account token, local only
+.env

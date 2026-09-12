@@ -1,0 +1,97 @@
+# Builds the mod on every push, and publishes to Thunderstore when a v* tag is
+# pushed. Tagging is the release gate: nothing reaches Thunderstore without one.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The mod compiles against the game's own assemblies, which cannot be
+      # committed. They come from the dedicated server, which Steam serves to
+      # anonymous logins -- so this needs no account and no secret.
+      - name: Resolve the current Valheim build
+        id: steam
+        run: |
+          BUILDID=$(curl -sf https://api.steamcmd.net/v1/info/896660 \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['data']['896660']['depots']['branches']['public']['buildid'])")
+          echo "buildid=$BUILDID" >> "$GITHUB_OUTPUT"
+
+      # Only the Managed folder is kept, so the cache is a few MB rather than the
+      # ~1.5 GB install, and it only misses when Valheim itself updates.
+      - name: Cache game assemblies
+        id: libs
+        uses: actions/cache@v4
+        with:
+          path: libs/valheim
+          key: valheim-managed-${{ steps.steam.outputs.buildid }}
+
+      - name: Download game assemblies
+        if: steps.libs.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends lib32gcc-s1
+          mkdir -p "$RUNNER_TEMP/steamcmd" && cd "$RUNNER_TEMP/steamcmd"
+          curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf -
+          # login BEFORE force_install_dir: the other order fails the install with
+          # "Missing configuration" having downloaded nothing.
+          ./steamcmd.sh +login anonymous \
+                        +force_install_dir "$RUNNER_TEMP/valheim" \
+                        +app_update 896660 validate +quit
+          mkdir -p "$GITHUB_WORKSPACE/libs/valheim"
+          cp "$RUNNER_TEMP/valheim/valheim_server_Data/Managed/"*.dll "$GITHUB_WORKSPACE/libs/valheim/"
+
+      - name: Fetch BepInEx
+        env:
+          BEPINEX: 5.4.23.2
+        run: |
+          curl -sfL -o "$RUNNER_TEMP/bepinex.zip" \
+            "https://github.com/BepInEx/BepInEx/releases/download/v${BEPINEX}/BepInEx_win_x64_${BEPINEX}.zip"
+          unzip -qo "$RUNNER_TEMP/bepinex.zip" 'BepInEx/core/*' -d "$RUNNER_TEMP/bep"
+          mkdir -p libs/BepInEx
+          cp -r "$RUNNER_TEMP/bep/BepInEx/core" libs/BepInEx/core
+
+      - run: npm ci
+      - run: dotnet tool restore
+
+      - name: Build and package
+        run: ./package.sh
+
+      # A tag that disagrees with the manifest would publish the wrong version
+      # under the right name, which cannot be undone on Thunderstore.
+      - name: Check the tag matches the manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          V=$(python3 -c "import json;print(json.load(open('manifest.json'))['version_number'])")
+          TAG="${GITHUB_REF_NAME#v}"
+          [ "$V" = "$TAG" ] || { echo "manifest is $V but the tag is $TAG"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebMap-package
+          path: dist/WebMap-*.zip
+
+      - name: Publish to Thunderstore
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TOKEN: ${{ secrets.THUNDERSTORE_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "THUNDERSTORE_TOKEN is not set"; exit 1; }
+          V=$(python3 -c "import json;print(json.load(open('manifest.json'))['version_number'])")
+          dotnet tcli publish --file "dist/WebMap-$V.zip" --package-version "$V" --token "$TOKEN"
