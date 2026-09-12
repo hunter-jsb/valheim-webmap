@@ -507,6 +507,7 @@ namespace WebMap
                 {
                     ZLog.LogError("WebMap: failed to find starting point");
                 }
+                mapDataServer.RefreshConfig();               // the start position is part of /config
 
                 WebMap.instance.Online();
 

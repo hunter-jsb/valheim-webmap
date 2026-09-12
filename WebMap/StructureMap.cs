@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace WebMap
@@ -11,12 +13,14 @@ namespace WebMap
     // unexplored territory are hidden by the fog mask for free -- no separate
     // spoiler logic.
     //
-    // A sweep walks every ZDO, so it is deliberately spread across frames and run
-    // infrequently: buildings change slowly and this shares a CPU with the game.
+    // A sweep walks every ZDO, so it is spread across frames and runs only while
+    // someone is reading it, at most once a minute: it shares a CPU with the game.
     internal static class StructureMap
     {
-        private const float SweepInterval = 120f;
         private const int ZdosPerFrame = 3000;
+        // A read arms the gate for WatchMs; sweeps start at least FloorMs apart.
+        private const int WatchMs = 120_000;
+        private const int FloorMs = 60_000;
 
         private static Texture2D texture;
         // Only a few hundred pixels ever hold anything, so a dictionary costs a
@@ -30,9 +34,11 @@ namespace WebMap
         private static bool pngStale = true;
         private static bool sweeping;
 
-        // Set from the HTTP thread; consumed on the main thread. Unity objects
-        // must not be touched off-thread, so a request can only ask, never scan.
-        public static volatile bool RefreshRequested;
+        // Tick of the last read that wants a sweep. Written from HTTP threads (an
+        // int store is atomic); only the main thread scans. Un-watched at boot.
+        // Deltas compare unsigned: a wrapped tick reads as long ago, never as recent.
+        public static volatile int LastRead = unchecked(Environment.TickCount - WatchMs);
+        private static int lastSweepStart = unchecked(Environment.TickCount - FloorMs);
 
         public static int LastCount { get; private set; }
         public static int LastScanned { get; private set; }
@@ -80,17 +86,12 @@ namespace WebMap
         public static IEnumerator Loop()
         {
             Init();
-            yield return new WaitForSeconds(30f);            // let the world finish loading
             while (true)
             {
-                yield return Sweep();
-                float waited = 0f;
-                while (waited < SweepInterval && !RefreshRequested)
-                {
-                    yield return new WaitForSeconds(1f);
-                    waited += 1f;
-                }
-                RefreshRequested = false;
+                int now = Environment.TickCount;
+                if (unchecked((uint)(now - LastRead)) < WatchMs && unchecked((uint)(now - lastSweepStart)) >= FloorMs)
+                    yield return Sweep();
+                yield return new WaitForSeconds(1f);
             }
         }
 
@@ -99,6 +100,11 @@ namespace WebMap
             if (sweeping) yield break;
             sweeping = true;
             Init();
+            lastSweepStart = Environment.TickCount;
+            int gc2 = GC.CollectionCount(2);
+            var wall = Stopwatch.StartNew();
+            var walk = Stopwatch.StartNew();                  // paused across yields: our slices only
+            int frames = 0;
 
             int size = WebMapConfig.TEXTURE_SIZE;
             int half = size / 2;
@@ -164,23 +170,41 @@ namespace WebMap
                         }
                     }
                 }
-                if (seen % ZdosPerFrame == 0) yield return null;   // never stall a frame
+                if (seen % ZdosPerFrame == 0)                     // never stall a frame
+                {
+                    walk.Stop(); frames++;
+                    yield return null;
+                    walk.Start();
+                }
             }
+            walk.Stop();
 
-            yield return Render(size);
+            var finish = Stopwatch.StartNew();
+            var render = Render(size);                        // stepped by hand so its yields are counted
+            while (render.MoveNext())
+            {
+                finish.Stop(); frames++;
+                yield return render.Current;
+                finish.Start();
+            }
             ForestMap.Finish();
             Vehicles.Finish();
             Portals.Finish();
             Pieces.Finish();
             Graves.Finish();
+            finish.Stop();
 
             LastCount = found;
             LastScanned = seen;
-            statsJson = BuildStats(byPrefab, found, seen);
+            gc2 = GC.CollectionCount(2) - gc2;
+            string sweep = FormattableString.Invariant($"{{\"at\":{lastSweepStart},\"zdos\":{seen},\"walk_ms\":{walk.ElapsedMilliseconds},\"finish_ms\":{finish.ElapsedMilliseconds},\"frames\":{frames},\"wall_ms\":{wall.ElapsedMilliseconds},\"gc2\":{gc2}}}");
+            statsJson = BuildStats(byPrefab, found, seen, sweep);
             pngStale = true;
             sweeping = false;
             ZLog.Log($"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
-                   + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps");
+                   + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps; "
+                   + $"walk {walk.ElapsedMilliseconds} ms + finish {finish.ElapsedMilliseconds} ms "
+                   + $"over {frames} frames, {wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc");
         }
 
         // Each pixel takes the weighted average albedo of the pieces standing on
@@ -225,7 +249,7 @@ namespace WebMap
             texture.Apply();
         }
 
-        private static string BuildStats(Dictionary<int, int> byPrefab, int found, int seen)
+        private static string BuildStats(Dictionary<int, int> byPrefab, int found, int seen, string sweep)
         {
             var top = new List<KeyValuePair<int, int>>(byPrefab);
             top.Sort((a, b) => b.Value.CompareTo(a.Value));
@@ -246,7 +270,7 @@ namespace WebMap
                 sb.Append("{\"name\":\"").Append(name.Replace("\"", "")).Append("\",\"count\":").Append(kv.Value).Append("}");
                 n++;
             }
-            sb.Append("]}");
+            sb.Append("],\"sweep\":").Append(sweep).Append("}");
             return sb.ToString();
         }
 

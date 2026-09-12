@@ -142,6 +142,16 @@ namespace WebMap
         private volatile string playersJson = "{\"count\":0,\"players\":[]}";
         public string PlayersWs => playersWs;
         private bool forceReload = false;
+        // /config carries the world name, which lives on ZNet: main-thread state.
+        // The main thread builds this when the world loads; HTTP only serves it.
+        private volatile string configJson = "{}";
+        public void RefreshConfig() => configJson = MakeClientConfigJson();
+        // Reads that the world sweep exists to serve. Anything a monitor probes
+        // (/config, /players, /map, /pins, /messages) must not keep it running.
+        private static readonly HashSet<string> sweepReads = new HashSet<string> {
+            "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces",
+            "/forest/stats", "/structures/stats", "/structures/refresh"
+        };
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
@@ -234,11 +244,11 @@ namespace WebMap
                 if (zdoData != null)
                 {
                     Vector3 pos = zdoData.GetPosition();
-                    int maxHealth = (int)Math.Ceiling(zdoData.GetFloat("max_health", 25));
-                    int health = (int)Math.Ceiling(zdoData.GetFloat("health", maxHealth));
-                    int dead = zdoData.GetBool("dead") ? 1 : 0;
-                    int pvp = zdoData.GetBool("pvp") ? 1 : 0;
-                    int inbed = zdoData.GetBool("inBed") ? 1 : 0;
+                    int maxHealth = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_maxHealth, 25));
+                    int health = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_health, maxHealth));
+                    int dead = zdoData.GetBool(ZDOVars.s_dead) ? 1 : 0;
+                    int pvp = zdoData.GetBool(ZDOVars.s_pvp) ? 1 : 0;
+                    int inbed = zdoData.GetBool(ZDOVars.s_inBed) ? 1 : 0;
 
                     maxHealth = Math.Max(maxHealth, health);
 
@@ -268,8 +278,8 @@ namespace WebMap
                 if (zdoData == null) return;
 
                 Vector3 pos = zdoData.GetPosition();
-                int maxHealth = (int)Math.Ceiling(zdoData.GetFloat("max_health", 25));
-                int health = (int)Math.Ceiling(zdoData.GetFloat("health", maxHealth));
+                int maxHealth = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_maxHealth, 25));
+                int health = (int)Math.Ceiling(zdoData.GetFloat(ZDOVars.s_health, maxHealth));
                 maxHealth = Math.Max(maxHealth, health);
                 bool hidden = !player.m_publicRefPos;
                 bool showPos = player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE;
@@ -278,8 +288,8 @@ namespace WebMap
                 sb.Append("{\"name\":\"").Append(JsonEscape(player.m_playerName)).Append("\"");
                 sb.Append(",\"health\":").Append(health);
                 sb.Append(",\"maxHealth\":").Append(maxHealth);
-                sb.Append(",\"dead\":").Append(zdoData.GetBool("dead") ? "true" : "false");
-                sb.Append(",\"inBed\":").Append(zdoData.GetBool("inBed") ? "true" : "false");
+                sb.Append(",\"dead\":").Append(zdoData.GetBool(ZDOVars.s_dead) ? "true" : "false");
+                sb.Append(",\"inBed\":").Append(zdoData.GetBool(ZDOVars.s_inBed) ? "true" : "false");
                 sb.Append(",\"hidden\":").Append(hidden ? "true" : "false");
                 if (showPos)
                 {
@@ -368,13 +378,15 @@ namespace WebMap
             string rawRequestPath = req.RawUrl.Split('?')[0];
             byte[] textBytes;
 
+            if (sweepReads.Contains(rawRequestPath)) StructureMap.LastRead = Environment.TickCount;
+
             switch (rawRequestPath)
             {
                 case "/config":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
                     res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(MakeClientConfigJson());
+                    textBytes = Encoding.UTF8.GetBytes(configJson);
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
@@ -536,8 +548,8 @@ namespace WebMap
                         return true;
                     }
                 case "/structures/refresh":
-                    // Ask for a sweep; the scan itself must happen on the main thread.
-                    StructureMap.RefreshRequested = true;
+                    // Arming the gate above is the whole request: the scan runs on the
+                    // main thread, and never sooner than the floor allows.
                     res.ContentType = "application/json";
                     res.StatusCode = 202;
                     textBytes = Encoding.UTF8.GetBytes("{\"queued\":true}");
