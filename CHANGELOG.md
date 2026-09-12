@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+* Removed a Harmony prefix on `ZRoutedRpc.InvokeRoutedRPC` that ran for every outgoing
+  routed RPC and did nothing unless `debug` or `test` was set. Chat is observed at
+  `RouteRPC` instead, so it was redundant as well as costly.
+* Removed the `test` setting it existed for, which rerouted `DiscoverLocationRespons` to
+  everybody, and `discord_invite_url`, which was read by nothing at all.
+* Removed `MapDataServer.BroadcastMessage`, which had no callers.
+
 ## 2.9.0
 
 * Forest and logging overlay (`/forest`, `/forest/stats`): trees shade the terrain,

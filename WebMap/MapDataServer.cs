@@ -545,11 +545,6 @@ namespace WebMap
             webSocketHandler.Sessions.Broadcast($"ping\n{id}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}");
         }
 
-        public void BroadcastMessage(long id, int type, string name, string message)
-        {
-            webSocketHandler.Sessions.Broadcast($"message\n{id}\n{type}\n{name}\n{message}");
-        }
-
         public void AddPin(string id, string pinId, string type, string name, Vector3 position, string pinText)
         {
             lock (pins) pins.Add($"{id},{pinId},{type},{name},{FixedValue(position.x)},{FixedValue(position.z)},{pinText}");

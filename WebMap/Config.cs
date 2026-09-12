@@ -19,7 +19,6 @@ namespace WebMap
         public static bool ALWAYS_MAP = true;
         public static bool ALWAYS_VISIBLE = false;
         public static bool DEBUG = false;
-        public static bool TEST = false;
 
         public static int SERVER_PORT = 3000;
         public static float PLAYER_UPDATE_INTERVAL = 1f;
@@ -33,7 +32,6 @@ namespace WebMap
 
         public static string ANNOUNCE_NAME = "Server";
         public static string DISCORD_WEBHOOK = "";
-        public static string DISCORD_INVITE_URL = "";
 
         public static string URL = "";
 
@@ -95,10 +93,6 @@ namespace WebMap
                 WebMapConfig.DEBUG,
                 "Output debugging information.").Value;
 
-            TEST = config.Bind("Server", "test",
-                WebMapConfig.TEST,
-                "Enable test features (bugs).").Value;
-
             SHOW_VEHICLES = config.Bind("Server", "show_vehicles",
                 WebMapConfig.SHOW_VEHICLES,
                 "Report boats and carts at /vehicles. They are only ever reported in "
@@ -108,10 +102,6 @@ namespace WebMap
             DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
                 WebMapConfig.DISCORD_WEBHOOK,
                 "Discord webhook URL").Value;
-
-            DISCORD_INVITE_URL = config.Bind("Server", "discord_invite_url",
-                WebMapConfig.DISCORD_INVITE_URL,
-                "Optional Discord invite URL to be added to the webpage.").Value;
 
             URL = config.Bind("Server", "webmap_url",
                 WebMapConfig.URL,
