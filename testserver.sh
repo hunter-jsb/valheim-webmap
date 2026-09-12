@@ -26,10 +26,9 @@ WEBPORT=3000                  # the mod's own HTTP port (its default)
 case "${1:-}" in
 up)
   mkdir -p "$DATA/server-files" "$DATA/server-data"
-  # The image's install.scmd puts force_install_dir BEFORE login, and steamcmd then
-  # fails with "Failed to install app '896660' (Missing configuration)" having
-  # downloaded nothing. Mount a corrected script with the order swapped.
-  [ -f "$DATA/install.scmd" ] || { echo "missing $DATA/install.scmd"; exit 1; }
+  # If the first boot dies with "Failed to install app '896660' (Missing configuration)",
+  # just run this again: steamcmd fails app_update that way in about one run in four,
+  # having downloaded nothing. It is transient and not worth working around.
   # No --userns=keep-id: the image sets file permissions as root during init, which
   # it cannot do when our uid is mapped in. Rootless podman maps container root to
   # us on the host instead, so the data dirs end up owned by a subuid -- use
@@ -40,7 +39,6 @@ up)
     -p "$WEBPORT:$WEBPORT/tcp" \
     -v "$DATA/server-files:/valheim:z" \
     -v "$DATA/server-data:/valheim-saves:z" \
-    -v "$DATA/install.scmd:/home/steam/server/install.scmd:ro,z" \
     -e SERVER_NAME="WebMap Test" \
     -e WORLD_NAME="WebMapTest" \
     -e SERVER_PASSWORD="$PASSWORD" \
