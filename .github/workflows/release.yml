@@ -49,16 +49,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends lib32gcc-s1
           mkdir -p "$RUNNER_TEMP/steamcmd" && cd "$RUNNER_TEMP/steamcmd"
           curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf -
-          # Prime first, install second, in two separate invocations -- which is
-          # what the repo's own Dockerfile does. A freshly unpacked steamcmd has no
-          # app info cached, so the first run cannot resolve 896660 and fails with
-          # "Missing configuration" having downloaded nothing, whichever order the
-          # arguments are in. The bare login populates the cache.
-          ./steamcmd.sh +login anonymous +quit || true
           mkdir -p "$RUNNER_TEMP/valheim"
-          ./steamcmd.sh +force_install_dir "$RUNNER_TEMP/valheim" \
-                        +login anonymous \
-                        +app_update 896660 validate +quit
+          # steamcmd fails this with "Missing configuration", having downloaded
+          # nothing, in roughly one run in four -- measured over 13 runs, and
+          # independent of argument order, of -beta, and of whether the app info
+          # cache is warm. It is transient, so the fix is to try again rather than
+          # to arrange the arguments in any particular way.
+          for attempt in 1 2 3 4; do
+            ./steamcmd.sh +force_install_dir "$RUNNER_TEMP/valheim" \
+                          +login anonymous \
+                          +app_update 896660 validate +quit && break
+            echo "steamcmd attempt $attempt failed; retrying"
+            [ "$attempt" = 4 ] && exit 1
+            sleep 20
+          done
           mkdir -p "$GITHUB_WORKSPACE/libs/valheim"
           cp "$RUNNER_TEMP/valheim/valheim_server_Data/Managed/"*.dll "$GITHUB_WORKSPACE/libs/valheim/"
 
