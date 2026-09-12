@@ -49,10 +49,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends lib32gcc-s1
           mkdir -p "$RUNNER_TEMP/steamcmd" && cd "$RUNNER_TEMP/steamcmd"
           curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf -
-          # login BEFORE force_install_dir: the other order fails the install with
-          # "Missing configuration" having downloaded nothing.
-          ./steamcmd.sh +login anonymous \
-                        +force_install_dir "$RUNNER_TEMP/valheim" \
+          # force_install_dir BEFORE login, which is what steamcmd asks for by name:
+          # the other way it prints "Please use force_install_dir before logon!" and
+          # fails with "Missing configuration" having downloaded nothing.
+          mkdir -p "$RUNNER_TEMP/valheim"
+          ./steamcmd.sh +force_install_dir "$RUNNER_TEMP/valheim" \
+                        +login anonymous \
                         +app_update 896660 validate +quit
           mkdir -p "$GITHUB_WORKSPACE/libs/valheim"
           cp "$RUNNER_TEMP/valheim/valheim_server_Data/Managed/"*.dll "$GITHUB_WORKSPACE/libs/valheim/"
