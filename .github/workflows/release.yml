@@ -103,4 +103,6 @@ jobs:
         run: |
           [ -n "$TOKEN" ] || { echo "THUNDERSTORE_TOKEN is not set"; exit 1; }
           V=$(python3 -c "import json;print(json.load(open('manifest.json'))['version_number'])")
-          dotnet tcli publish --file "dist/WebMap-$V.zip" --package-version "$V" --token "$TOKEN"
+          # no --package-version with --file: tcli rejects the pair, and the version
+          # comes from the manifest.json inside the zip anyway
+          dotnet tcli publish --file "dist/WebMap-$V.zip" --token "$TOKEN"
