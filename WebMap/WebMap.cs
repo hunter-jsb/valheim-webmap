@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using WebMap.Patches;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -583,9 +582,19 @@ namespace WebMap
         {
             private static readonly Dictionary<string, float> recent = new Dictionary<string, float>();
 
+            private static readonly int SayHash = "Say".GetStableHashCode();
+            private static readonly int ChatHash = "ChatMessage".GetStableHashCode();
+
             private static void Prefix(ref ZRoutedRpc __instance, RoutedRPCData rpcData)
             {
                 if (rpcData == null || rpcData.m_targetPeerID == 0L) return;
+                // Decide whether this is chat before doing anything else. The server
+                // forwards every routed RPC between players through here -- thousands
+                // a second with a few people on -- and hashing each one's body to
+                // de-duplicate it was a per-RPC tax on the game thread. Only a chat
+                // shout needs de-duplicating, since it arrives once per recipient.
+                int h = rpcData.m_methodHash;
+                if (h != SayHash && h != ChatHash) return;
                 try
                 {
                     if (IsDuplicate(rpcData)) return;
@@ -621,8 +630,6 @@ namespace WebMap
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
-            private static string[] ignoreRpc = { "DestroyZDO", "SetEvent", "OnTargeted", "Step" };
-
             private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data) => Observe(ref __instance, ref data);
 
             internal static void Observe(ref ZRoutedRpc __instance, ref RoutedRPCData data)
@@ -638,11 +645,7 @@ namespace WebMap
                 bool isChat = hash == chatMessageMethodHash || hash == "ChatMessage".GetStableHashCode();
                 if (!isSay && !isChat)
                 {
-                    if (WebMapConfig.DEBUG)
-                    {
-                        string other = StringExtensionMethods_Patch.GetStableHashName(hash);
-                        if (!Array.Exists(ignoreRpc, x => x == other)) ZLog.Log("RoutedRPC: " + other);
-                    }
+                    if (WebMapConfig.DEBUG) ZLog.Log("RoutedRPC: " + hash);
                     return;
                 }
 
