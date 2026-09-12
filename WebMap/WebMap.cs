@@ -140,8 +140,18 @@ namespace WebMap
             string mapImagePath = Path.Combine(worldDataPath, "map.png");
             try
             {
-                mapDataServer.mapImageData = File.ReadAllBytes(mapImagePath);
-                mapDataServer.BuildMapJpg();
+                byte[] png = File.ReadAllBytes(mapImagePath);
+                // IHDR width sits at bytes 16..19; no need to decode to know the size.
+                int width = png.Length > 24 ? (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19] : 0;
+                if (width == WebMapConfig.RENDER_SIZE)
+                {
+                    mapDataServer.mapImageData = png;
+                    mapDataServer.BuildMapJpg();
+                }
+                else
+                {
+                    ZLog.Log($"WebMap: map.png is {width}px, render_size is {WebMapConfig.RENDER_SIZE}: rebuilding");
+                }
             }
             catch (Exception e)
             {
@@ -254,6 +264,7 @@ namespace WebMap
                                         {
                                             if (WebMapConfig.DEBUG && !fogTextureNeedsSaving) ZLog.Log("Fog needs saving");
                                             fogTextureNeedsSaving = true;
+                                            mapDataServer.fogPngStale = true;
                                             mapDataServer.fogTexture.SetPixel(x, y, Color.white);
                                         }
                                     }
@@ -277,7 +288,7 @@ namespace WebMap
         {
             if (mapDataServer.players.Count > 0 && fogTextureNeedsSaving)
             {
-                byte[] pngBytes = ImageConv.EncodeToPNG(mapDataServer.fogTexture);
+                byte[] pngBytes = mapDataServer.GetFogPng();
 
                 if (WebMapConfig.DEBUG) ZLog.Log("Saving Fog");
 
@@ -386,24 +397,35 @@ namespace WebMap
                 }
 
                 ZLog.Log("WebMap: BUILD MAP!");
+                StaticCoroutine.Start(BuildMap());
+            }
 
-                int num = WebMapConfig.TEXTURE_SIZE / 2;
-                float num2 = WebMapConfig.PIXEL_SIZE / 2f;
+            // The terrain picture. Sampled at RENDER_SIZE, which may be finer than the
+            // overlays' TEXTURE_SIZE; it covers the same area, so the pitch is scaled
+            // to match. Yields as it goes: at 4096 this is 16M samples and used to
+            // freeze the server for the duration.
+            private static IEnumerator BuildMap()
+            {
+                int R = WebMapConfig.RENDER_SIZE;
+                float rp = WebMapConfig.PIXEL_SIZE * (float)WebMapConfig.TEXTURE_SIZE / R;
+                float step = 2f * rp / WebMapConfig.PIXEL_SIZE;   // 2f at 2048: the original look
+
+                int num = R / 2;
+                float num2 = rp / 2f;
                 Color mask;
-                Color32[] colorArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
-                Color32[] treeMaskArray = new Color32[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
-                float[] heightArray = new float[WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE];
-                for (int i = 0; i < WebMapConfig.TEXTURE_SIZE; i++)
+                Color32[] colorArray = new Color32[R * R];
+                float[] heightArray = new float[R * R];
+                for (int i = 0; i < R; i++)
                 {
-                    for (int j = 0; j < WebMapConfig.TEXTURE_SIZE; j++)
+                    yield return null;                       // one row per frame: never freeze the server for this
+                    for (int j = 0; j < R; j++)
                     {
-                        float wx = (float)(j - num) * WebMapConfig.PIXEL_SIZE + num2;
-                        float wy = (float)(i - num) * WebMapConfig.PIXEL_SIZE + num2;
+                        float wx = (float)(j - num) * rp + num2;
+                        float wy = (float)(i - num) * rp + num2;
                         Heightmap.Biome biome = WorldGenerator.instance.GetBiome(wx, wy);
                         float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out mask);
-                        colorArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetPixelColor(biome);
-                        treeMaskArray[i * WebMapConfig.TEXTURE_SIZE + j] = GetMaskColor(wx, wy, biomeHeight, biome);
-                        heightArray[i * WebMapConfig.TEXTURE_SIZE + j] = biomeHeight;
+                        colorArray[i * R + j] = GetPixelColor(biome);
+                        heightArray[i * R + j] = biomeHeight;
                     }
                 }
 
@@ -413,12 +435,13 @@ namespace WebMap
 
                 for (int t = 0; t < colorArray.Length; t++)
                 {
+                    if ((t & 0x3FFFF) == 0) yield return null;
                     float h = heightArray[t];
 
-                    int tUp = t - WebMapConfig.TEXTURE_SIZE;
+                    int tUp = t - R;
                     if (tUp < 0) tUp = t;
 
-                    int tDown = t + WebMapConfig.TEXTURE_SIZE;
+                    int tDown = t + R;
                     if (tDown > colorArray.Length - 1) tDown = t;
 
                     int tRight = t + 1;
@@ -432,8 +455,8 @@ namespace WebMap
                     float hLeft = heightArray[tLeft];
                     float hDown = heightArray[tDown];
 
-                    Vector3 va = new Vector3(2f, 0f, hRight - hLeft).normalized;
-                    Vector3 vb = new Vector3(0f, 2f, hUp - hDown).normalized;
+                    Vector3 va = new Vector3(step, 0f, hRight - hLeft).normalized;
+                    Vector3 vb = new Vector3(0f, step, hUp - hDown).normalized;
                     Vector3 normal = Vector3.Cross(va, vb);
 
                     float surfaceLight = Vector3.Dot(normal, sunDir) * 0.25f + 0.75f;
@@ -450,7 +473,7 @@ namespace WebMap
                     newColors[t] = new Color(ans.r * surfaceLight, ans.g * surfaceLight, ans.b * surfaceLight, ans.a);
                 }
 
-                Texture2D newTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE,
+                Texture2D newTexture = new Texture2D(R, R,
                     TextureFormat.RGBA32, false);
                 newTexture.SetPixels(newColors);
                 byte[] pngBytes = ImageConv.EncodeToPNG(newTexture);

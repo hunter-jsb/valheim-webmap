@@ -11,6 +11,7 @@ namespace WebMap
     {
         public static int TEXTURE_SIZE = 2048;
         public static int PIXEL_SIZE = 12;
+        public static int RENDER_SIZE = 2048;
         public static float EXPLORE_RADIUS = 100f;
         public static float UPDATE_FOG_TEXTURE_INTERVAL = 2f;
         public static float SAVE_FOG_TEXTURE_INTERVAL = 30f;
@@ -44,6 +45,14 @@ namespace WebMap
             PIXEL_SIZE = config.Bind("Texture", "pixel_size",
                 WebMapConfig.PIXEL_SIZE,
                 "How many in game units does a map pixel represent? Probably dont change this.").Value;
+
+            RENDER_SIZE = config.Bind("Texture", "render_size",
+                WebMapConfig.RENDER_SIZE,
+                "Pixels across the world render (the terrain picture). Covers the same "
+                + "area as texture_size, just sharper: 4096 halves the metres per pixel. "
+                + "Costs a one-time render and a bigger download; the overlays stay at "
+                + "texture_size, where extra resolution buys nothing.").Value;
+            if (RENDER_SIZE < TEXTURE_SIZE) RENDER_SIZE = TEXTURE_SIZE;
 
             EXPLORE_RADIUS = config.Bind<float>("Texture", "explore_radius",
                 WebMapConfig.EXPLORE_RADIUS,

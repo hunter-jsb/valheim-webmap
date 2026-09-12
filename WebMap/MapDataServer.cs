@@ -85,13 +85,31 @@ namespace WebMap
 
         // Must run on the main thread: a Texture2D cannot be created from the HTTP
         // thread. Called right after the world render is built or loaded.
+        // The fog changes a few pixels every couple of seconds and is asked for far
+        // more often than that. Encode when it has changed, serve the bytes otherwise.
+        public volatile bool fogPngStale = true;
+        private byte[] fogPngCache;
+        private readonly object fogPngLock = new object();
+        public byte[] GetFogPng()
+        {
+            lock (fogPngLock)
+            {
+                if (fogPngStale || fogPngCache == null)
+                {
+                    fogPngCache = ImageConv.EncodeToPNG(fogTexture);
+                    fogPngStale = false;
+                }
+                return fogPngCache;
+            }
+        }
+
         public void BuildMapJpg()
         {
             if (mapJpgCache != null) return;
             if (mapImageData == null || mapImageData.Length == 0) return;
             try
             {
-                int size = WebMapConfig.TEXTURE_SIZE;
+                int size = WebMapConfig.RENDER_SIZE;      // LoadImage resizes anyway
                 var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
                 if (!ImageConv.LoadImage(tex, mapImageData)) return;
                 mapJpgCache = ImageConv.EncodeToJPG(tex, 85);
@@ -294,7 +312,7 @@ namespace WebMap
             HttpListenerRequest req = e.Request;
             HttpListenerResponse res = e.Response;
 
-            string rawRequestPath = req.RawUrl;
+            string rawRequestPath = req.RawUrl.Split('?')[0];   // ?v= is for caches, not for us
             if (rawRequestPath == "/") rawRequestPath = "/index.html";
 
             // GetFileName, not the last '/'-separated part: splitting on '/' alone
@@ -347,7 +365,7 @@ namespace WebMap
         {
             HttpListenerRequest req = e.Request;
             HttpListenerResponse res = e.Response;
-            string rawRequestPath = req.RawUrl;
+            string rawRequestPath = req.RawUrl.Split('?')[0];
             byte[] textBytes;
 
             switch (rawRequestPath)
@@ -380,6 +398,12 @@ namespace WebMap
                         return true;
                     }
                 case "/map":
+                    if (mapImageData == null || mapImageData.Length == 0)
+                    {
+                        res.StatusCode = 503;          // still rendering; never cached
+                        res.Close();
+                        return true;
+                    }
                     // Doing things this way to make the full map harder to accidentally see.
                     res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=604800, immutable");
                     res.ContentType = "application/octet-stream";
@@ -391,7 +415,7 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "image/png";
                     res.StatusCode = 200;
-                    byte[] fogBytes = ImageConv.EncodeToPNG(fogTexture);
+                    byte[] fogBytes = GetFogPng();
                     res.ContentLength64 = fogBytes.Length;
                     res.Close(fogBytes, true);
                     return true;

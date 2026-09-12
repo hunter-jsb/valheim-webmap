@@ -184,7 +184,7 @@ const setIconTypeHidden = (type, isHidden) => {
 const redrawMap = () => {
     ctx.clearRect(0, 0, width, height);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(mapImage, 0, 0);
+    ctx.drawImage(mapImage, 0, 0, width, height);   // the render may be finer than the canvas
 
     // Forest multiplies, so woods darken the terrain and a clearing is simply a
     // hole where the render shows through. Structures paint over it. Both go
