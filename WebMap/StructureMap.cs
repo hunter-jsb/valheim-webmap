@@ -107,6 +107,7 @@ namespace WebMap
             ForestMap.Begin();                                // shares this one walk of the world
             Vehicles.Begin();
             Portals.Begin();
+            Graves.Begin();
 
             var byPrefab = new Dictionary<int, int>();
 
@@ -131,7 +132,11 @@ namespace WebMap
                         int idx = y * size + x;
                         int pref = 0;
                         try { pref = zdo.GetPrefab(); } catch { }
-                        if (creator != 0L)
+                        if (Graves.IsGrave(pref))
+                        {
+                            Graves.Observe(zdo, p);   // spawned by the game, so no creator
+                        }
+                        else if (creator != 0L)
                         {
                             var veh = Vehicles.Classify(pref);
                             if (veh != Vehicles.Kind.None)
@@ -164,6 +169,7 @@ namespace WebMap
             ForestMap.Finish();
             Vehicles.Finish();
             Portals.Finish();
+            Graves.Finish();
 
             LastCount = found;
             LastScanned = seen;
