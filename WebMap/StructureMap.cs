@@ -39,7 +39,7 @@ namespace WebMap
 
         // Rough albedo per build material, keyed off the prefab name. Valheim's
         // piece names are descriptive enough that this needs no asset lookups.
-        private static Color32 MaterialOf(int prefabHash)
+        internal static Color32 MaterialOf(int prefabHash)
         {
             if (paletteCache.TryGetValue(prefabHash, out var cached)) return cached;
             string n = null;
@@ -107,6 +107,7 @@ namespace WebMap
             ForestMap.Begin();                                // shares this one walk of the world
             Vehicles.Begin();
             Portals.Begin();
+            Pieces.Begin();
             Graves.Begin();
 
             var byPrefab = new Dictionary<int, int>();
@@ -147,6 +148,7 @@ namespace WebMap
                             {
                                 // a portal is part of a build, so it is reported AND painted
                                 if (Portals.IsPortal(pref)) Portals.Observe(zdo, p);
+                                Pieces.Observe(pref, zdo, p);      // the same piece, as a footprint
                                 var mat = MaterialOf(pref);
                                 cells.TryGetValue(idx, out Cell cell);
                                 cell.n++; cell.r += mat.r; cell.g += mat.g; cell.b += mat.b;
@@ -169,6 +171,7 @@ namespace WebMap
             ForestMap.Finish();
             Vehicles.Finish();
             Portals.Finish();
+            Pieces.Finish();
             Graves.Finish();
 
             LastCount = found;

@@ -483,6 +483,14 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/pieces":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(Pieces.GetJson());
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/structures/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
