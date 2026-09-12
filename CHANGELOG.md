@@ -16,6 +16,21 @@
   `HandleRoutedRPC`, which never sees a message addressed to another player.
 * Removed the fake server-client patches: they block joins on 1.0 and are unnecessary now.
 
+Fixes that matter now that chat is actually observed:
+
+* The chat lists are no longer edited from three threads at once. They are written from
+  the game thread, drained by a timer on a pool thread and read by HTTP on a third;
+  `/messages` now serves a snapshot instead of walking a list another thread is editing.
+* Chat observation decides whether a routed RPC is chat *before* looking up the sender.
+  It now runs for every RPC the server forwards, and used to throw and catch a
+  NullReferenceException on each one whose sender was not a live peer.
+* No more one console line per chat message and per ping; both are behind `debug`.
+* The static file cache is concurrent: a browser opens several connections on first load
+  and a plain Dictionary can corrupt under that.
+* Static files resolve through `Path.GetFileName`, so a backslash in the URL cannot walk
+  out of the web root on Windows.
+* `/messages` sends `application/json` rather than `applicaion/json`.
+
 ## 2.8.0
 
 * Build for **Valheim 1.0 (Deep North)**.

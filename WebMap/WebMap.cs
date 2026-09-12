@@ -591,27 +591,40 @@ namespace WebMap
 
             internal static void Observe(ref ZRoutedRpc __instance, ref RoutedRPCData data)
             {
-                string methodName = StringExtensionMethods_Patch.GetStableHashName(data?.m_methodHash ?? 0);
-                if (Array.Exists(ignoreRpc, x => x == methodName)) // Ignore noise
-                    return;
-
-                if (WebMapConfig.DEBUG)
+                // Since this also runs from the RouteRPC prefix it sees every routed
+                // RPC the server forwards, not just the few addressed to it -- so
+                // decide whether this is chat before doing any work. The peer lookup
+                // below used to run for all of them, and threw and caught a
+                // NullReferenceException each time the sender was not a live peer.
+                int hash = data?.m_methodHash ?? 0;
+                if (hash == 0) return;          // no data: must not match the caches, which start at 0
+                bool isSay = hash == sayMethodHash || hash == "Say".GetStableHashCode();
+                bool isChat = hash == chatMessageMethodHash || hash == "ChatMessage".GetStableHashCode();
+                if (!isSay && !isChat)
                 {
-                    ZLog.Log("HandleRoutedRPC: " + methodName);
+                    if (WebMapConfig.DEBUG)
+                    {
+                        string other = StringExtensionMethods_Patch.GetStableHashName(hash);
+                        if (!Array.Exists(ignoreRpc, x => x == other)) ZLog.Log("RoutedRPC: " + other);
+                    }
+                    return;
                 }
 
                 ZNetPeer peer = ZNet.instance.GetPeer(data.m_senderPeerID);
                 string steamid = "";
-                try
+                if (peer != null)
                 {
-                    steamid = peer.m_rpc.GetSocket().GetHostName();
-                }
-                catch
-                {
-                    // ignored
+                    try
+                    {
+                        steamid = peer.m_rpc.GetSocket().GetHostName();
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
                 }
 
-                if (data?.m_methodHash == sayMethodHash || data?.m_methodHash == "Say".GetStableHashCode())
+                if (isSay)
                 {
                     sayMethodHash = data.m_methodHash;
                     try
@@ -695,7 +708,10 @@ namespace WebMap
                             {
                                 mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
                             }
-                            ZLog.Log($"WebMap: (say) {pos} | {messageType} | {userInfo.Name} | {message}");
+                            // one console line per chat message and per ping is spam on a
+                            // busy server; the web feed is where these are meant to be read
+                            if (WebMapConfig.DEBUG)
+                                ZLog.Log($"WebMap: (say) {pos} | {messageType} | {userInfo.Name} | {message}");
                         }
                     }
                     catch (Exception ex)
@@ -703,7 +719,7 @@ namespace WebMap
                         ZLog.LogWarning("WebMap: failed handling a chat message: " + ex);
                     }
                 }
-                else if (data?.m_methodHash == chatMessageMethodHash || data?.m_methodHash == "ChatMessage".GetStableHashCode())
+                else
                 {
                     chatMessageMethodHash = data.m_methodHash;
                     try
@@ -717,7 +733,8 @@ namespace WebMap
                         if (messageType == (int)Talker.Type.Ping)
                         {
                             mapDataServer.BroadcastPing(data.m_senderPeerID, userInfo.Name, pos);
-                            ZLog.Log($"WebMap: (ping) {pos} | {messageType} | {userInfo.Name}");
+                            if (WebMapConfig.DEBUG)
+                                ZLog.Log($"WebMap: (ping) {pos} | {messageType} | {userInfo.Name}");
                         }
                         else
                         {
@@ -725,7 +742,8 @@ namespace WebMap
                             message = message.Trim();
 
                             mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
-                            ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
+                            if (WebMapConfig.DEBUG)
+                                ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
                         }
                     }
                     catch (Exception ex)

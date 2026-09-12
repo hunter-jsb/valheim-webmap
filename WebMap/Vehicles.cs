@@ -64,16 +64,14 @@ namespace WebMap
                 var e = found[i];
                 if (e.kind == Kind.Boat) boats++; else carts++;
                 if (i > 0) sb.Append(",");
-                sb.Append("{\"kind\":\"").Append(e.kind == Kind.Boat ? "boat" : "cart")
-                  .Append("\",\"name\":\"").Append(e.name.Replace("\"", ""))
-                  .Append(FormattableInvariant(e.x, e.z)).Append("}");
+                string kind = e.kind == Kind.Boat ? "boat" : "cart";
+                string name = e.name.Replace("\"", "");
+                sb.Append(System.FormattableString.Invariant(
+                    $"{{\"kind\":\"{kind}\",\"name\":\"{name}\",\"x\":{e.x:0.#},\"z\":{e.z:0.#}}}"));
             }
             sb.Append("],\"boats\":").Append(boats).Append(",\"carts\":").Append(carts).Append("}");
             json = sb.ToString();
         }
-
-        private static string FormattableInvariant(float x, float z) =>
-            System.FormattableString.Invariant($"\",\"x\":{x:0.#},\"z\":{z:0.#}");
 
         public static string GetJson() => json;
     }

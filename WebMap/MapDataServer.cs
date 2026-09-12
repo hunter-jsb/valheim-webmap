@@ -74,7 +74,9 @@ namespace WebMap
         };
 
         private readonly System.Threading.Timer broadcastTimer;
-        private readonly Dictionary<string, byte[]> fileCache;
+        // Written from HTTP threads, and a browser opens several connections at once
+        // on the first page load: a plain Dictionary can corrupt under that.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> fileCache;
         public Texture2D fogTexture;
         private readonly HttpServer httpServer;
 
@@ -104,6 +106,13 @@ namespace WebMap
         public List<string> pins = new List<string>();
         public List<MapMessage> sentMessages = new List<MapMessage>();
         public List<MapMessage> newMessages = new List<MapMessage>();
+        // Chat arrives on the game thread, is drained by a timer on a pool thread,
+        // and is read by HTTP on a third -- so the lists are never touched without
+        // this, and /messages serves a snapshot the timer builds rather than walking
+        // a list another thread is editing. Latent until 2.9.0: before chat could be
+        // observed at all, these lists were almost always empty.
+        private readonly object messageLock = new object();
+        private volatile string messagesJson = "[]";
         public List<ZNetPeer> players = new List<ZNetPeer>();
         public string lastPlayerResponse = "";
         private bool forceReload = false;
@@ -138,26 +147,33 @@ namespace WebMap
                         lastPlayerResponse = dataString;
                     }
 
-                    if (newMessages.Count > 0)
+                    List<string> tosend = null;
+                    lock (messageLock)
                     {
-                        List<string> tosend = new List<string>();
-
-                        newMessages.ForEach(message =>
+                        if (newMessages.Count > 0)
                         {
-                            if (WebMapConfig.MAX_MESSAGES < sentMessages.Count) sentMessages.RemoveAt(0);
-                            tosend.Add(message.ToJson());
-                            sentMessages.Add(message);
-                        });
-                        if (tosend.Count > 0) webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
-                        newMessages.Clear();
-                        newMessages.TrimExcess();
+                            tosend = new List<string>();
+                            newMessages.ForEach(message =>
+                            {
+                                if (WebMapConfig.MAX_MESSAGES < sentMessages.Count) sentMessages.RemoveAt(0);
+                                tosend.Add(message.ToJson());
+                                sentMessages.Add(message);
+                            });
+                            newMessages.Clear();
+                            newMessages.TrimExcess();
+                            var all = new List<string>(sentMessages.Count);
+                            sentMessages.ForEach(m => all.Add(m.ToJson()));
+                            messagesJson = "[" + string.Join(", ", all) + "]";
+                        }
                     }
+                    if (tosend != null && tosend.Count > 0)
+                        webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
                 }
             }, null, TimeSpan.Zero, TimeSpan.FromSeconds(PLAYER_UPDATE_INTERVAL));
 
             publicRoot = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty, "web");
 
-            fileCache = new Dictionary<string, byte[]>();
+            fileCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
 
             httpServer.OnGet += (sender, e) =>
             {
@@ -277,25 +293,24 @@ namespace WebMap
             string rawRequestPath = req.RawUrl;
             if (rawRequestPath == "/") rawRequestPath = "/index.html";
 
-            string[] pathParts = rawRequestPath.Split('/');
-            string requestedFile = pathParts[pathParts.Length - 1];
+            // GetFileName, not the last '/'-separated part: splitting on '/' alone
+            // leaves backslashes intact, and Path.Combine would honour them as
+            // separators on Windows -- an escape from the web root.
+            string requestedFile = Path.GetFileName(rawRequestPath);
             string[] fileParts = requestedFile.Split('.');
             string fileExt = fileParts[fileParts.Length - 1];
 
             if (contentTypes.ContainsKey(fileExt))
             {
                 byte[] requestedFileBytes = new byte[0];
-                if (fileCache.ContainsKey(requestedFile))
+                if (!fileCache.TryGetValue(requestedFile, out requestedFileBytes))
                 {
-                    requestedFileBytes = fileCache[requestedFile];
-                }
-                else
-                {
+                    requestedFileBytes = new byte[0];
                     string filePath = Path.Combine(publicRoot, requestedFile);
                     try
                     {
                         requestedFileBytes = File.ReadAllBytes(filePath);
-                        if (CACHE_SERVER_FILES) fileCache.Add(requestedFile, requestedFileBytes);
+                        if (CACHE_SERVER_FILES) fileCache[requestedFile] = requestedFileBytes;
                     }
                     catch (Exception ex)
                     {
@@ -378,14 +393,9 @@ namespace WebMap
                     return true;
                 case "/messages":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "applicaion/json";
+                    res.ContentType = "application/json";
                     res.StatusCode = 200;
-                    List<string> tosend = new List<string>();
-                    sentMessages.ForEach(message =>
-                    {
-                        tosend.Add(message.ToJson());
-                    });
-                    textBytes = Encoding.UTF8.GetBytes("[" + string.Join(", ", tosend) + "]");
+                    textBytes = Encoding.UTF8.GetBytes(messagesJson);
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
@@ -486,7 +496,8 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "text/csv";
                     res.StatusCode = 200;
-                    string text = string.Join("\n", pins);
+                    string text;
+                    lock (pins) text = string.Join("\n", pins);
                     textBytes = Encoding.UTF8.GetBytes(text);
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
@@ -523,22 +534,25 @@ namespace WebMap
 
         public void AddPin(string id, string pinId, string type, string name, Vector3 position, string pinText)
         {
-            pins.Add($"{id},{pinId},{type},{name},{FixedValue(position.x)},{FixedValue(position.z)},{pinText}");
+            lock (pins) pins.Add($"{id},{pinId},{type},{name},{FixedValue(position.x)},{FixedValue(position.z)},{pinText}");
             webSocketHandler.Sessions.Broadcast(
                 $"pin\n{id}\n{pinId}\n{type}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}\n{pinText}");
         }
 
         public void RemovePin(int idx)
         {
-            string pin = pins[idx];
-            string[] pinParts = pin.Split(',');
-            pins.RemoveAt(idx);
+            string[] pinParts;
+            lock (pins)
+            {
+                pinParts = pins[idx].Split(',');
+                pins.RemoveAt(idx);
+            }
             webSocketHandler.Sessions.Broadcast($"rmpin\n{pinParts[1]}");
         }
 
         public void AddMessage(long id, int type, string name, string message)
         {
-            newMessages.Add(new MapMessage(id, type, name, message));
+            lock (messageLock) newMessages.Add(new MapMessage(id, type, name, message));
         }
 
         private static string FixedValue(float f)
