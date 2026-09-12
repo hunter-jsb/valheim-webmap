@@ -49,9 +49,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends lib32gcc-s1
           mkdir -p "$RUNNER_TEMP/steamcmd" && cd "$RUNNER_TEMP/steamcmd"
           curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf -
-          # force_install_dir BEFORE login, which is what steamcmd asks for by name:
-          # the other way it prints "Please use force_install_dir before logon!" and
-          # fails with "Missing configuration" having downloaded nothing.
+          # Prime first, install second, in two separate invocations -- which is
+          # what the repo's own Dockerfile does. A freshly unpacked steamcmd has no
+          # app info cached, so the first run cannot resolve 896660 and fails with
+          # "Missing configuration" having downloaded nothing, whichever order the
+          # arguments are in. The bare login populates the cache.
+          ./steamcmd.sh +login anonymous +quit || true
           mkdir -p "$RUNNER_TEMP/valheim"
           ./steamcmd.sh +force_install_dir "$RUNNER_TEMP/valheim" \
                         +login anonymous \
