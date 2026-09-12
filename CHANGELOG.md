@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.9.1
 
 * Removed a Harmony prefix on `ZRoutedRpc.InvokeRoutedRPC` that ran for every outgoing
   routed RPC and did nothing unless `debug` or `test` was set. Chat is observed at

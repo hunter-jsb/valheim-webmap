@@ -1,6 +1,6 @@
 {
     "name": "WebMap",
-    "version_number": "2.9.0",
+    "version_number": "2.9.1",
     "website_url": "https://github.com/hunter-jsb/valheim-webmap",
     "description": "Dedicated-server web map for Valheim 1.0. Live players, shared fog-of-war exploration, player-built structures, forest and logging, and in-game server announcements. Clients need no mods.",
     "dependencies": [
