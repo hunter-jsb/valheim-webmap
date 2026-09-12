@@ -75,6 +75,7 @@ namespace WebMap
             StaticCoroutine.Start(UpdateFogTextureLoop());
             StaticCoroutine.Start(StructureMap.Loop());
             StaticCoroutine.Start(Announce.Pump());
+            StaticCoroutine.Start(PlayerSnapshotLoop());
             NotifyOnline();
         }
 
@@ -191,6 +192,18 @@ namespace WebMap
             if (forceReload)
             {
                 mapDataServer.Reload();
+            }
+        }
+
+        // The broadcast timer and every HTTP request used to read ZDOs and ZNet's
+        // peer list themselves, from whatever thread they happened to be on. They
+        // read what this builds instead.
+        public IEnumerator PlayerSnapshotLoop()
+        {
+            while (true)
+            {
+                mapDataServer.RefreshPlayerSnapshot();
+                yield return new WaitForSeconds(WebMapConfig.PLAYER_UPDATE_INTERVAL);
             }
         }
 

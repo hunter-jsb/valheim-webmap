@@ -30,6 +30,11 @@ Fixes that matter now that chat is actually observed:
 * Static files resolve through `Path.GetFileName`, so a backslash in the URL cannot walk
   out of the web root on Windows.
 * `/messages` sends `application/json` rather than `applicaion/json`.
+* Player state is built once on the game thread and read from there. The broadcast
+  timer runs on a pool thread and HTTP on others again, and both used to read ZDOs and
+  walk ZNet's live peer list themselves.
+* `/vehicles` only reports what is in explored territory, and `show_vehicles` turns it
+  off entirely.
 
 ## 2.8.0
 

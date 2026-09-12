@@ -56,7 +56,7 @@ Besides the map UI, the server exposes:
 | `/map.jpg` | the same render as JPEG — about a seventh the size, and the render is opaque so nothing is lost |
 | `/forest` | forest cover and logging (PNG, transparent) |
 | `/forest/stats` | tree and stump counts, and canopy density percentiles (JSON) |
-| `/vehicles` | boats and carts, with position and type (JSON) |
+| `/vehicles` | boats and carts in explored territory, with position and type (JSON) |
 | `/announce` | POST a line to every player's screen (see below) |
 | `/fog` | the explored mask (PNG) |
 | `/structures` | player-built structures overlay (PNG, transparent) |

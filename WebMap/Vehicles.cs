@@ -54,16 +54,38 @@ namespace WebMap
             found.Add(new Entry { kind = kind, name = name ?? "", x = pos.x, z = pos.z });
         }
 
+        // The structures layer is drawn under the fog mask by the page, so builds in
+        // unexplored land are hidden for free. Markers cannot be masked that way, so
+        // the filtering happens here instead -- a boat somewhere nobody has been is
+        // not reported at all, rather than merely not drawn.
+        private static bool Explored(float x, float z)
+        {
+            try
+            {
+                var fog = WebMap.mapDataServer != null ? WebMap.mapDataServer.fogTexture : null;
+                if (fog == null) return true;          // before the fog loads, hide nothing
+                int size = WebMapConfig.TEXTURE_SIZE, half = size / 2;
+                int px = Mathf.RoundToInt(x / WebMapConfig.PIXEL_SIZE + half);
+                int py = Mathf.RoundToInt(z / WebMapConfig.PIXEL_SIZE + half);
+                if (px < 0 || py < 0 || px >= size || py >= size) return false;
+                return fog.GetPixel(px, py).r > 0.5f;  // white is explored
+            }
+            catch { return true; }
+        }
+
         public static void Finish()
         {
             int boats = 0, carts = 0;
             var sb = new StringBuilder();
             sb.Append("{\"vehicles\":[");
+            bool first = true;
             for (int i = 0; i < found.Count; i++)
             {
                 var e = found[i];
+                if (!WebMapConfig.SHOW_VEHICLES || !Explored(e.x, e.z)) continue;
                 if (e.kind == Kind.Boat) boats++; else carts++;
-                if (i > 0) sb.Append(",");
+                if (!first) sb.Append(",");
+                first = false;
                 string kind = e.kind == Kind.Boat ? "boat" : "cart";
                 string name = e.name.Replace("\"", "");
                 sb.Append(System.FormattableString.Invariant(

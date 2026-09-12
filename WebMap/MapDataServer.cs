@@ -56,7 +56,7 @@ namespace WebMap
         {
             if (e.Data.ToString() == "players")
             {
-                Send(MapDataServer.getInstance().getPlayerResponse(true));
+                Send(MapDataServer.getInstance().PlayersWs);
             }
             base.OnMessage(e);
         }
@@ -115,6 +115,14 @@ namespace WebMap
         private volatile string messagesJson = "[]";
         public List<ZNetPeer> players = new List<ZNetPeer>();
         public string lastPlayerResponse = "";
+        // Player state comes from ZDOMan and from ZNet's own live m_peers list, and
+        // neither may be read off the game thread: the broadcast timer runs on a pool
+        // thread and HTTP on others again, so both would be walking a list the game is
+        // editing. RefreshPlayerSnapshot runs on the game thread and everyone else
+        // only ever reads these strings.
+        private volatile string playersWs = "players";
+        private volatile string playersJson = "{\"count\":0,\"players\":[]}";
+        public string PlayersWs => playersWs;
         private bool forceReload = false;
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
@@ -140,7 +148,7 @@ namespace WebMap
                 }
                 else
                 {
-                    dataString = getPlayerResponse(false);
+                    dataString = playersWs;
                     if (dataString != lastPlayerResponse)
                     {
                         webSocketHandler.Sessions.Broadcast(dataString);
@@ -191,13 +199,9 @@ namespace WebMap
             };
         }
 
-        public string getPlayerResponse(bool sendLast)
+        // Called only from RefreshPlayerSnapshot, i.e. only on the game thread.
+        private string BuildPlayerResponse()
         {
-            if (sendLast && lastPlayerResponse.Length > 0)
-            {
-                return lastPlayerResponse;
-            }
-
             string dataString = "players\n";
 
             players.ForEach(player =>
@@ -236,7 +240,7 @@ namespace WebMap
         // clients don't have to speak websocket. Position is omitted for players
         // who chose to be hidden (unless ALWAYS_VISIBLE), matching the map's own
         // behaviour -- a hidden player must not leak coordinates over HTTP either.
-        public string MakePlayersJson()
+        private string BuildPlayersJson()
         {
             var entries = new List<string>();
             players.ForEach(player =>
@@ -403,7 +407,7 @@ namespace WebMap
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
                     res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(MakePlayersJson());
+                    textBytes = Encoding.UTF8.GetBytes(playersJson);
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
@@ -505,6 +509,20 @@ namespace WebMap
             }
 
             return false;
+        }
+
+        // Game thread only. Rebuilds what every other thread serves.
+        public void RefreshPlayerSnapshot()
+        {
+            try
+            {
+                playersWs = BuildPlayerResponse();
+                playersJson = BuildPlayersJson();
+            }
+            catch (Exception ex)
+            {
+                if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: player snapshot failed: " + ex.Message);
+            }
         }
 
         public void Reload()

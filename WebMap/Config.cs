@@ -29,6 +29,8 @@ namespace WebMap
         public static Vector3 WORLD_START_POS = Vector3.zero;
         public static int DEFAULT_ZOOM = 100;
 
+        public static bool SHOW_VEHICLES = true;
+
         public static string ANNOUNCE_NAME = "Server";
         public static string DISCORD_WEBHOOK = "";
         public static string DISCORD_INVITE_URL = "";
@@ -96,6 +98,12 @@ namespace WebMap
             TEST = config.Bind("Server", "test",
                 WebMapConfig.TEST,
                 "Enable test features (bugs).").Value;
+
+            SHOW_VEHICLES = config.Bind("Server", "show_vehicles",
+                WebMapConfig.SHOW_VEHICLES,
+                "Report boats and carts at /vehicles. They are only ever reported in "
+                + "territory players have already explored, but turning this off stops "
+                + "the endpoint reporting anything at all.").Value;
 
             DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
                 WebMapConfig.DISCORD_WEBHOOK,
