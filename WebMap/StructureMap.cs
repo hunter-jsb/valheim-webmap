@@ -106,6 +106,7 @@ namespace WebMap
             System.Array.Clear(buf, 0, buf.Length);
             ForestMap.Begin();                                // shares this one walk of the world
             Vehicles.Begin();
+            Portals.Begin();
 
             var byPrefab = new Dictionary<int, int>();
 
@@ -139,6 +140,8 @@ namespace WebMap
                             }
                             else
                             {
+                                // a portal is part of a build, so it is reported AND painted
+                                if (Portals.IsPortal(pref)) Portals.Observe(zdo, p);
                                 var mat = MaterialOf(pref);
                                 cells.TryGetValue(idx, out Cell cell);
                                 cell.n++; cell.r += mat.r; cell.g += mat.g; cell.b += mat.b;
@@ -160,6 +163,7 @@ namespace WebMap
             yield return Render(size);
             ForestMap.Finish();
             Vehicles.Finish();
+            Portals.Finish();
 
             LastCount = found;
             LastScanned = seen;
