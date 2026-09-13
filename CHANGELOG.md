@@ -37,7 +37,9 @@
 * `/state`: every small JSON block in one document per tick, with a content revision per
   layer. A viewer polls one URL and fetches a layer only when its revision moved; `?v=` on
   a layer request lets a cache keep it as long as it likes. The bundled viewer polls it
-  every 30 s instead of re-pulling both overlays on timers.
+  every 30 s instead of re-pulling both overlays on timers, and loads the world render as
+  the JPEG: browsers gave up on the 16 MB PNG a 4096 render produces part way through,
+  after which the viewer never got to its overlays, pins or messages.
 * `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
   hops, pins, and what is standing in the world with their name on it (pieces, portals,
   ships, graves). No time played, by design. Persisted beside the world's map data.

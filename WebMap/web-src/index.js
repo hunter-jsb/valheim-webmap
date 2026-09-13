@@ -7,8 +7,11 @@ import ui, { createUi } from "./ui";
 const mapImage = document.createElement('img');
 const fogImage = document.createElement('img');
 
+// The JPEG, not the PNG: at render_size 4096 the PNG is 16 MB, and Chrome gives
+// up on it part way -- after which nothing else in setup ever ran, and the map
+// had no structures, pins or messages.
 const fetchMap = () => new Promise((res) => {
-    fetch('map').then(res => res.blob()).then((mapBlob) => {
+    fetch('map.jpg').then(res => res.blob()).then((mapBlob) => {
         mapImage.onload = res;
         mapImage.src = URL.createObjectURL(mapBlob);
     });
