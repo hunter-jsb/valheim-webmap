@@ -36,6 +36,9 @@ namespace WebMap
         private static volatile byte[] png;
         public static volatile int Rev;                    // content revision of the PNG
         private static volatile bool sweeping;            // set on the game thread, cleared by the pool thread
+        // BepInEx only captures Unity log calls made on the main thread, so the
+        // pool thread leaves its summary here and the loop prints it next tick.
+        private static volatile string pendingLog;
 
         // Tick of the last read that wants a sweep. Written from HTTP threads (an
         // int store is atomic); only the main thread scans. Un-watched at boot.
@@ -109,6 +112,8 @@ namespace WebMap
             Init();
             while (true)
             {
+                string line = pendingLog;
+                if (line != null) { pendingLog = null; ZLog.Log(line); }
                 int now = Environment.TickCount;
                 if (unchecked((uint)(now - LastRead)) < WatchMs && unchecked((uint)(now - lastSweepStart)) >= FloorMs)
                 {
@@ -241,10 +246,10 @@ namespace WebMap
                 int gc2 = GC.CollectionCount(2) - gcBefore;
                 string sweep = FormattableString.Invariant($"{{\"at\":{started},\"zdos\":{seen},\"walk_ms\":{walkMs},\"finish_ms\":{finish.ElapsedMilliseconds},\"frames\":{frames},\"wall_ms\":{wall.ElapsedMilliseconds},\"gc2\":{gc2}}}");
                 statsJson = BuildStats(byPrefab, found, seen, sweep);
-                ZLog.Log($"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
-                       + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps; "
-                       + $"walk {walkMs} ms over {frames} frames + finish {finish.ElapsedMilliseconds} ms off-thread, "
-                       + $"{wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc");
+                pendingLog = $"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
+                           + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps; "
+                           + $"walk {walkMs} ms over {frames} frames + finish {finish.ElapsedMilliseconds} ms off-thread, "
+                           + $"{wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc";
             }
             catch (Exception e)
             {
