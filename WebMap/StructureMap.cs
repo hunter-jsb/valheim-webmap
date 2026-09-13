@@ -42,9 +42,6 @@ namespace WebMap
         public static volatile int LastRead = unchecked(Environment.TickCount - WatchMs);
         private static int lastSweepStart = unchecked(Environment.TickCount - FloorMs);
 
-        public static int LastCount { get; private set; }
-        public static int LastScanned { get; private set; }
-
         // Rough albedo per build material, keyed off the prefab name. Valheim's
         // piece names are descriptive enough that this needs no asset lookups.
         internal static Color32 MaterialOf(int prefabHash)
@@ -239,8 +236,6 @@ namespace WebMap
                 Stats.PublishSweep();
                 finish.Stop();
 
-                LastCount = found;
-                LastScanned = seen;
                 int gc2 = GC.CollectionCount(2) - gcBefore;
                 string sweep = FormattableString.Invariant($"{{\"at\":{started},\"zdos\":{seen},\"walk_ms\":{walkMs},\"finish_ms\":{finish.ElapsedMilliseconds},\"frames\":{frames},\"wall_ms\":{wall.ElapsedMilliseconds},\"gc2\":{gc2}}}");
                 statsJson = BuildStats(byPrefab, found, seen, sweep);

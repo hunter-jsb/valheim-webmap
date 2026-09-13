@@ -77,16 +77,35 @@ namespace WebMap
         // Written from HTTP threads, and a browser opens several connections at once
         // on the first page load: a plain Dictionary can corrupt under that.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> fileCache;
-        public Texture2D fogTexture;
+        // The fog as bytes, laid out like a texture. A Texture2D is only the PNG
+        // decoder at load; every read and write after that is on this array, so the
+        // encode can run on any thread. A pixel only ever turns white, so an encode
+        // that overlaps a write is at worst one pixel behind.
+        public byte[] fogRgba;
+        public void SetFog(Texture2D tex, bool fresh)
+        {
+            int n = WebMapConfig.TEXTURE_SIZE * WebMapConfig.TEXTURE_SIZE;
+            var b = new byte[n * 4];
+            if (fresh)
+            {
+                for (int i = 3; i < b.Length; i += 4) b[i] = 255;      // opaque black: nothing explored
+            }
+            else
+            {
+                var px = tex.GetPixels32();
+                for (int i = 0; i < px.Length && i < n; i++) { int o = i * 4; b[o] = px[i].r; b[o + 1] = px[i].g; b[o + 2] = px[i].b; b[o + 3] = px[i].a; }
+            }
+            fogRgba = b;
+            fogPngStale = true;
+        }
         private readonly HttpServer httpServer;
 
         public byte[] mapImageData;
         private byte[] mapJpgCache;          // built once; the world render never changes
 
-        // Must run on the main thread: a Texture2D cannot be created from the HTTP
-        // thread. Called right after the world render is built or loaded.
         // The fog changes a few pixels every couple of seconds and is asked for far
         // more often than that. Encode when it has changed, serve the bytes otherwise.
+        // EncodeArrayToPNG is thread-safe, so this may run on the HTTP thread.
         public volatile bool fogPngStale = true;
         private byte[] fogPngCache;
         private readonly object fogPngLock = new object();
@@ -96,7 +115,9 @@ namespace WebMap
             {
                 if (fogPngStale || fogPngCache == null)
                 {
-                    fogPngCache = ImageConv.EncodeToPNG(fogTexture);
+                    if (fogRgba == null) return fogPngCache ?? new byte[0];
+                    int size = WebMapConfig.TEXTURE_SIZE;
+                    fogPngCache = ImageConv.EncodeRgbaToPNG(fogRgba, size, size);
                     fogPngStale = false;
                 }
                 return fogPngCache;
@@ -150,7 +171,7 @@ namespace WebMap
         // (/config, /players, /map, /pins, /messages) must not keep it running.
         private static readonly HashSet<string> sweepReads = new HashSet<string> {
             "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces",
-            "/forest/stats", "/structures/stats", "/structures/refresh"
+            "/forest/stats", "/structures/stats"
         };
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
@@ -555,15 +576,6 @@ namespace WebMap
                         res.Close(textBytes, true);
                         return true;
                     }
-                case "/structures/refresh":
-                    // Arming the gate above is the whole request: the scan runs on the
-                    // main thread, and never sooner than the floor allows.
-                    res.ContentType = "application/json";
-                    res.StatusCode = 202;
-                    textBytes = Encoding.UTF8.GetBytes("{\"queued\":true}");
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
-                    return true;
                 case "/pins":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "text/csv";

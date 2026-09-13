@@ -166,7 +166,8 @@ namespace WebMap
                 Texture2D fogTexture = new Texture2D(WebMapConfig.TEXTURE_SIZE, WebMapConfig.TEXTURE_SIZE);
                 byte[] fogBytes = File.ReadAllBytes(fogImagePath);
                 ImageConv.LoadImage(fogTexture, fogBytes);
-                mapDataServer.fogTexture = fogTexture;
+                mapDataServer.SetFog(fogTexture, fresh: false);
+                UnityEngine.Object.Destroy(fogTexture);
             }
             catch (Exception e)
             {
@@ -179,7 +180,8 @@ namespace WebMap
                 fogTexture.SetPixels32(fogColors);
                 byte[] fogPngBytes = ImageConv.EncodeToPNG(fogTexture);
 
-                mapDataServer.fogTexture = fogTexture;
+                mapDataServer.SetFog(fogTexture, fresh: true);
+                UnityEngine.Object.Destroy(fogTexture);
                 try
                 {
                     File.WriteAllBytes(fogImagePath, fogPngBytes);
@@ -261,13 +263,14 @@ namespace WebMap
                                     int currentExploreRadiusSquared = xDiff * xDiff + yDiff * yDiff;
                                     if (currentExploreRadiusSquared < pixelExploreRadiusSquared)
                                     {
-                                        Color fogTexColor = mapDataServer.fogTexture.GetPixel(x, y);
-                                        if (fogTexColor != Color.white)
+                                        byte[] fog = mapDataServer.fogRgba;
+                                        int o = (y * WebMapConfig.TEXTURE_SIZE + x) * 4;
+                                        if (fog != null && fog[o] != 255)
                                         {
                                             if (WebMapConfig.DEBUG && !fogTextureNeedsSaving) ZLog.Log("Fog needs saving");
                                             fogTextureNeedsSaving = true;
                                             mapDataServer.fogPngStale = true;
-                                            mapDataServer.fogTexture.SetPixel(x, y, Color.white);
+                                            fog[o] = fog[o + 1] = fog[o + 2] = fog[o + 3] = 255;
                                         }
                                     }
                                 }

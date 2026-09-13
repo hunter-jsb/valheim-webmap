@@ -31,6 +31,9 @@
   nothing else; the ~140 ms finish it used to absorb is gone. Overlays are encoded with
   `EncodeArrayToPNG`, which Unity marks thread-safe; `EncodeToPNG` on a `Texture2D`, which
   was being called from HTTP threads, is not.
+* The fog is kept as bytes and encoded the same thread-safe way; it was a `Texture2D`
+  encoded on HTTP threads while the game thread painted it. `/structures/refresh` is gone:
+  reading any layer arms a sweep, which is all it did.
 * `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
   hops, pins, and what is standing in the world with their name on it (pieces, portals,
   ships, graves). No time played, by design. Persisted beside the world's map data.
