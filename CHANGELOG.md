@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.10.0
+
+* `render_size`: the world render at its own resolution. 4096 halves the metres per pixel
+  over the same area; the overlays stay at `texture_size`. The render is a coroutine that
+  yields every row, so it no longer freezes the server, and a `map.png` of the wrong width
+  is rebuilt rather than served.
+* Structure sweeps run only while someone is reading the map. A request to any layer or
+  sweep-fed JSON arms them for two minutes and they start at least a minute apart; an idle
+  server does no sweep work. The fixed two-minute timer and the immediate re-sweep on
+  `/structures/refresh` are gone. Every sweep measures itself — ZDOs, game-thread
+  milliseconds for walk and finish, frames yielded, wall time, gen-2 collections — as a
+  `sweep` field on `/structures/stats` and one log line.
+* `/pieces`: every placed piece as `[prefab, x, z, yaw]` against a small table of prefab
+  footprint and colour, for viewers that draw builds as vectors. Recorded in the same sweep
+  and the same ZDO visit; about 60 KB for a world.
+* `/portals`: portals with their tag and the portal each is linked to, taken from the
+  game's own connection rather than from matching names.
+* `/graves`: tombstones still holding gear, with owner and seconds since the death.
+* The chat observer compares the method hash before doing anything else. It used to hash,
+  key and de-duplicate every routed RPC the server forwards, on the game thread, thousands
+  a second with a few players on. Also removed: a postfix on `GetStableHashCode` that wrote
+  two dictionaries on every string the game hashes, and the `ZSyncAnimation` hooks beside it.
+* `/fog` encodes its PNG once per change instead of on every request, and request paths
+  drop their query string before routing, so a cache-busting parameter no longer 404s.
+* Player state is read by ZDOVars hash and `/config` is built on the game thread when the
+  world loads, so HTTP threads no longer touch `ZNet`.
+
 ## 2.9.1
 
 * Removed a Harmony prefix on `ZRoutedRpc.InvokeRoutedRPC` that ran for every outgoing

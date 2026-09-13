@@ -15,9 +15,14 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
 * Live player list and positions, auto-follow, and in-game pings.
 * **Structures** — placed pieces drawn in the colour of their material, so bases read as
   bases. Keyed off the piece's creator, so terrain and world-generated ruins never appear.
+  The sweep behind it runs only while someone is looking at the map.
 * **Forest and logging** — standing trees shade the terrain and felled ground stops being
   shaded, so clearings show through. Stumps are counted as the record of felling.
 * **Boats and carts**, in explored territory only.
+* **Portals, graves and every placed piece** as JSON, for a front-end of your own. The
+  bundled page does not draw them yet.
+* **World render at the resolution you choose** — `render_size` 4096 halves the metres
+  per pixel, and rendering no longer stalls the server.
 * **Server announcements** on every player's screen, for restart warnings and the like.
 * Chat, deaths and joins in the message log; optional Discord notifications.
 
@@ -57,8 +62,14 @@ shutdown and would discard it. No token file means the route is closed.
 
 ## Configuration
 
-Standard BepInEx config, plus `show_vehicles` to stop `/vehicles` reporting boats and
-carts at all. They are only ever reported in explored territory.
+Standard BepInEx config, plus:
+
+* `render_size` — pixels across the world render, default 2048. Same area as
+  `texture_size`, only sharper: 4096 halves the metres per pixel for a one-time render of
+  about a minute and a larger download. The overlays stay at `texture_size`, where extra
+  resolution buys nothing. A `map.png` of the wrong size is rebuilt on start.
+* `show_vehicles` — report boats and carts at `/vehicles`. They are only ever reported in
+  explored territory; off stops them being reported at all.
 
 ## HTTP endpoints
 
@@ -66,15 +77,22 @@ carts at all. They are only ever reported in explored territory.
 |------|---------|
 | `/map`, `/map.jpg` | the world render; the JPEG is about a seventh the size |
 | `/fog` | explored mask (PNG) |
-| `/structures`, `/structures/stats`, `/structures/refresh` | structures overlay, counts by prefab, queue a sweep |
+| `/structures`, `/structures/stats`, `/structures/refresh` | structures overlay, counts by prefab and the last sweep's cost, arm a sweep |
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
+| `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour (JSON, about 60 KB for a world) |
+| `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
+| `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/announce` | POST, see above |
 
-The structure sweep walks every ZDO on the main thread in slices, so it runs on a slow
-cadence (2 minutes) rather than with the map refresh. `/structures/refresh` cuts the wait
-short.
+The structure sweep walks every ZDO on the game thread, a few thousand per frame. It runs
+only while someone is reading the map: a request to any layer or to the sweep-fed JSON
+arms it for two minutes, sweeps start at least a minute apart, and an idle server does
+none at all. `/config`, `/players`, `/map`, `/pins` and `/messages` do not arm it, so a
+monitor probing those keeps the game idle. `/structures/stats` reports the last sweep —
+ZDOs walked, game-thread milliseconds, frames, wall time, gen-2 collections — so the cost
+can be read rather than guessed.
 
 ## Notes for developers
 
@@ -86,6 +104,10 @@ A shout arrives once per recipient and is de-duplicated on sender, method and pa
 Upstream instead registered a fake server-side player so clients would address the server.
 **On 1.0 that stops anyone joining at all** — the server stays healthy and registered but
 logs zero connection attempts — so it is gone here. Don't put it back.
+
+**The sweep yields only between sector lists.** Yielding inside a `List<ZDO>` lets the
+game's removals shift the index under the walk and skip ZDOs; a whole sector between
+yields is the smallest safe step.
 
 **Announcements** use `MessageHud`'s `ShowMessage` rather than chat: `Chat` gates every
 message on a `RelationsManager` permission check against the sender's platform user id,
@@ -114,7 +136,7 @@ container silently sees nothing.
 
 MIT where applicable.
 
-* 1.0 update, structures, forest and vehicles by [Hunter Boyd](https://github.com/hunterjsb)
+* 1.0 update, structures, forest, vehicles, portals, graves and pieces by [Hunter Boyd](https://github.com/hunterjsb)
 * Maintained upstream by [Jeff Clark](https://github.com/h0tw1r3)
 * Original work by [Kyle Paulsen](https://github.com/kylepaulsen)
 * Background by [webtreats], [CC BY 2.0]
