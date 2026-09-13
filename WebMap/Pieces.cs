@@ -86,10 +86,12 @@ namespace WebMap
                 sb.Append(Inv($"[{e.kind},{e.x:0.#},{e.z:0.#},{Mathf.RoundToInt(e.yaw)}]"));
             }
             sb.Append("],\"count\":").Append(found.Count).Append('}');
-            json = sb.ToString();
+            string s = sb.ToString();
+            json = s; Rev = Fnv.Of(s);
         }
 
         public static string GetJson() => json;
+        public static volatile int Rev;                    // content revision of the JSON
 
         // Name from the walk's cache: safe off the game thread, unlike ZNetScene.
         internal static string NameOf(int prefabHash) => kinds.TryGetValue(prefabHash, out var k) ? k.name : prefabHash.ToString();

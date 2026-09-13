@@ -85,6 +85,7 @@ Standard BepInEx config, plus:
 | `/vehicles` | boats and carts, position and type (JSON) |
 | `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
+| `/state` | all of the small JSON blocks in one document, plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=` |
 | `/announce` | POST, see above |
 
 The structure sweep walks every ZDO on the game thread, a few thousand per frame;

@@ -107,6 +107,7 @@ namespace WebMap
         // more often than that. Encode when it has changed, serve the bytes otherwise.
         // EncodeArrayToPNG is thread-safe, so this may run on the HTTP thread.
         public volatile bool fogPngStale = true;
+        public volatile int fogRev = 1;          // bumped once per pass that revealed anything
         private byte[] fogPngCache;
         private readonly object fogPngLock = new object();
         public byte[] GetFogPng()
@@ -171,7 +172,7 @@ namespace WebMap
         // (/config, /players, /map, /pins, /messages) must not keep it running.
         private static readonly HashSet<string> sweepReads = new HashSet<string> {
             "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces",
-            "/forest/stats", "/structures/stats"
+            "/forest/stats", "/structures/stats", "/state"
         };
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
@@ -524,6 +525,34 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/state":
+                    // One document per tick for a viewer: every small block the page
+                    // polls, and a revision per large layer so it fetches a layer only
+                    // when the picture changed. Each block is a string another thread
+                    // already built; this is concatenation.
+                    {
+                        string pinsJson;
+                        lock (pins)
+                        {
+                            var q = new List<string>(pins.Count);
+                            foreach (string line in pins) q.Add("\"" + JsonEscape(line) + "\"");
+                            pinsJson = "[" + string.Join(",", q) + "]";
+                        }
+                        string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                            + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
+                            + ",\"structures\":" + StructureMap.Rev + "}"
+                            + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
+                            + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
+                            + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()
+                            + ",\"stats\":" + Stats.Json(PinsByName()) + "}";
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                        res.ContentType = "application/json";
+                        res.StatusCode = 200;
+                        textBytes = Encoding.UTF8.GetBytes(state);
+                        res.ContentLength64 = textBytes.Length;
+                        res.Close(textBytes, true);
+                        return true;
+                    }
                 case "/stats/players":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";

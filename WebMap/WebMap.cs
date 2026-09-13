@@ -236,6 +236,7 @@ namespace WebMap
             int pixelExploreRadiusSquared = pixelExploreRadius * pixelExploreRadius;
             int halfTextureSize = WebMapConfig.TEXTURE_SIZE / 2;
 
+            bool changed = false;
             mapDataServer.players.ForEach(player =>
             {
                 if (player.m_publicRefPos || WebMapConfig.ALWAYS_MAP || WebMapConfig.ALWAYS_VISIBLE)
@@ -270,6 +271,7 @@ namespace WebMap
                                             if (WebMapConfig.DEBUG && !fogTextureNeedsSaving) ZLog.Log("Fog needs saving");
                                             fogTextureNeedsSaving = true;
                                             mapDataServer.fogPngStale = true;
+                                            changed = true;
                                             fog[o] = fog[o + 1] = fog[o + 2] = fog[o + 3] = 255;
                                         }
                                     }
@@ -278,6 +280,7 @@ namespace WebMap
                     }
                 }
             });
+            if (changed) mapDataServer.fogRev++;          // once per pass, not per pixel
         }
 
         public IEnumerator SaveFogTextureLoop()

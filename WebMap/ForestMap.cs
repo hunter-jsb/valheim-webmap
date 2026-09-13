@@ -31,6 +31,7 @@ namespace WebMap
 
         private static byte[] rgba;
         private static volatile byte[] png;
+        public static volatile int Rev;                    // content revision of the PNG
         private static volatile string statsJson = "{\"trees\":0,\"stumps\":0}";
 
         public static int LastTrees { get; private set; }
@@ -93,7 +94,7 @@ namespace WebMap
             if (rgba == null) return;
             System.Array.Clear(rgba, 0, rgba.Length);
             int size = WebMapConfig.TEXTURE_SIZE;
-            if (cells.Count == 0) { png = ImageConv.EncodeRgbaToPNG(rgba, size, size); return; }
+            if (cells.Count == 0) { var e = ImageConv.EncodeRgbaToPNG(rgba, size, size); png = e; Rev = Fnv.Of(e); return; }
 
             int minX = size, minY = size, maxX = 0, maxY = 0;
             foreach (var kv in cells)
@@ -152,7 +153,8 @@ namespace WebMap
                     rgba[o] = 96; rgba[o + 1] = 130; rgba[o + 2] = 84; rgba[o + 3] = a;
                 }
 
-            png = ImageConv.EncodeRgbaToPNG(rgba, size, size);
+            var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
+            png = bytes; Rev = Fnv.Of(bytes);
             statsJson = "{\"trees\":" + LastTrees + ",\"stumps\":" + LastStumps
                       + ",\"cells\":" + cells.Count
                       + ",\"density\":" + Percentiles(blur) + "}";

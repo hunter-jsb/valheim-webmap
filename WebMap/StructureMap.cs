@@ -34,6 +34,7 @@ namespace WebMap
         private static byte[] rgba;                       // render target, reused between sweeps
         private static volatile string statsJson = "{\"total\":0,\"prefabs\":[]}";
         private static volatile byte[] png;
+        public static volatile int Rev;                    // content revision of the PNG
         private static volatile bool sweeping;            // set on the game thread, cleared by the pool thread
 
         // Tick of the last read that wants a sweep. Written from HTTP threads (an
@@ -227,7 +228,8 @@ namespace WebMap
             {
                 var finish = Stopwatch.StartNew();
                 Render(size);
-                png = ImageConv.EncodeRgbaToPNG(rgba, size, size);
+                var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
+                png = bytes; Rev = Fnv.Of(bytes);
                 ForestMap.Finish();
                 Vehicles.Finish();
                 Portals.Finish();
