@@ -83,11 +83,12 @@ Standard BepInEx config, plus:
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
+| `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/announce` | POST, see above |
 
-The structure sweep walks every ZDO on the game thread, a few thousand per frame. It runs
-only while someone is reading the map: a request to any layer or to the sweep-fed JSON
+The structure sweep walks every ZDO on the game thread, a few thousand per frame;
+everything after the walk runs on a pool thread. It runs only while someone is reading the map: a request to any layer or to the sweep-fed JSON
 arms it for two minutes, sweeps start at least a minute apart, and an idle server does
 none at all. `/config`, `/players`, `/map`, `/pins` and `/messages` do not arm it, so a
 monitor probing those keeps the game idle. `/structures/stats` reports the last sweep —

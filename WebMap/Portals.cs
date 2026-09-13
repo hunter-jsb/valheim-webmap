@@ -15,11 +15,11 @@ namespace WebMap
     // boat, a portal is part of a build.
     internal static class Portals
     {
-        private struct Entry { public string id, name, to; public float x, z; }
+        private struct Entry { public string id, name, to; public float x, z; public bool explored; }
 
         private static readonly Dictionary<int, bool> isPortal = new Dictionary<int, bool>();
         private static readonly List<Entry> found = new List<Entry>();
-        private static string json = "{\"portals\":[],\"count\":0}";
+        private static volatile string json = "{\"portals\":[],\"count\":0}";
 
         // By component, so a portal added in a later patch counts without this
         // having to learn its prefab name.
@@ -49,7 +49,8 @@ namespace WebMap
                 if (target != ZDOID.None) to = target.ToString();
             }
             catch { }
-            found.Add(new Entry { id = zdo.m_uid.ToString(), name = name, to = to, x = pos.x, z = pos.z });
+            found.Add(new Entry { id = zdo.m_uid.ToString(), name = name, to = to, x = pos.x, z = pos.z,
+                                  explored = MapFog.Explored(pos.x, pos.z) });   // fog is a texture: game thread only
         }
 
         public static void Finish()
@@ -59,7 +60,7 @@ namespace WebMap
             int n = 0;
             foreach (var e in found)
             {
-                if (!MapFog.Explored(e.x, e.z)) continue;
+                if (!e.explored) continue;
                 if (n > 0) sb.Append(",");
                 n++;
                 string name = e.name.Replace("\\", "").Replace("\"", "");

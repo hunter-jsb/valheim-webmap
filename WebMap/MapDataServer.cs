@@ -503,6 +503,14 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/stats/players":
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(Stats.Json(PinsByName()));
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
                 case "/structures/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
@@ -578,6 +586,16 @@ namespace WebMap
             {
                 playersWs = BuildPlayerResponse();
                 playersJson = BuildPlayersJson();
+                foreach (var player in players)
+                {
+                    ZDO z = null;
+                    try { z = ZDOMan.instance.GetZDO(player.m_characterID); } catch { }
+                    if (z == null) continue;
+                    long pid = 0L;
+                    try { pid = z.GetLong(ZDOVars.s_playerID, 0L); } catch { }
+                    Stats.Seen(player.m_playerName, pid, z.GetPosition());
+                }
+                Stats.MaybeSave();
             }
             catch (Exception ex)
             {
@@ -603,6 +621,21 @@ namespace WebMap
         public void BroadcastPing(long id, string name, Vector3 position)
         {
             webSocketHandler.Sessions.Broadcast($"ping\n{id}\n{name}\n{FixedValue(position.x)},{FixedValue(position.z)}");
+        }
+
+        // Pins by the character name in each CSV line, for the player tallies.
+        public Dictionary<string, int> PinsByName()
+        {
+            var d = new Dictionary<string, int>();
+            lock (pins)
+                foreach (string line in pins)
+                {
+                    var parts = line.Split(',');
+                    if (parts.Length < 4) continue;
+                    d.TryGetValue(parts[3], out int n);
+                    d[parts[3]] = n + 1;
+                }
+            return d;
         }
 
         public void AddPin(string id, string pinId, string type, string name, Vector3 position, string pinText)

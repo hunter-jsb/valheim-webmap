@@ -18,12 +18,12 @@ namespace WebMap
     {
         internal enum Kind { None, Boat, Cart }
 
-        private struct Entry { public Kind kind; public string name; public float x, z; }
+        private struct Entry { public Kind kind; public string name; public float x, z; public bool explored; }
 
         private static readonly Dictionary<int, Kind> kindCache = new Dictionary<int, Kind>();
         private static readonly Dictionary<int, string> nameCache = new Dictionary<int, string>();
         private static readonly List<Entry> found = new List<Entry>();
-        private static string json = "{\"boats\":0,\"carts\":0,\"vehicles\":[]}";
+        private static volatile string json = "{\"boats\":0,\"carts\":0,\"vehicles\":[]}";
 
         public static Kind Classify(int prefabHash)
         {
@@ -51,7 +51,8 @@ namespace WebMap
         public static void Observe(int prefabHash, Kind kind, Vector3 pos)
         {
             nameCache.TryGetValue(prefabHash, out string name);
-            found.Add(new Entry { kind = kind, name = name ?? "", x = pos.x, z = pos.z });
+            // the fog is a texture, so it is sampled here on the game thread
+            found.Add(new Entry { kind = kind, name = name ?? "", x = pos.x, z = pos.z, explored = MapFog.Explored(pos.x, pos.z) });
         }
 
         public static void Finish()
@@ -63,7 +64,7 @@ namespace WebMap
             for (int i = 0; i < found.Count; i++)
             {
                 var e = found[i];
-                if (!WebMapConfig.SHOW_VEHICLES || !MapFog.Explored(e.x, e.z)) continue;
+                if (!WebMapConfig.SHOW_VEHICLES || !e.explored) continue;
                 if (e.kind == Kind.Boat) boats++; else carts++;
                 if (!first) sb.Append(",");
                 first = false;

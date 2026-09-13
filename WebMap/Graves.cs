@@ -14,11 +14,11 @@ namespace WebMap
     // grave carries no creator and has to be recognised before that test.
     internal static class Graves
     {
-        private struct Entry { public string name; public float x, z; public long age; }
+        private struct Entry { public string name; public float x, z; public long age; public bool explored; }
 
         private static readonly Dictionary<int, bool> isGrave = new Dictionary<int, bool>();
         private static readonly List<Entry> found = new List<Entry>();
-        private static string json = "{\"graves\":[],\"count\":0}";
+        private static volatile string json = "{\"graves\":[],\"count\":0}";
 
         public static bool IsGrave(int prefabHash)
         {
@@ -50,7 +50,9 @@ namespace WebMap
                     age = (ZNet.instance.GetTime().Ticks - died) / System.TimeSpan.TicksPerSecond;
             }
             catch { }
-            found.Add(new Entry { name = name, x = pos.x, z = pos.z, age = age });
+            Stats.ObserveGrave(name);
+            found.Add(new Entry { name = name, x = pos.x, z = pos.z, age = age,
+                                  explored = MapFog.Explored(pos.x, pos.z) });   // fog is a texture: game thread only
         }
 
         public static void Finish()
@@ -60,7 +62,7 @@ namespace WebMap
             int n = 0;
             foreach (var e in found)
             {
-                if (!MapFog.Explored(e.x, e.z)) continue;
+                if (!e.explored) continue;
                 if (n > 0) sb.Append(",");
                 n++;
                 string name = e.name.Replace("\\", "").Replace("\"", "");

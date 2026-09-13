@@ -12,6 +12,8 @@ namespace WebMap
     // "Stubbe" with no underscore, which is how they stay out of the count.
     //
     // Fed from the structures sweep so the world's ZDOs are only walked once.
+    // Observe runs on the game thread during the walk; Finish runs on the sweep's
+    // pool thread and touches nothing of Unity's but Mathf.
     internal static class ForestMap
     {
         // Shading curve. Trees per pixel run ~0.5 at a woodland fringe to ~8 in
@@ -27,11 +29,9 @@ namespace WebMap
         private static readonly Dictionary<int, Cell> cells = new Dictionary<int, Cell>();
         private static readonly Dictionary<int, Kind> kindCache = new Dictionary<int, Kind>();
 
-        private static Texture2D texture;
-        private static Color32[] buf;
-        private static byte[] png;
-        private static bool pngStale = true;
-        private static string statsJson = "{\"trees\":0,\"stumps\":0}";
+        private static byte[] rgba;
+        private static volatile byte[] png;
+        private static volatile string statsJson = "{\"trees\":0,\"stumps\":0}";
 
         public static int LastTrees { get; private set; }
         public static int LastStumps { get; private set; }
@@ -64,12 +64,11 @@ namespace WebMap
             cells.Clear();
             LastTrees = 0;
             LastStumps = 0;
-            if (texture != null) return;
-            int size = WebMapConfig.TEXTURE_SIZE;
-            texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            buf = new Color32[size * size];
-            texture.SetPixels32(buf);
-            texture.Apply();
+            if (rgba == null)
+            {
+                int size = WebMapConfig.TEXTURE_SIZE;
+                rgba = new byte[size * size * 4];
+            }
         }
 
         public static void Observe(int prefabHash, int idx)
@@ -91,10 +90,10 @@ namespace WebMap
         // A box blur over the populated bounds turns them into canopy.
         public static void Finish()
         {
-            if (texture == null) return;
-            System.Array.Clear(buf, 0, buf.Length);
+            if (rgba == null) return;
+            System.Array.Clear(rgba, 0, rgba.Length);
             int size = WebMapConfig.TEXTURE_SIZE;
-            if (cells.Count == 0) { texture.SetPixels32(buf); texture.Apply(); pngStale = true; return; }
+            if (cells.Count == 0) { png = ImageConv.EncodeRgbaToPNG(rgba, size, size); return; }
 
             int minX = size, minY = size, maxX = 0, maxY = 0;
             foreach (var kv in cells)
@@ -149,12 +148,11 @@ namespace WebMap
                     byte a = (byte)Mathf.Min(MaxShade, Steepness * d / (d + HalfShade));
                     // multiplied, so this darkens and pulls toward green -- which also
                     // greens the biomes that aren't green to begin with
-                    buf[(y + minY) * size + (x + minX)] = new Color32(96, 130, 84, a);
+                    int o = ((y + minY) * size + (x + minX)) * 4;
+                    rgba[o] = 96; rgba[o + 1] = 130; rgba[o + 2] = 84; rgba[o + 3] = a;
                 }
 
-            texture.SetPixels32(buf);
-            texture.Apply();
-            pngStale = true;
+            png = ImageConv.EncodeRgbaToPNG(rgba, size, size);
             statsJson = "{\"trees\":" + LastTrees + ",\"stumps\":" + LastStumps
                       + ",\"cells\":" + cells.Count
                       + ",\"density\":" + Percentiles(blur) + "}";
@@ -169,23 +167,14 @@ namespace WebMap
             if (v.Count == 0) return "{}";
             v.Sort();
             System.Func<float, float> q = p => v[Mathf.Clamp((int)(p * v.Count), 0, v.Count - 1)];
-            return "{\"p50\":" + q(0.50f).ToString("0.00")
-                 + ",\"p90\":" + q(0.90f).ToString("0.00")
-                 + ",\"p99\":" + q(0.99f).ToString("0.00")
-                 + ",\"max\":" + v[v.Count - 1].ToString("0.00") + "}";
+            return "{\"p50\":" + q(0.50f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                 + ",\"p90\":" + q(0.90f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                 + ",\"p99\":" + q(0.99f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                 + ",\"max\":" + v[v.Count - 1].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "}";
         }
 
         public static string GetStats() => statsJson;
 
-        public static byte[] GetPng()
-        {
-            if (texture == null) return new byte[0];
-            if (pngStale || png == null)
-            {
-                png = ImageConv.EncodeToPNG(texture);
-                pngStale = false;
-            }
-            return png;
-        }
+        public static byte[] GetPng() => png ?? new byte[0];
     }
 }

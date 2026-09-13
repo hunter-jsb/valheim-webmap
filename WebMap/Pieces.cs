@@ -23,7 +23,7 @@ namespace WebMap
         private static readonly List<Kind> order = new List<Kind>();            // idx -> kind
         private static readonly List<Entry> found = new List<Entry>();
         private static readonly Regex Dims = new Regex(@"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)", RegexOptions.Compiled);
-        private static string json = "{\"prefabs\":[],\"pieces\":[],\"count\":0}";
+        private static volatile string json = "{\"prefabs\":[],\"pieces\":[],\"count\":0}";
 
         private static string Inv(System.FormattableString f) => f.ToString(CultureInfo.InvariantCulture);
 
@@ -90,5 +90,8 @@ namespace WebMap
         }
 
         public static string GetJson() => json;
+
+        // Name from the walk's cache: safe off the game thread, unlike ZNetScene.
+        internal static string NameOf(int prefabHash) => kinds.TryGetValue(prefabHash, out var k) ? k.name : prefabHash.ToString();
     }
 }

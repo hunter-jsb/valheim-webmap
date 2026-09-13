@@ -102,6 +102,7 @@ namespace WebMap
         public void NotifyJoin(ZNetPeer peer)
         {
             string message = $"player _{peer.m_playerName}_ joined";
+            Stats.Join(peer.m_playerName);
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
             mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
         }
@@ -109,6 +110,7 @@ namespace WebMap
         public void NotifyLeave(ZNetPeer peer)
         {
             string message = $"player _{peer.m_playerName}_ left";
+            Stats.Leave(peer.m_playerName);
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
             // MessageHud is a client HUD; on a dedicated server instance is null, so
             // this threw on every disconnect. Announce.Enqueue reaches players properly.
@@ -123,6 +125,7 @@ namespace WebMap
 
             worldDataPath = Path.Combine(mapDataPath, WebMapConfig.GetWorldName());
             Directory.CreateDirectory(worldDataPath);
+            Stats.Load(worldDataPath);
 
             if (mapDataServer == null)
             {
@@ -529,6 +532,7 @@ namespace WebMap
         {
             private static void Postfix()
             {
+                Stats.Save();
                 mapDataServer.Stop();
                 WebMap.instance.NotifyOffline();
             }
@@ -747,6 +751,7 @@ namespace WebMap
                             if (messageType != (int)Talker.Type.Whisper)
                             {
                                 mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
+                                Stats.Chat(userInfo.Name);
                             }
                             // one console line per chat message and per ping is spam on a
                             // busy server; the web feed is where these are meant to be read
@@ -782,6 +787,8 @@ namespace WebMap
                             message = message.Trim();
 
                             mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
+
+                            Stats.Chat(userInfo.Name);
                             if (WebMapConfig.DEBUG)
                                 ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
                         }

@@ -26,6 +26,14 @@
   drop their query string before routing, so a cache-busting parameter no longer 404s.
 * Player state is read by ZDOVars hash and `/config` is built on the game thread when the
   world loads, so HTTP threads no longer touch `ZNet`.
+* Everything a sweep does after the walk — rendering the overlays, the forest blur, the
+  JSON, the PNG encodes — runs on a pool thread. The game thread pays for the walk and
+  nothing else; the ~140 ms finish it used to absorb is gone. Overlays are encoded with
+  `EncodeArrayToPNG`, which Unity marks thread-safe; `EncodeToPNG` on a `Texture2D`, which
+  was being called from HTTP threads, is not.
+* `/stats/players`: per-player tallies — joins, deaths, chat lines, distance covered, portal
+  hops, pins, and what is standing in the world with their name on it (pieces, portals,
+  ships, graves). No time played, by design. Persisted beside the world's map data.
 
 ## 2.9.1
 

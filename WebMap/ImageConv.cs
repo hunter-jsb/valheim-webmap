@@ -32,6 +32,17 @@ namespace WebMap
 
         public static byte[] EncodeToPNG(Texture2D tex) => (byte[])_enc.Invoke(null, new object[] { tex });
 
+        private static readonly MethodInfo _encArr =
+            T?.GetMethod("EncodeArrayToPNG", new[] { typeof(Array), typeof(UnityEngine.Experimental.Rendering.GraphicsFormat),
+                                                    typeof(uint), typeof(uint), typeof(uint) });
+
+        // Thread-safe in Unity's binding (FreeFunction ..., true), which EncodeToPNG
+        // on a Texture2D is not: a sweep encodes its overlays on a pool thread with
+        // this. RGBA bytes laid out like a texture, bottom row first.
+        public static byte[] EncodeRgbaToPNG(byte[] rgba, int width, int height) =>
+            (byte[])_encArr.Invoke(null, new object[] { rgba, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm,
+                                                        (uint)width, (uint)height, 0u });
+
         public static byte[] EncodeToJPG(Texture2D tex, int quality) =>
             (byte[])_jpg.Invoke(null, new object[] { tex, quality });
     }
