@@ -19,20 +19,31 @@ const fetchFog = () => new Promise((res) => {
     fogImage.src = 'fog';
 });
 
-// Structures and forest change as players build and log, so they are re-pulled on
-// a timer. A server too old to serve them just leaves the layer unset.
-const loadOverlay = (name, path) => {
+// Structures and forest change as players build and log. /state carries a
+// content revision per layer, so the viewer polls that small document and
+// re-pulls a layer only when its picture changed -- and that poll is what
+// keeps the server sweeping while the map is open.
+const loadOverlay = (name, rev) => {
     const img = document.createElement('img');
     img.onload = () => map.setOverlay(name, img);
     img.onerror = () => {};
-    img.src = `${path}?${Date.now()}`;
+    img.src = `${name}?v=${rev}`;
 };
 
+const revs = {};
+const pollState = () => fetch('state').then(res => res.json()).then(state => {
+    const rev = state.rev || {};
+    ['forest', 'structures'].forEach(name => {
+        if (rev[name] !== undefined && rev[name] !== revs[name]) {
+            revs[name] = rev[name];
+            loadOverlay(name, rev[name]);
+        }
+    });
+}).catch(() => {});
+
 const startOverlays = () => {
-    loadOverlay('forest', 'forest');
-    loadOverlay('structures', 'structures');
-    setInterval(() => loadOverlay('structures', 'structures'), 60000);
-    setInterval(() => loadOverlay('forest', 'forest'), 180000);
+    pollState();
+    setInterval(pollState, 30000);
 };
 
 const createStyleSheet = (styles = '') => {
