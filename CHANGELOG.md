@@ -30,6 +30,11 @@
   the legend, the map's button column, section rules. The pages' own styles shrank
   to what each alone draws. The bar underlines the page you are on, controls ease
   between states, focus is visible, and scrollbars are thin everywhere.
+* Hildir is her camp and nothing else. The trader scan matched any location whose name
+  contained "hildir", which caught her three quest sites -- the mountain cave, the swamp
+  crypt and the plains fortress -- and drew her standing in each of them. The three
+  camps are now matched by name (`Vendor_BlackForest`, `Hildir_camp`, `BogWitch_Camp`),
+  and the scan logs which it found.
 
 ## 2.11.0
 

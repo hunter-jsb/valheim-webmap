@@ -13,13 +13,18 @@ namespace WebMap
         private static readonly List<Entry> found = new List<Entry>();
         private static bool scanned;
 
+        // The camp each one keeps shop in, by name. Hildir's three quest sites
+        // (Hildir_cave, Hildir_crypt, Hildir_plainsfortress) carry her name too and
+        // are nowhere near her, so a prefix match puts her in three wrong places.
         private static string Label(string prefab)
         {
-            string l = (prefab ?? "").ToLowerInvariant();
-            if (l.Contains("vendor"))   return "Haldor";
-            if (l.Contains("hildir"))   return "Hildir";
-            if (l.Contains("bogwitch")) return "Bog Witch";
-            return null;
+            switch ((prefab ?? "").ToLowerInvariant())
+            {
+                case "vendor_blackforest": return "Haldor";
+                case "hildir_camp":        return "Hildir";
+                case "bogwitch_camp":      return "Bog Witch";
+                default:                   return null;
+            }
         }
 
         // Game thread, from the sweep: the location list exists once the world has
@@ -39,7 +44,8 @@ namespace WebMap
                     found.Add(new Entry { name = label, x = li.m_position.x, z = li.m_position.z });
                 }
                 scanned = true;
-                ZLog.Log($"WebMap: {found.Count} trader locations in this world");
+                ZLog.Log($"WebMap: {found.Count} trader locations in this world: "
+                         + string.Join(", ", found.ConvertAll(e => e.name).ToArray()));
             }
             catch (Exception e) { ZLog.LogWarning("WebMap: trader scan failed: " + e.Message); }
         }

@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "targets": {
+    "net10.0/linux-x64": {
+      "bepinex.assemblypublicizer.cli/0.4.3": {
+        "type": "package",
+        "tools": {
+          "tools/net6.0/any/AsmResolver.DotNet.dll": {},
+          "tools/net6.0/any/AsmResolver.PE.File.dll": {},
+          "tools/net6.0/any/AsmResolver.PE.dll": {},
+          "tools/net6.0/any/AsmResolver.dll": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.Cli.deps.json": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.Cli.dll": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.Cli.pdb": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.Cli.runtimeconfig.json": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.dll": {},
+          "tools/net6.0/any/BepInEx.AssemblyPublicizer.pdb": {},
+          "tools/net6.0/any/DotnetToolSettings.xml": {},
+          "tools/net6.0/any/Serilog.Sinks.Console.dll": {},
+          "tools/net6.0/any/Serilog.dll": {},
+          "tools/net6.0/any/System.CommandLine.NamingConventionBinder.dll": {},
+          "tools/net6.0/any/System.CommandLine.dll": {},
+          "tools/net6.0/any/System.Text.Json.dll": {},
+          "tools/net6.0/any/cs/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/de/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/es/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/fr/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/it/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/ja/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/ko/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/pl/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/pt-BR/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/ru/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/tr/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/zh-Hans/System.CommandLine.resources.dll": {},
+          "tools/net6.0/any/zh-Hant/System.CommandLine.resources.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {},
+  "projectFileDependencyGroups": {}
+}

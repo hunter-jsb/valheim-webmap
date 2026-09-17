@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>BepInEx.AssemblyPublicizer.Cli</id>
+    <version>0.4.3</version>
+    <authors>BepInEx</authors>
+    <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
+    <description>CLI tool for BepInEx.AssemblyPublicizer</description>
+    <packageTypes>
+      <packageType name="DotnetTool" />
+    </packageTypes>
+    <repository type="git" url="https://github.com/BepInEx/BepInEx.AssemblyPublicizer" commit="874cfb60160c053cbefc7277f5f0cb6f7a732748" />
+  </metadata>
+</package>
