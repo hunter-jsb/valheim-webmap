@@ -10,7 +10,9 @@ namespace WebMap
     internal static class Traders
     {
         private struct Entry { public string name; public float x, z; }
-        private static readonly List<Entry> found = new List<Entry>();
+        // Written once by the scan on the game thread, read by HTTP: published whole,
+        // never filled in place, so a read cannot walk a list mid-write.
+        private static volatile Entry[] found = new Entry[0];
         private static bool scanned;
 
         // The camp each one keeps shop in, by name. Hildir's three quest sites
@@ -36,16 +38,17 @@ namespace WebMap
             {
                 var zs = ZoneSystem.instance;
                 if (zs == null || zs.m_locationInstances == null || zs.m_locationInstances.Count == 0) return;
-                found.Clear();
+                var list = new List<Entry>();
                 foreach (var li in zs.m_locationInstances.Values)
                 {
                     string label = Label(li.m_location != null ? li.m_location.m_prefabName : null);
                     if (label == null) continue;
-                    found.Add(new Entry { name = label, x = li.m_position.x, z = li.m_position.z });
+                    list.Add(new Entry { name = label, x = li.m_position.x, z = li.m_position.z });
                 }
+                found = list.ToArray();
                 scanned = true;
-                ZLog.Log($"WebMap: {found.Count} trader locations in this world: "
-                         + string.Join(", ", found.ConvertAll(e => e.name).ToArray()));
+                ZLog.Log($"WebMap: {list.Count} trader locations in this world: "
+                         + string.Join(", ", list.ConvertAll(e => e.name).ToArray()));
             }
             catch (Exception e) { ZLog.LogWarning("WebMap: trader scan failed: " + e.Message); }
         }

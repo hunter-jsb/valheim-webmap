@@ -43,6 +43,20 @@
   push the chat out, and writes a leave once. The panel has a **chat / all** switch,
   chat by default, remembered per browser; a viewer on an older server falls back to
   treating a line with no speaker as an event.
+* Four bugs found by reading the paths the last few features added to:
+  * A chat message was dropped whole if the server could not resolve the sender's
+    character -- the position was looked up before anything else, though only the
+    pin commands use it. Chat is now read first and the lookup happens only for a
+    pin.
+  * A pin command from a sender with no id would have matched every pin in the
+    list (`StartsWith("")`), so the per-player trim could delete other players'
+    pins and `!undoPin` could remove someone else's. Pins now need a known owner.
+  * An RPC addressed to everybody runs both branches of `RPC_RoutedRPC`, so the
+    two observation points saw it twice; only one of them de-duplicated. Both do.
+  * The Discord webhook posted from the join and disconnect handlers on the game
+    thread: a slow Discord stalled a player's join for as long as it took to fail,
+    and a bad URL threw inside the handshake. The post goes to a pool thread, and
+    an unset webhook no longer logs a line per join.
 
 ## 2.11.0
 

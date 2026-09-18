@@ -623,7 +623,7 @@ namespace WebMap
                 }
             }
 
-            private static bool IsDuplicate(RoutedRPCData d)
+            internal static bool IsDuplicate(RoutedRPCData d)
             {
                 byte[] body = d.m_parameters != null ? d.m_parameters.GetArray() : null;
                 uint h = 2166136261u;
@@ -646,7 +646,13 @@ namespace WebMap
         [HarmonyPatch(typeof(ZRoutedRpc), nameof(ZRoutedRpc.HandleRoutedRPC))]
         private class ZRoutedRpcPatch
         {
-            private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data) => Observe(ref __instance, ref data);
+            private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data)
+            {
+                // An RPC addressed to everybody runs both branches of RPC_RoutedRPC --
+                // this one and the RouteRPC prefix -- so it arrives here twice.
+                if (data != null && ZRoutedRpcRoutePatch.IsDuplicate(data)) return;
+                Observe(ref __instance, ref data);
+            }
 
             internal static void Observe(ref ZRoutedRpc __instance, ref RoutedRPCData data)
             {
@@ -684,8 +690,6 @@ namespace WebMap
                     sayMethodHash = data.m_methodHash;
                     try
                     {
-                        ZDO zdoData = ZDOMan.instance.GetZDO(peer.m_characterID);
-                        Vector3 pos = zdoData.GetPosition();
                         // A copy: RouteRPC still has to forward this packet onward,
                         // so the original's read position must not move.
                         ZPackage package = new ZPackage(data.m_parameters.GetArray());
@@ -694,6 +698,25 @@ namespace WebMap
                         userInfo.Deserialize(ref package);
                         string message = package.ReadString() ?? "";
                         message = message.Trim();
+
+                        bool isPinCommand = message.StartsWith("!", StringComparison.Ordinal)
+                            && (message.ToUpper().StartsWith("!PIN") || message.ToUpper().StartsWith("!UNDOPIN")
+                                || message.ToUpper().StartsWith("!DELETEPIN"));
+                        Vector3 pos = Vector3.zero;
+                        if (isPinCommand)
+                        {
+                            // A pin belongs to somebody and sits somewhere. Without an owner
+                            // every pin in the list would answer to StartsWith("") and the
+                            // overflow trim would delete other players' pins.
+                            ZDO zdoData = peer != null ? ZDOMan.instance.GetZDO(peer.m_characterID) : null;
+                            if (zdoData == null || string.IsNullOrEmpty(steamid))
+                            {
+                                ZLog.LogWarning("WebMap: ignoring a pin command from a sender with no "
+                                                + (zdoData == null ? "position" : "id"));
+                                return;
+                            }
+                            pos = zdoData.GetPosition();
+                        }
 
                         if (message.ToUpper().StartsWith("!PIN"))
                         {
@@ -767,7 +790,7 @@ namespace WebMap
                             // one console line per chat message and per ping is spam on a
                             // busy server; the web feed is where these are meant to be read
                             if (WebMapConfig.DEBUG)
-                                ZLog.Log($"WebMap: (say) {pos} | {messageType} | {userInfo.Name} | {message}");
+                                ZLog.Log($"WebMap: (say) {messageType} | {userInfo.Name} | {message}");
                         }
                     }
                     catch (Exception ex)
