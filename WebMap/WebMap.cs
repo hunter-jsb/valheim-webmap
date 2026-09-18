@@ -104,7 +104,7 @@ namespace WebMap
             string message = $"player _{peer.m_playerName}_ joined";
             Stats.Join(peer.m_playerName);
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
-            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
+            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message, true);
         }
 
         public void NotifyLeave(ZNetPeer peer)
@@ -114,8 +114,10 @@ namespace WebMap
             discordWebHook.SendMessage($"🎮 **{serverInfo["serverName"]}** {message}");
             // MessageHud is a client HUD; on a dedicated server instance is null, so
             // this threw on every disconnect. Announce.Enqueue reaches players properly.
-            Announce.Enqueue(message);
-            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message);
+            // feed: false -- the line below is this leave's one feed entry. Announcing
+            // it as well wrote a second, and every disconnect showed up twice.
+            Announce.Enqueue(message, false);
+            mapDataServer.AddMessage(peer.m_uid, (int)Talker.Type.Normal, "Server", message, true);
         }
 
         public void NewWorld()

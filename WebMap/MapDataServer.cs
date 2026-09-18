@@ -20,13 +20,18 @@ namespace WebMap
         public string name;
         public string message;
         public string ts;
+        // 1 for the server's own joined/left/died lines, 0 for anything a person
+        // said -- chat and announcements. The feed is read as a chat monitor, and
+        // the events outnumber chat by thirty to one.
+        public int ev;
 
-        public MapMessage(long id, int type, string name, string message)
+        public MapMessage(long id, int type, string name, string message, bool ev = false)
         {
             this.id = id;
             this.type = type;
             this.name = name;
             this.message = message;
+            this.ev = ev ? 1 : 0;
             this.ts = DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
         }
 
@@ -214,12 +219,16 @@ namespace WebMap
                             tosend = new List<string>();
                             newMessages.ForEach(message =>
                             {
-                                if (WebMapConfig.MAX_MESSAGES < sentMessages.Count) sentMessages.RemoveAt(0);
                                 tosend.Add(message.ToJson());
                                 sentMessages.Add(message);
                             });
                             newMessages.Clear();
                             newMessages.TrimExcess();
+                            // Per kind, not over the whole list: a quiet evening of
+                            // joins and deaths would otherwise push every line of
+                            // chat out of a feed someone is reading for the chat.
+                            TrimToDepth(sentMessages, 0, WebMapConfig.MAX_MESSAGES);
+                            TrimToDepth(sentMessages, 1, WebMapConfig.MAX_MESSAGES);
                             var all = new List<string>(sentMessages.Count);
                             sentMessages.ForEach(m => all.Add(m.ToJson()));
                             messagesJson = "[" + string.Join(", ", all) + "]";
@@ -731,9 +740,20 @@ namespace WebMap
             webSocketHandler.Sessions.Broadcast($"rmpin\n{pinParts[1]}");
         }
 
-        public void AddMessage(long id, int type, string name, string message)
+        // Newest first, keep `max` of this kind, drop the rest. Caller holds messageLock.
+        private static void TrimToDepth(List<MapMessage> list, int ev, int max)
         {
-            lock (messageLock) newMessages.Add(new MapMessage(id, type, name, message));
+            int n = 0;
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i].ev != ev) continue;
+                if (++n > max) { list.RemoveAt(i); n--; }
+            }
+        }
+
+        public void AddMessage(long id, int type, string name, string message, bool ev = false)
+        {
+            lock (messageLock) newMessages.Add(new MapMessage(id, type, name, message, ev));
         }
 
         private static string FixedValue(float f)

@@ -122,7 +122,7 @@ namespace WebMap
             }
 
             ZLog.Log($"WebMap: player {name} died");
-            server.AddMessage(peerID, (int)Talker.Type.Normal, "Server", $"player _{name}_ died");
+            server.AddMessage(peerID, (int)Talker.Type.Normal, "Server", $"player _{name}_ died", true);
             Stats.Death(name);
         }
 

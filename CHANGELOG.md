@@ -35,6 +35,14 @@
   crypt and the plains fortress -- and drew her standing in each of them. The three
   camps are now matched by name (`Vendor_BlackForest`, `Hildir_camp`, `BogWitch_Camp`),
   and the scan logs which it found.
+* The Log reads as chat again. A player asked for the web map's chat back: it had
+  never gone, but the panel had become a join-and-death ticker with a line of chat
+  every few hours lost in it -- and every disconnect was written twice, once by the
+  announcement and once by the notifier. The server now marks its own lines (`ev` on
+  each message), keeps chat and events to their own depth so a busy evening cannot
+  push the chat out, and writes a leave once. The panel has a **chat / all** switch,
+  chat by default, remembered per browser; a viewer on an older server falls back to
+  treating a line with no speaker as an event.
 
 ## 2.11.0
 

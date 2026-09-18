@@ -28,7 +28,8 @@
   .grid{display:grid;gap:.6rem;grid-template-columns:1fr 1fr}
   .online{font-size:.78rem;color:var(--muted);margin-top:.7rem}
   .online b{color:var(--ok);font-weight:600}
-  .feed h3{margin-bottom:.5rem}
+  .feedhead{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}
+  .feedhead .chip{padding:.08rem .45rem;font-size:.62rem;text-transform:uppercase;letter-spacing:.06em}
   #feed{height:230px;overflow-y:auto;padding:.6rem .65rem}
   .msg{font-size:.78rem;margin-bottom:.45rem;line-height:1.35;word-wrap:break-word}
   .msg .who{color:var(--gold);font-weight:600}
@@ -160,7 +161,13 @@
     <div class="grid" id="tiles"></div>
     <div class="online" id="online"></div>
     <div class="feed section">
-      <h3 class="eyebrow">Log</h3>
+      <div class="feedhead">
+        <h3 class="eyebrow">Log</h3>
+        <div class="btnrow" id="feedsw">
+          <button class="chip" data-feed="chat">chat</button>
+          <button class="chip" data-feed="all">all</button>
+        </div>
+      </div>
       <div id="feed" class="well"></div>
     </div>
     <div class="legend section">
@@ -687,9 +694,30 @@ function renderTiles(){
   buildMarkers(list.filter(p=>p.x!=null && p.z!=null).map(p=>({name:p.name, ...toPx(p.x,p.z)})),
                PINS, VEHICLES);
 }
-function renderFeed(msgs){
+// Chat is a few lines a day and the joins, leaves and deaths are a few hundred,
+// so a feed showing both is not a chat monitor. The server marks its own lines
+// (ev); on a server too old to say, a line with no speaker is one of them.
+let MESSAGES = [];
+let FEED = "chat";
+try{ const f = localStorage.getItem("xnv.feed"); if(f==="chat"||f==="all") FEED = f; }catch(e){}
+const isEvent = m => m.ev != null ? !!m.ev : (!m.name || m.name==="Server");
+function setFeed(which){
+  FEED = which;
+  try{ localStorage.setItem("xnv.feed", FEED); }catch(e){}
+  document.querySelectorAll("#feedsw .chip").forEach(b => b.classList.toggle("on", b.dataset.feed===FEED));
+  renderFeed();
+}
+document.getElementById("feedsw").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if(b) setFeed(b.dataset.feed);
+});
+setFeed(FEED);
+function renderFeed(){
   const el=document.getElementById("feed");
-  if(!msgs || !msgs.length){ el.innerHTML='<div class="msg sys">nothing yet</div>'; return; }
+  const msgs = FEED==="chat" ? MESSAGES.filter(m=>!isEvent(m)) : MESSAGES;
+  if(!msgs.length){
+    el.innerHTML = `<div class="msg sys">${FEED==="chat" ? "nobody has said anything yet" : "nothing yet"}</div>`;
+    return;
+  }
   el.innerHTML = msgs.slice().reverse().map(m=>{
     const sys = !m.name || m.name==="Server";
     const when = m.ts ? `<span class="t">${esc(ago(m.ts))}</span>` : "";
@@ -718,7 +746,7 @@ async function tickState(){
   PINS = MapCore.parsePins(s.pins);
   if(s.forest) FOREST = s.forest;
   renderTiles();
-  if(s.messages) renderFeed(s.messages);
+  if(s.messages){ MESSAGES = s.messages; renderFeed(); }
   await LAYERS.sync(s.rev, {
     chart: true,                    // the atlas ground, and the card's thumbnail of it
     trails: () => DETAILS.has("trails"),
