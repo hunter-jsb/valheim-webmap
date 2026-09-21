@@ -215,18 +215,25 @@ const DATA = {portals:[], graves:[], vehicles:[], pins:[], players:[]};
 // Builds are footprints, drawn exactly as the live map draws them; the fog says
 // which of them stand in ground someone has actually walked.
 let PIECES = null, PIECES_ALL = null;
-function refilterPieces(){ PIECES = PIECES_ALL && MapCore.filterExplored(PIECES_ALL, RASTER.imgs.fog); }
-const RASTER = MapCore.layers(API, k => { if(k === "fog"){ refilterPieces(); fogReady(); } draw(); });
+function refilterPieces(){ PIECES = PIECES_ALL && MapCore.filterExplored(PIECES_ALL, RASTER.imgs.fog); SCENE.invalidate(); }
+const RASTER = MapCore.layers(API, k => { if(k === "fog"){ refilterPieces(); fogReady(); } redraw(); });
+// The ground and the builds render once per zoom into a window the pans slide
+// over; the plan's own marks are drawn over it every frame.
+const SCENE = MapCore.viewCache((g, v) => ground(g, v), () => draw());
+function redraw(){ SCENE.invalidate(); draw(); }   // the ground, the builds or the layers changed
+function ground(g, view){
+  MapCore.drawRasters(g, view, RASTER.imgs, {forest:doc.layers.forest});
+  if(doc.layers.builds && PIECES)
+    MapCore.drawPieces(g, view, PIECES, {plan:view.scale >= MapCore.PLAN_ZOOM});
+}
 
 // ---------- render ----------
-// One pass paints everything, and the PNG export runs the same pass at 2x, so what
-// gets shared is exactly what is on screen.
+// One pass paints everything, and the PNG export runs the same pass at 2x (direct,
+// off the screen's cache), so what gets shared is exactly what is on screen.
 function render(g, W, H, v, o){
   o = o || {};
   const view = {scale:v.scale, tx:v.tx, ty:v.ty, w:W, h:H, pix:o.pix || 1};
-  MapCore.drawRasters(g, view, RASTER.imgs, {forest:doc.layers.forest});
-  if(doc.layers.builds && PIECES)
-    MapCore.drawPieces(g, view, PIECES, {plan:v.scale >= MapCore.PLAN_ZOOM});
+  if(o.direct) ground(g, view); else SCENE.draw(g, view, "#0a0c0a");
   g.globalCompositeOperation = "source-over";
   g.imageSmoothingEnabled = true;
 
@@ -673,7 +680,7 @@ document.getElementById("newBtn").onclick = () => {
   doc = newDoc(); RO = false; undoStack.length = 0;
   history.replaceState(null, "", location.pathname);
   document.getElementById("roBanner").hidden = true;
-  syncFields(); save(); draw(); renderCount(); setRO(false);
+  syncFields(); save(); redraw(); renderCount(); setRO(false);
 };
 document.getElementById("zoomIn").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1.35);
 document.getElementById("zoomOut").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1/1.35);
@@ -717,7 +724,7 @@ function renderLegend(){
 document.getElementById("legend").addEventListener("click", e => {
   const el = e.target.closest("[data-layer]"); if(!el) return;
   doc.layers[el.dataset.layer] = !doc.layers[el.dataset.layer];
-  renderLegend(); save(); draw();
+  renderLegend(); save(); redraw();
 });
 
 // ---------- storage ----------
@@ -796,7 +803,7 @@ async function exportPNG(){
   const c = document.createElement("canvas");
   c.width = W*pix; c.height = H*pix;
   const g = c.getContext("2d");
-  render(g, W, H, view(), {pix});
+  render(g, W, H, view(), {pix, direct:true});
   g.setTransform(pix, 0, 0, pix, 0, 0);
   const title = (doc.title || "Untitled plan").slice(0, 60);
   g.font = `700 20px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
@@ -858,7 +865,7 @@ document.getElementById("dismissBtn").onclick = () => {
   doc.layers = Object.assign({}, DEFAULT_LAYERS, doc.layers || {});
   setRO(false); syncFields();
   if(doc.view) centreOn(doc.view.x, doc.view.z, doc.view.zoom);
-  draw();
+  redraw();
 };
 
 // ---------- live data ----------
@@ -896,7 +903,7 @@ async function start(){
   try{ shared = await decodeDoc(location.hash); }
   catch(e){ shared = null; }
   if(shared){
-    doc = shared;
+    doc = shared; SCENE.invalidate();
     setRO(true);
     const b = document.getElementById("roBanner");
     b.hidden = false;
@@ -907,7 +914,7 @@ async function start(){
   } else {
     const mine = storedPlan();
     if(mine && mine.v === 1){
-      doc = mine;
+      doc = mine; SCENE.invalidate();
       doc.layers = Object.assign({}, DEFAULT_LAYERS, doc.layers || {});
       doc.items = Array.isArray(doc.items) ? doc.items : [];
     }

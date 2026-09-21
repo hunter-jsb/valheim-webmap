@@ -25,6 +25,12 @@
   blue over the ground; `rev.trails` in `/state` says when it moved.
 * The bundled viewer's file cache keys on each file's timestamp, so a viewer file
   replaced on disk is served at once instead of after the next restart.
+* Panning no longer lags. The map and the plan rendered every raster and every one
+  of the thousands of build footprints again on every pointer event; now the scene
+  renders once per zoom into a window wider than the screen, a pan slides it, and a
+  zoom stretches it until a fresh render lands -- at once where that is quick, after
+  the zoom settles where it is not. The footprints themselves draw as one path per
+  colour instead of a fill each, and the deaths re-render only when the list changes.
 * One style system in `site.css`: the tokens (surfaces, ink, accents, radii, shadows),
   the base, and the pieces every page shares -- cards, stats, buttons, chips, fields,
   the legend, the map's button column, section rules. The pages' own styles shrank

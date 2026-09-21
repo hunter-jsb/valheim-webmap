@@ -267,27 +267,37 @@ let scale = 1, tx = 0, ty = 0, fit = 1;
 
 const PLAN_ZOOM = MapCore.PLAN_ZOOM, MAX_ZOOM = MapCore.MAX_ZOOM;
 
-// The rasters, then the builds over the fog: a build in unexplored ground has
-// already been dropped, so nothing has to hide it.
-function drawRaster(){
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
-  const v = {scale, tx, ty, w:W, h:H};
-  MapCore.drawRasters(rctx, v, LAYERS.imgs,
+// The scene: the rasters, then the builds over the fog -- a build in unexplored
+// ground has already been dropped, so nothing has to hide it -- then the details.
+// It changes with the data or a switch, never with a pan, so it is rendered once
+// per zoom into a window the pans slide over.
+function renderScene(g, v){
+  MapCore.drawRasters(g, v, LAYERS.imgs,
     {bg:"#000", ground:GROUND, forest:!HIDDEN.has("forest") && GROUND !== "atlas",
      structures:!HIDDEN.has("builds") && !PIECES, trails:DETAILS.has("trails")});
   if(PIECES && !HIDDEN.has("builds"))
-    MapCore.drawPieces(rctx, v, PIECES, {plan: scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
-  if(PIECES && DETAILS.has("fires")) MapCore.drawFires(rctx, v, PIECES);
-  if(DETAILS.has("deaths")) MapCore.drawDeaths(rctx, v, DEATHS);
+    MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
+  if(PIECES && DETAILS.has("fires")) MapCore.drawFires(g, v, PIECES);
+  if(DETAILS.has("deaths")) MapCore.drawDeaths(g, v, DEATHS);
 }
-function apply(){
-  drawRaster();
+const SCENE = MapCore.viewCache(renderScene, () => apply());
+// the scene changed: the next frame renders it afresh
+function drawRaster(){ SCENE.invalidate(); apply(); }
+function paint(){
+  const W = stage.clientWidth, H = stage.clientHeight;
+  if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
+  SCENE.draw(rctx, {scale, tx, ty, w:W, h:H}, "#000");
   // the portal lines see the same window, in texture coordinates
   document.getElementById("portalLinks").setAttribute("viewBox",
-    `${(-tx/scale).toFixed(3)} ${(-ty/scale).toFixed(3)} ${(stage.clientWidth/scale).toFixed(3)} ${(stage.clientHeight/scale).toFixed(3)}`);
+    `${(-tx/scale).toFixed(3)} ${(-ty/scale).toFixed(3)} ${(W/scale).toFixed(3)} ${(H/scale).toFixed(3)}`);
   positionMarkers();
-  seenW = stage.clientWidth; seenH = stage.clientHeight;
+  seenW = W; seenH = H;
+}
+// the view changed: one paint per frame however many events asked for it
+let frame = 0;
+function apply(){
+  if(frame) return;
+  frame = requestAnimationFrame(() => { frame = 0; paint(); });
 }
 function positionMarkers(){
   document.querySelectorAll("#markers .marker").forEach(el => {
@@ -623,11 +633,11 @@ let VEHICLES = null;      // boats and carts, refreshed on the slow tick; null =
 let PORTALS = [];         // portals and the links between connected pairs
 let GRAVES = [];          // tombstones still standing, i.e. gear still out there
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
-let DEATHS = [];          // where people died, newest last
+let DEATHS = [], DEATHS_JSON = null;   // where people died, newest last; as it came, to spot a change
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-14h";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-21a";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -741,7 +751,12 @@ async function tickState(){
   PORTALS = ((s.portals||{}).portals||[]).map(p=>({id:p.id, name:p.name, to:p.to, ...toPx(p.x,p.z)}));
   GRAVES = ((s.graves||{}).graves||[]).map(g=>({name:g.name, age:g.age, ...toPx(g.x,g.z)}));
   TRADERS = ((s.traders||{}).traders||[]).map(t=>({name:t.name, ...toPx(t.x,t.z)}));
-  DEATHS = ((s.deaths||{}).deaths||[]).map(d=>({name:d.n, t:d.t, ...toPx(d.x,d.z)}));
+  const dj = JSON.stringify(s.deaths || null);
+  if(dj !== DEATHS_JSON){
+    DEATHS_JSON = dj;
+    DEATHS = ((s.deaths||{}).deaths||[]).map(d=>({name:d.n, t:d.t, ...toPx(d.x,d.z)}));
+    if(DETAILS.has("deaths")) drawRaster();
+  }
   LAST_REV = s.rev;
   PINS = MapCore.parsePins(s.pins);
   if(s.forest) FOREST = s.forest;

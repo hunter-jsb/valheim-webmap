@@ -175,6 +175,13 @@ function shade(hex, yaw){
 // footprint in metres and turned by its yaw. Every storey of a build lands on the
 // same footprint, so one rect per (kind, position, yaw) survives; a ridge piece
 // is flat and keeps its plain colour.
+// the four corners of a footprint, as offsets from its centre in texture px,
+// turned the way the canvas turns a rect under rotate(yaw)
+function corners(w, d, yaw){
+  const t = yaw*Math.PI/180, c = Math.cos(t), s = Math.sin(t), hw = w/2, hd = d/2;
+  return [-hw*c + hd*s, -hw*s - hd*c,   hw*c + hd*s,  hw*s - hd*c,
+           hw*c - hd*s,  hw*s + hd*c,  -hw*c - hd*s, -hw*s + hd*c];
+}
 function parsePieces(json){
   const per = 1/geom.pixel, half = geom.size/2, prefabs = (json && json.prefabs) || [];
   const seen = new Set(), out = [];
@@ -188,6 +195,7 @@ function parsePieces(json){
                w: Math.max(p.w*per, 0.08), d: Math.max(p.d*per, 0.08),
                c: "#" + (kind === "roof" && !p.n.includes("_top") ? shade(p.c, yaw) : p.c)};
     if(FIRE.test(p.n.toLowerCase())) q.fire = lit === undefined ? 1 : lit;   // an older server says nothing: lit
+    q.o = corners(q.w, q.d, yaw);
     out.push(q);
   }
   return out.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
@@ -235,27 +243,40 @@ const ROOF_STYLE = {
   roof:  {fill: 1, alpha: 1, stroke: 1, lw: 1.5},
 };
 // o: {plan} -- the floor plan, or the roofs. Pieces arrive already in draw order.
+// One path per colour rather than a fill per piece: a base is thousands of
+// footprints, and a draw call each was the cost of every frame.
 function drawPieces(g, v, pieces, o){
   if(!pieces || !pieces.length) return;
-  const S = (o && o.plan) ? PLAN_STYLE : ROOF_STYLE, pix = v.pix || 1;
+  const S = (o && o.plan) ? PLAN_STYLE : ROOF_STYLE, pix = v.pix || 1, s = v.scale;
   g.save();
   g.setTransform(pix, 0, 0, pix, 0, 0);
   g.globalCompositeOperation = "source-over";
   g.lineJoin = "miter";
+  let kind = null, st = null, paths = null;
+  const flush = () => {
+    if(!paths) return;
+    for(const [c, path] of paths){
+      if(st.fill){ g.globalAlpha = st.alpha; g.fillStyle = st.fill === 1 ? c : st.fill; g.fill(path); }
+      if(st.stroke){ g.globalAlpha = 1; g.lineWidth = st.lw; g.strokeStyle = st.stroke === 1 ? c : st.stroke; g.stroke(path); }
+    }
+    paths = null;
+  };
   for(const p of pieces){
-    const st = S[p.kind]; if(!st) continue;
-    const x = v.tx + p.px*v.scale, y = v.ty + p.py*v.scale;
-    const w = p.w*v.scale, d = p.d*v.scale, m = w + d;
+    if(p.kind !== kind){ flush(); kind = p.kind; st = S[kind]; paths = st ? new Map() : null; }
+    if(!paths) continue;
+    const x = v.tx + p.px*s, y = v.ty + p.py*s, m = (p.w + p.d)*s;
     if(x < -m || y < -m || x > v.w + m || y > v.h + m) continue;
-    g.save();
-    g.translate(x, y);
-    if(p.yaw) g.rotate(p.yaw*Math.PI/180);
-    g.beginPath();
-    g.rect(-w/2, -d/2, w, d);
-    if(st.fill){ g.globalAlpha = st.alpha; g.fillStyle = st.fill === 1 ? p.c : st.fill; g.fill(); }
-    if(st.stroke){ g.globalAlpha = 1; g.lineWidth = st.lw; g.strokeStyle = st.stroke === 1 ? p.c : st.stroke; g.stroke(); }
-    g.restore();
+    const key = (st.fill === 1 || st.stroke === 1) ? p.c : "";
+    let path = paths.get(key);
+    if(!path){ path = new Path2D(); paths.set(key, path); }
+    const q = p.o;
+    path.moveTo(x + q[0]*s, y + q[1]*s);
+    path.lineTo(x + q[2]*s, y + q[3]*s);
+    path.lineTo(x + q[4]*s, y + q[5]*s);
+    path.lineTo(x + q[6]*s, y + q[7]*s);
+    path.closePath();
   }
+  flush();
   g.restore();
   g.globalAlpha = 1;
 }
@@ -314,6 +335,54 @@ function drawDeaths(g, v, deaths, now){
   }
   g.globalAlpha = 1;
   g.restore();
+}
+
+// ---------- view cache ----------
+// The scene, rendered once at a zoom over a window wider than the screen: a pan
+// slides it and a zoom stretches it, and the scene renders again only when the
+// view runs off the window or the zoom changes -- at once where a render is
+// quick, else once the zoom has settled, the stretch holding the screen until
+// then. render(g, v) draws the scene for a view; fresh() hears of a render that
+// landed late. The window is capped: iOS refuses a canvas past 16M px.
+const CACHE_PX = 12e6, CACHE_MARGIN = .5, QUICK_MS = 20, SETTLE_MS = 90;
+function viewCache(render, fresh){
+  const cv = document.createElement("canvas"), g = cv.getContext("2d");
+  let at = null, cost = 0, timer = 0;
+  function renderAt(v){
+    const pix = v.pix || 1;
+    const m = Math.max(0, Math.min(CACHE_MARGIN, (Math.sqrt(CACHE_PX/(v.w*v.h*pix*pix)) - 1)/2));
+    const mw = Math.round(v.w*m), mh = Math.round(v.h*m), W = v.w + 2*mw, H = v.h + 2*mh;
+    if(cv.width !== W*pix || cv.height !== H*pix){ cv.width = W*pix; cv.height = H*pix; }
+    const t0 = performance.now();
+    at = {scale: v.scale, tx: v.tx + mw, ty: v.ty + mh, w: W, h: H, pix};
+    render(g, at);
+    cost = performance.now() - t0;
+  }
+  // paints the view onto dst, leaving its transform at the view's pixel ratio the
+  // way drawRasters does; false when a stretch stood in and a render is due
+  function draw(dst, v, bg){
+    clearTimeout(timer);
+    const pix = v.pix || 1;
+    dst.setTransform(pix, 0, 0, pix, 0, 0);
+    dst.globalAlpha = 1; dst.globalCompositeOperation = "source-over";
+    if(at && at.pix === pix && at.scale !== v.scale && cost >= QUICK_MS){
+      const r = v.scale/at.scale;
+      dst.fillStyle = bg; dst.fillRect(0, 0, v.w, v.h);
+      dst.imageSmoothingEnabled = true;
+      dst.drawImage(cv, v.tx - at.tx*r, v.ty - at.ty*r, at.w*r, at.h*r);
+      timer = setTimeout(() => { renderAt(v); fresh(); }, SETTLE_MS);
+      return false;
+    }
+    let dx = at ? at.tx - v.tx : -1, dy = at ? at.ty - v.ty : -1;   // where the screen sits in the window
+    if(!at || at.pix !== pix || at.scale !== v.scale || dx < 0 || dy < 0 || dx + v.w > at.w || dy + v.h > at.h){
+      renderAt(v); dx = at.tx - v.tx; dy = at.ty - v.ty;
+    }
+    dst.imageSmoothingEnabled = false;
+    dst.drawImage(cv, Math.round(dx*pix), Math.round(dy*pix), v.w*pix, v.h*pix, 0, 0, v.w, v.h);
+    return true;
+  }
+  function invalidate(){ at = null; clearTimeout(timer); }
+  return {draw, invalidate, cost: () => cost};
 }
 
 // ---------- marker icons ----------
@@ -479,7 +548,7 @@ function nav(current, el){
 return {cfg, brand, setTitle, credits, toggleSide,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
-        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires, drawDeaths,
+        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires, drawDeaths, viewCache,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
         parsePins, ago, esc, nav};
 })();
