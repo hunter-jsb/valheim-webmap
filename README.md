@@ -131,6 +131,8 @@ mod does -- the pages from disk, every other path forwarded to the server -- and
 `tools/shoot.mjs http://127.0.0.1:8765 /tmp/out 9333 / /portals.html /plan.html /players.html`
 drives a headless Chrome over it and prints what each page drew, which hosts it talked
 to, and any exception. A viewer change is done when that is clean.
+`tools/bench.mjs http://127.0.0.1:8765 9333` pans and zooms the map over the same Chrome
+and prints ms per frame: 16.7 is the screen's own rate, anything above it is lag.
 
 ### Local test server
 
