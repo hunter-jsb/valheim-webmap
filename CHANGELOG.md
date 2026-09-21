@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.12.0
 
 * A Layers card on the map, as on Google Maps: a thumbnail of the other ground in the
   corner, and behind it the choice of ground -- the world render, or the flat biome
