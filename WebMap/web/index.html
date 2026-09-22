@@ -12,6 +12,10 @@
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
 <style>
+.namer{position:absolute;z-index:6;width:16rem;padding:.6rem .7rem;box-shadow:var(--shadow-lg)}
+.namer .field{margin:.4rem 0 0}
+.namer .btnrow{margin-top:.5rem}
+.namer .nm{font-weight:600;margin-top:.25rem}
   html,body{height:100%}
   body{overflow:hidden}
 
@@ -193,6 +197,7 @@
     <canvas id="mapCanvas" aria-label="Valheim world map"></canvas>
     <svg id="portalLinks" preserveAspectRatio="none" aria-hidden="true"></svg>
     <div class="markers" id="markers"></div>
+    <div id="namer" class="glass namer" hidden></div>
     <button id="mini" class="glass" title="Details &amp; legend"><span class="dot"></span><span id="miniText">…</span></button>
     <div class="layers" id="layers">
       <button class="lcard" id="lcard" title="Switch ground (L)"><canvas id="lthumb"></canvas><span class="lbl">Layers</span></button>
@@ -200,6 +205,7 @@
         <div class="trow"><span class="tk eyebrow">Ground</span><div class="grounds" id="grounds"></div></div>
         <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="presets"></div></div>
         <div class="trow"><span class="tk eyebrow">Details</span><div class="presets" id="details">
+          <button class="chip" data-detail="names" title="The names of the land: continents, islands, ranges, lakes, rivers. Signed in, tap one to rename it">Names</button>
           <button class="chip" data-detail="fires" title="Torches, fire pits and hearths; a grey ring has burnt out">Torches &amp; fires</button>
           <button class="chip" data-detail="deaths" title="Where people died, fading over a month">Deaths</button>
           <button class="chip" data-detail="trails" title="Where people have walked">Trails</button>
@@ -279,6 +285,8 @@ function renderScene(g, v){
     MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
   if(PIECES && DETAILS.has("fires")) MapCore.drawFires(g, v, PIECES);
   if(DETAILS.has("deaths")) MapCore.drawDeaths(g, v, DEATHS);
+  NAMEBOXES = showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog)) : [];
+  NAMEVIEW = v;
 }
 const SCENE = MapCore.viewCache(renderScene, () => apply());
 // the scene changed: the next frame renders it afresh
@@ -425,14 +433,19 @@ function applyHidden(){
 // Details are extras drawn over whatever the legend shows, each its own switch.
 const DETAILS = new Set();
 try{ (JSON.parse(localStorage.getItem("xnv.details") || "[]")).forEach(k => DETAILS.add(k)); }catch(e){}
+// the names are part of the map, so they are on until switched off; that switch is kept apart
+const DEFAULT_ON = new Set(["names"]), OFF = new Set();
+try{ (JSON.parse(localStorage.getItem("xnv.off") || "[]")).forEach(k => OFF.add(k)); }catch(e){}
+const showDetail = k => DEFAULT_ON.has(k) ? !OFF.has(k) : DETAILS.has(k);
 function markDetails(){
-  document.querySelectorAll("#details .chip").forEach(el => el.classList.toggle("on", DETAILS.has(el.dataset.detail)));
-  try{ localStorage.setItem("xnv.details", JSON.stringify([...DETAILS])); }catch(e){}
+  document.querySelectorAll("#details .chip").forEach(el => el.classList.toggle("on", showDetail(el.dataset.detail)));
+  try{ localStorage.setItem("xnv.details", JSON.stringify([...DETAILS])); localStorage.setItem("xnv.off", JSON.stringify([...OFF])); }catch(e){}
 }
 document.getElementById("details").addEventListener("click", e => {
   const el = e.target.closest(".chip"); if(!el) return;
   const k = el.dataset.detail;
-  DETAILS.has(k) ? DETAILS.delete(k) : DETAILS.add(k);
+  if(DEFAULT_ON.has(k)) OFF.has(k) ? OFF.delete(k) : OFF.add(k);
+  else DETAILS.has(k) ? DETAILS.delete(k) : DETAILS.add(k);
   markDetails(); drawRaster();
   // the trails raster is fetched only once asked for
   if(k === "trails" && DETAILS.has(k) && LAST_REV) LAYERS.sync(LAST_REV, {trails: true});
@@ -557,12 +570,14 @@ stage.addEventListener("wheel", e => {
 // drag to pan + pinch to zoom
 const pts = new Map();
 let last = null, pinch = null;
+let down = null;      // where a single pointer came down, for telling a tap from a drag
 stage.addEventListener("pointerdown", e => {
   // Don't start a drag on the controls: capturing the pointer here retargets
   // the pointerup to the stage, so the button never receives its click.
-  if (e.target.closest && e.target.closest(".mapctl, .layers, #mini")) return;
+  if (e.target.closest && e.target.closest(".mapctl, .layers, #mini, #namer")) return;
   stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  down = pts.size === 1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
   if(pts.size === 1){ last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); }
   else if(pts.size === 2){ pinch = pinchState(); }
 });
@@ -581,6 +596,12 @@ stage.addEventListener("pointermove", e => {
   }
 });
 function endPtr(e){
+  if(e.type === "pointerup" && down && down.id === e.pointerId && pts.size === 1
+     && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5){
+    const r = stage.getBoundingClientRect();
+    tapName(e.clientX - r.left, e.clientY - r.top);
+  }
+  down = null;
   pts.delete(e.pointerId);
   if(pts.size < 2) pinch = null;
   if(pts.size === 0){ last = null; stage.classList.remove("dragging"); }
@@ -634,10 +655,12 @@ let PORTALS = [];         // portals and the links between connected pairs
 let GRAVES = [];          // tombstones still standing, i.e. gear still out there
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let DEATHS = [], DEATHS_JSON = null;   // where people died, newest last; as it came, to spot a change
+let FEATURES = null;      // the world's geography with its names, by revision
+let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the scene window's coordinates, for a tap
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-21a";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-22a";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -762,6 +785,7 @@ async function tickState(){
   if(s.forest) FOREST = s.forest;
   renderTiles();
   if(s.messages){ MESSAGES = s.messages; renderFeed(); }
+  if(s.rev && s.rev.features && s.rev.features !== FEATURES_REV) fetchFeatures(s.rev.features);
   await LAYERS.sync(s.rev, {
     chart: true,                    // the atlas ground, and the card's thumbnail of it
     trails: () => DETAILS.has("trails"),
@@ -769,6 +793,63 @@ async function tickState(){
     structures: () => !PIECES,      // the raster only stands in until the footprints land
     onFog: () => setTimeout(()=>fitExplored(false), 60),
   });
+}
+
+let FEATURES_REV = null;
+async function fetchFeatures(rev){
+  FEATURES_REV = rev;
+  try{
+    const j = await MapCore.fetchJSON(API, "/features?v=" + rev);
+    if(j && j.features){ FEATURES = j.features; drawRaster(); }
+  }catch(e){ FEATURES_REV = null; }
+}
+
+// ---------- naming a place ----------
+// A tap on a name opens it: what it is and how big, and for a signed-in member
+// a field to rename it. The server keeps the name; everyone sees it on the next tick.
+const namer = document.getElementById("namer");
+let NAMING = null;
+function openNamer(f, x, y){
+  NAMING = f;
+  const me = MapCore.user();
+  const size = f.kind === "river" ? (f.area >= 1000 ? (f.area/1000).toFixed(1) + " km long" : Math.round(f.area) + " m long")
+             : f.area >= 1 ? f.area.toFixed(1) + " km\u00b2" : Math.round(f.area*100) + " ha";
+  const peak = f.peak ? ` \u00b7 peak ${Math.round(f.peak.y)} m` : "";
+  namer.innerHTML = `<div class="eyebrow">${esc(f.kind)} \u00b7 ${esc(size)}${esc(peak)}</div>`
+    + (me ? `<input class="field" id="nameIn" maxlength="40" value="${esc(f.name)}" autocomplete="off">
+            <div class="btnrow"><button class="btn" id="nameSave">Save</button>${f.by ? '<button class="btn quiet" id="nameReset" title="Back to the name the world gave it">Own name</button>' : ""}</div>`
+          : `<div class="nm">${esc(f.name)}</div><div class="note">Sign in to rename it.</div>`)
+    + `<div class="note" id="nameNote">${f.by ? "named by " + esc(f.by) : "the world's own name"}</div>`;
+  namer.hidden = false;
+  const r = stage.getBoundingClientRect();
+  namer.style.left = Math.max(8, Math.min(r.width - namer.offsetWidth - 8, x - namer.offsetWidth/2)) + "px";
+  namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, y + 14)) + "px";
+  const inp = document.getElementById("nameIn");
+  if(inp){
+    inp.focus(); inp.select();
+    inp.addEventListener("keydown", e => { if(e.key === "Enter") saveName(inp.value); if(e.key === "Escape") closeNamer(); });
+    document.getElementById("nameSave").onclick = () => saveName(inp.value);
+    const rs = document.getElementById("nameReset"); if(rs) rs.onclick = () => saveName("");
+  }
+}
+function closeNamer(){ namer.hidden = true; NAMING = null; }
+async function saveName(name){
+  if(!NAMING) return;
+  const note = document.getElementById("nameNote");
+  note.className = "note"; note.textContent = "saving\u2026";
+  try{
+    const r = await MapCore.post(API, "/names", {id: NAMING.id, name});
+    closeNamer();
+    if(r && r.rev) await fetchFeatures(r.rev);
+  }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; }
+}
+namer.addEventListener("pointerdown", e => e.stopPropagation());
+document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.closest("#namer")) closeNamer(); });
+// a tap, as against a drag: the pointer came down and went up within a few pixels
+function tapName(x, y){
+  if(!NAMEVIEW || NAMEVIEW.scale !== scale || !NAMEBOXES.length) return;
+  const f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - tx), y + (NAMEVIEW.ty - ty));
+  if(f) openNamer(f, x, y);
 }
 
 async function boot(){

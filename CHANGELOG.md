@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+* The land has names. Once per world the mod reads the generator's own geography --
+  landmasses, lakes, bays and mountain ranges from a sampled grid of biome and height,
+  rivers from the generator's river list -- and gives each an Old Norse name from the
+  seed: Morland, Stenarey, Frostfjell, Eikvatn, Nordsvik, Langará. `/features` lists
+  them (kind, where the name sits, extent, a range's peak, a river's course), `rev.features`
+  in `/state` says when they changed. The map sets them the way an atlas does, once the
+  fog has lifted somewhere on the place; a Names detail switches them off.
+* Naming a place. `POST /names` with `{"id","name"}` gives a place a name (an empty name
+  returns the world's own), guarded by the announce token and attributed to an `X-User`
+  header; the hosted site's Worker adds both for a signed-in Discord member, who taps a
+  name on the map to rename it.
+* The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
+  the mod alone it shows nothing.
+
 ## 2.12.0
 
 * A Layers card on the map, as on Google Maps: a thumbnail of the other ground in the

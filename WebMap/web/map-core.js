@@ -59,6 +59,13 @@ async function api(base, path){
   return r;
 }
 const fetchJSON = (base, path) => api(base, path).then(r => r.json());
+// a signed-in write: the session rides as a bearer, the answer is the mod's JSON
+async function post(base, path, body){
+  const r = await fetch(base + path, {method: "POST", headers: {"content-type": "application/json", ...authHeaders()}, body: JSON.stringify(body)});
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
 // One document per tick carries every small block a page shows, plus a revision
 // per large layer.
 const fetchState = base => fetchJSON(base, "/state");
@@ -200,25 +207,32 @@ function parsePieces(json){
   }
   return out.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
 }
-// A build in ground nobody has walked is not drawn. Until the fog has decoded,
-// nothing is dropped rather than everything.
+// The fog as a question: one downsampled read per fog image, shared by whatever
+// asks whether a spot has been walked. explored(fog) is null until it has decoded.
 const FOGN = 512;
-function filterExplored(pieces, fogImg){
-  let d = null;
-  try{
-    if(fogImg && fogImg.complete && fogImg.naturalWidth){
+let fogKey = null, fogBits = null;
+function explored(fogImg){
+  if(!(fogImg && fogImg.complete && fogImg.naturalWidth)) return null;
+  if(fogImg.src !== fogKey){
+    try{
       const c = document.createElement("canvas"); c.width = c.height = FOGN;
       const g = c.getContext("2d", {willReadFrequently: true});
       g.drawImage(fogImg, 0, 0, FOGN, FOGN);
-      d = g.getImageData(0, 0, FOGN, FOGN).data;
-    }
-  }catch(e){ d = null; }
-  if(!d) return pieces;
+      fogBits = g.getImageData(0, 0, FOGN, FOGN).data; fogKey = fogImg.src;
+    }catch(e){ fogBits = null; fogKey = null; }
+  }
+  const d = fogBits; if(!d) return null;
   const k = FOGN/geom.size;
-  return pieces.filter(p => {
-    const x = Math.min(FOGN-1, Math.max(0, (p.px*k)|0)), y = Math.min(FOGN-1, Math.max(0, (p.py*k)|0));
+  return (px, py) => {
+    const x = Math.min(FOGN-1, Math.max(0, (px*k)|0)), y = Math.min(FOGN-1, Math.max(0, (py*k)|0));
     return d[(y*FOGN + x)*4] > 40;
-  });
+  };
+}
+// A build in ground nobody has walked is not drawn. Until the fog has decoded,
+// nothing is dropped rather than everything.
+function filterExplored(pieces, fogImg){
+  const ok = explored(fogImg);
+  return ok ? pieces.filter(p => ok(p.px, p.py)) : pieces;
 }
 // Up close a base reads as a floor plan: walls as lines, floors a tint, roofs
 // barely there, furniture solid -- every storey lands on the same footprint, so
@@ -336,6 +350,121 @@ function drawDeaths(g, v, deaths, now){
   g.globalAlpha = 1;
   g.restore();
 }
+
+// ---------- names ----------
+// The geography's names, set the way an atlas sets them: landmasses and ranges
+// spaced out in capitals, water in italics, the biomes muted, rivers written
+// along their course. A name shows once the fog has lifted somewhere on the
+// place, and at the zooms where the place is between a thumb's width and a few
+// screens; bigger kinds win the ground when two would overlap.
+// features: /features rows (world metres). Returns the boxes drawn, for a tap.
+const FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const WATER_INK = "#9fd0e6";
+const NAME_STYLE = {
+  continent: {tier: 0, caps: true, space: .28, weight: 700, ink: "#f1ecdc", min: 13, max: 30, div: 9},
+  range:     {tier: 1, caps: true, space: .22, weight: 600, ink: "#ffffff", min: 11, max: 20, div: 10},
+  island:    {tier: 2, caps: true, space: .16, weight: 600, ink: "#e7e2d4", min: 11, max: 20, div: 8},
+  lake:      {tier: 3, italic: true, ink: WATER_INK, min: 11, max: 16, div: 7},
+  bay:       {tier: 3, italic: true, ink: WATER_INK, min: 11, max: 16, div: 7},
+  river:     {tier: 4, italic: true, ink: WATER_INK, min: 11, max: 15},
+  forest:    {tier: 5, italic: true, ink: "#a6c48a", min: 11, max: 15, div: 10, lo: 140},
+  swamp:     {tier: 5, italic: true, ink: "#caa27b", min: 11, max: 15, div: 10, lo: 140},
+  plains:    {tier: 5, italic: true, ink: "#e2c98f", min: 11, max: 15, div: 10, lo: 140},
+  meadows:   {tier: 5, italic: true, ink: "#c2d69a", min: 11, max: 15, div: 10, lo: 140},
+  mistlands: {tier: 5, italic: true, ink: "#c4a4dc", min: 11, max: 15, div: 10, lo: 140},
+  ashlands:  {tier: 5, italic: true, ink: "#e6907e", min: 11, max: 15, div: 10, lo: 140},
+  north:     {tier: 5, italic: true, ink: "#dde8f2", min: 11, max: 15, div: 10, lo: 140},
+  holm:      {tier: 6, ink: "#d8d2c2", min: 10, max: 13, div: 6, lo: 36},
+};
+const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+function font(st, fs){ return `${st.italic ? "italic " : ""}${st.weight || 500} ${fs}px ${FONT}`; }
+function halo(g, fs){ g.lineJoin = "round"; g.lineWidth = Math.max(2, fs/4.5); g.strokeStyle = "rgba(10,12,10,.82)"; }
+// letters set apart by hand: the canvas property is not everywhere yet
+function spacedWidth(g, text, gap){ let w = 0; for(const ch of text) w += g.measureText(ch).width + gap; return w - gap; }
+function spacedText(g, text, x, y, gap){
+  for(const ch of text){ g.strokeText(ch, x, y); g.fillText(ch, x, y); x += g.measureText(ch).width + gap; }
+}
+function drawNames(g, v, features, ok, o){
+  const boxes = [];
+  if(!features || !features.length || !ok) return boxes;
+  const pix = v.pix || 1, s = v.scale, mPx = s/geom.pixel;        // screen px per metre
+  const far = 6*Math.max(v.w, v.h);
+  g.save();
+  g.setTransform(pix, 0, 0, pix, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  g.textBaseline = "middle";
+  const sx = (x, z) => { const p = toPx(x, z); return [v.tx + p.px*s, v.ty + p.py*s]; };
+  const seen = (x, z) => { const p = toPx(x, z); return ok(p.px, p.py); };
+  const list = features.filter(f => NAME_STYLE[f.kind]).slice()
+    .sort((a, b) => NAME_STYLE[a.kind].tier - NAME_STYLE[b.kind].tier || b.area - a.area);
+  for(const f of list){
+    const st = NAME_STYLE[f.kind];
+    if(f.kind === "river"){ river(g, v, f, st, ok, boxes, sx); continue; }
+    const E = Math.max(f.w, f.h)*mPx;
+    if(E < (st.lo || 70) || E > far) continue;
+    if(!(seen(f.x, f.z) || seen(f.x - f.w/4, f.z) || seen(f.x + f.w/4, f.z) || seen(f.x, f.z - f.h/4) || seen(f.x, f.z + f.h/4))) continue;
+    const [cx, cy] = sx(f.x, f.z);
+    if(cx < -200 || cy < -100 || cx > v.w + 200 || cy > v.h + 100) continue;
+    const fs = Math.round(Math.min(st.max, Math.max(st.min, E/st.div)));
+    g.font = font(st, fs);
+    const text = st.caps ? (f.name || "").toUpperCase() : (f.name || "");
+    const gap = st.space ? st.space*fs : 0;
+    const w = st.space ? spacedWidth(g, text, gap) : g.measureText(text).width;
+    const box = {x0: cx - w/2 - 4, y0: cy - fs*.6 - 2, x1: cx + w/2 + 4, y1: cy + fs*.6 + 2, f};
+    if(boxes.some(b => overlaps(b, box))) continue;
+    halo(g, fs); g.fillStyle = st.ink;
+    if(st.space){ g.textAlign = "left"; spacedText(g, text, cx - w/2, cy, gap); }
+    else { g.textAlign = "center"; g.strokeText(text, cx, cy); g.fillText(text, cx, cy); }
+    boxes.push(box);
+    // a range's highest point, once the range fills a good part of the screen
+    if(f.peak && E >= 260 && seen(f.peak.x, f.peak.z)){
+      const [px, py] = sx(f.peak.x, f.peak.z), t = "\u25B2 " + Math.round(f.peak.y) + " m", pf = 11;
+      g.font = `500 ${pf}px ${FONT}`; g.textAlign = "left";
+      const pw = g.measureText(t).width, pb = {x0: px - 2, y0: py - pf, x1: px + pw + 6, y1: py + pf, f};
+      if(!boxes.some(b => overlaps(b, pb))){ halo(g, pf); g.fillStyle = st.ink; g.strokeText(t, px + 4, py); g.fillText(t, px + 4, py); boxes.push(pb); }
+    }
+  }
+  g.restore();
+  return boxes;
+}
+// a river's name follows its course, centred on the middle of it, reading left to right
+function river(g, v, f, st, ok, boxes, sx){
+  if(!f.line || f.line.length < 2) return;
+  let pts = f.line.map(([x, z]) => sx(x, z));
+  if(pts[pts.length - 1][0] < pts[0][0]) pts = pts.reverse();
+  const L = [0]; for(let i = 1; i < pts.length; i++) L.push(L[i-1] + Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
+  const len = L[L.length - 1];
+  if(len < 140) return;
+  if(!f.line.some((q, i) => i % 3 === 0 && (() => { const p = toPx(q[0], q[1]); return ok(p.px, p.py); })())) return;
+  const fs = Math.round(Math.min(st.max, Math.max(st.min, v.scale*1.4)));
+  g.font = font(st, fs); g.textAlign = "center";
+  const text = f.name || "", gap = fs*.08;
+  const w = spacedWidth(g, text, gap);
+  if(w > len*.85) return;
+  const at = d => {                                  // point and angle at distance d along the line
+    let i = 1; while(i < L.length - 1 && L[i] < d) i++;
+    const t = (d - L[i-1])/Math.max(1e-6, L[i] - L[i-1]);
+    const [ax, ay] = pts[i-1], [bx, by] = pts[i];
+    return [ax + (bx-ax)*t, ay + (by-ay)*t, Math.atan2(by-ay, bx-ax)];
+  };
+  let d = (len - w)/2;
+  const box = {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9, f};
+  const glyphs = [];
+  for(const ch of text){
+    const cw = g.measureText(ch).width, [x, y, a] = at(d + cw/2);
+    glyphs.push([ch, x, y, a]);
+    box.x0 = Math.min(box.x0, x - fs); box.y0 = Math.min(box.y0, y - fs); box.x1 = Math.max(box.x1, x + fs); box.y1 = Math.max(box.y1, y + fs);
+    d += cw + gap;
+  }
+  if(box.x1 < 0 || box.y1 < 0 || box.x0 > v.w || box.y0 > v.h) return;
+  if(boxes.some(b => overlaps(b, box))) return;
+  halo(g, fs); g.fillStyle = st.ink;
+  for(const [ch, x, y, a] of glyphs){
+    g.save(); g.translate(x, y); g.rotate(a); g.strokeText(ch, 0, -fs*.15); g.fillText(ch, 0, -fs*.15); g.restore();
+  }
+  boxes.push(box);
+}
+const hitName = (boxes, x, y) => { const b = (boxes || []).find(b => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1); return b ? b.f : null; };
 
 // ---------- view cache ----------
 // The scene, rendered once at a zoom over a window wider than the screen: a pan
@@ -590,7 +719,7 @@ function nav(current, el){
 return {cfg, brand, setTitle, credits, toggleSide,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
-        drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires, drawDeaths, viewCache,
+        drawRasters, kindOf, ORDER, shade, parsePieces, explored, filterExplored, drawPieces, drawFires, drawDeaths, drawNames, hitName, viewCache, post,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
         parsePins, ago, esc, nav, user, authHeaders, whoami, signIn, signOut};
 })();

@@ -580,7 +580,8 @@ namespace WebMap
                         }
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                             + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
-                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev + "}"
+                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev
+                            + ",\"features\":" + Features.Rev + "}"
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
                             + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
@@ -610,6 +611,46 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/features":
+                    // the world's geography with its names; the fog is the viewer's to apply
+                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    textBytes = Encoding.UTF8.GetBytes(Features.Json());
+                    res.ContentLength64 = textBytes.Length;
+                    res.Close(textBytes, true);
+                    return true;
+                case "/names":
+                    // A name given on the site. The same shared secret as /announce
+                    // guards it, and the caller says who: the public Worker adds both
+                    // once it has seen a signed-in Discord member.
+                    {
+                        string want = Announce.Token;
+                        string got = req.Headers["X-Announce-Token"] ?? "";
+                        res.ContentType = "application/json";
+                        if (req.HttpMethod != "POST" || want == null || got != want)
+                        {
+                            res.StatusCode = 403;
+                            textBytes = Encoding.UTF8.GetBytes("{\"error\":\"forbidden\"}");
+                            res.ContentLength64 = textBytes.Length;
+                            res.Close(textBytes, true);
+                            return true;
+                        }
+                        string body;
+                        using (var sr = new StreamReader(req.InputStream, Encoding.UTF8))
+                            body = sr.ReadToEnd();
+                        string who = req.Headers["X-User"] ?? "";
+                        try { who = Uri.UnescapeDataString(who); } catch { }
+                        string err = Features.ParseBody(body, out string id, out string name)
+                            ? Features.SetName(id, name, who) : "expected {\"id\":..,\"name\":..}";
+                        res.StatusCode = err == null ? 200 : 400;
+                        textBytes = Encoding.UTF8.GetBytes(err == null
+                            ? "{\"ok\":true,\"rev\":" + Features.Rev + "}"
+                            : "{\"error\":\"" + JsonEscape(err) + "\"}");
+                        res.ContentLength64 = textBytes.Length;
+                        res.Close(textBytes, true);
+                        return true;
+                    }
                 case "/announce":
                     // Shared-secret only, and deliberately absent from the public
                     // Worker's allowlist: this writes into everyone's chat.
