@@ -586,7 +586,8 @@ function vehicleStyle(m){
 const PIN_ICON = {dot: "pin-dot", fire: "pin-fire", mine: "pin-mine", house: "pin-house", cave: "pin-cave"};
 
 // ---------- odds and ends ----------
-// The mod's pin CSV: id,stamp,type,owner,x,z,text -- and the text may hold commas.
+// The mod's pin CSV: placer,id,type,owner,x,z,text -- and the text may hold commas.
+// The placer is a player's platform id, or "web" for a pin placed on the site.
 function parsePins(lines){
   if(typeof lines === "string") lines = lines.split("\n");
   return (lines || []).map(line => {
@@ -594,7 +595,7 @@ function parsePins(lines){
     if(f.length < 6) return null;
     const x = parseFloat(f[4]), z = parseFloat(f[5]);
     if(!isFinite(x) || !isFinite(z)) return null;
-    return Object.assign({type: f[2], owner: f[3], text: f.slice(6).join(",").trim(), x, z}, toPx(x, z));
+    return Object.assign({id: f[1], type: f[2], owner: f[3], site: f[0] === "web", text: f.slice(6).join(",").trim(), x, z}, toPx(x, z));
   }).filter(Boolean);
 }
 function ago(iso){

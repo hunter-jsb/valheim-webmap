@@ -21,6 +21,18 @@
   a name opens that place. Signed in, the name is editable in the card.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
+* Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin
+  and answers its id; `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text` changes one;
+  `{"op":"delete","id"}` takes it up. Every answer carries the pins as they now stand. Guarded
+  like `/names`: a new pin's owner is the `X-User` who placed it, any signed-in member may
+  change any pin, and the server log says who did what. The text is at most 60 characters
+  and a pin only ever lands on walked ground. A site pin has `web` where a game pin has its
+  placer's platform id, and a `w`-prefixed id, so the chat commands never reach it. On the
+  map a pin opens its card on a tap -- type, label, who placed it -- and signed in it can be
+  relabelled, retyped, moved (the next tap is the new spot) or deleted (confirmed in the
+  card); the ground card offers **Pin here**. The chat commands now find and remove under
+  the pin list's lock, and `pins.csv` is written from a snapshot, since the site writes
+  from HTTP threads.
 
 ## 2.12.0
 

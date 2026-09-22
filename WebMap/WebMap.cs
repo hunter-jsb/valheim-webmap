@@ -27,7 +27,7 @@ namespace WebMap
         public const string NAME = "WebMap";
         public const string VERSION = "2.7.1";
 
-        private static readonly string[] ALLOWED_PINS = { "dot", "fire", "mine", "house", "cave" };
+        internal static readonly string[] ALLOWED_PINS = { "dot", "fire", "mine", "house", "cave" };
 
         public DiscordWebHook discordWebHook;
         public static MapDataServer mapDataServer;
@@ -317,12 +317,20 @@ namespace WebMap
             }
         }
 
+        // Pins change on the game thread (chat) and on HTTP threads (the site): each
+        // save writes a snapshot, one save at a time, so the last one written is the newest.
+        private static readonly object pinsSaveLock = new object();
         public static void SavePins()
         {
             string mapPinsFile = Path.Combine(worldDataPath, "pins.csv");
             try
             {
-                File.WriteAllLines(mapPinsFile, mapDataServer.pins);
+                lock (pinsSaveLock)
+                {
+                    string[] lines;
+                    lock (mapDataServer.pins) lines = mapDataServer.pins.ToArray();
+                    File.WriteAllLines(mapPinsFile, lines);
+                }
             }
             catch (Exception e)
             {
@@ -741,26 +749,31 @@ namespace WebMap
                             long timestamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
 
                             string pinId = $"{timestamp}-{Random.Range(1000, 9999)}";
-                            mapDataServer.AddPin(steamid, pinId, pinType, userInfo.Name, pos, safePinsText);
-
-                            List<string> usersPins = mapDataServer.pins.FindAll(pin => pin.StartsWith(steamid));
-                            int numOverflowPins = usersPins.Count - WebMapConfig.MAX_PINS_PER_USER;
-                            for (int t = numOverflowPins; t > 0; t--)
+                            // the site writes pins from HTTP threads: a find and its remove stay together
+                            lock (mapDataServer.pins)
                             {
-                                int pinIdx = mapDataServer.pins.FindIndex(pin => pin.StartsWith(steamid));
-                                mapDataServer.RemovePin(pinIdx);
+                                mapDataServer.AddPin(steamid, pinId, pinType, userInfo.Name, pos, safePinsText);
+
+                                List<string> usersPins = mapDataServer.pins.FindAll(pin => pin.StartsWith(steamid));
+                                int numOverflowPins = usersPins.Count - WebMapConfig.MAX_PINS_PER_USER;
+                                for (int t = numOverflowPins; t > 0; t--)
+                                {
+                                    int pinIdx = mapDataServer.pins.FindIndex(pin => pin.StartsWith(steamid));
+                                    mapDataServer.RemovePin(pinIdx);
+                                }
                             }
 
                             SavePins();
                         }
                         else if (message.ToUpper().StartsWith("!UNDOPIN"))
                         {
-                            int pinIdx = mapDataServer.pins.FindLastIndex(pin => pin.StartsWith(steamid));
-                            if (pinIdx > -1)
+                            bool took = false;
+                            lock (mapDataServer.pins)
                             {
-                                mapDataServer.RemovePin(pinIdx);
-                                SavePins();
+                                int pinIdx = mapDataServer.pins.FindLastIndex(pin => pin.StartsWith(steamid));
+                                if (pinIdx > -1) { mapDataServer.RemovePin(pinIdx); took = true; }
                             }
+                            if (took) SavePins();
                         }
                         else if (message.ToUpper().StartsWith("!DELETEPIN"))
                         {
@@ -769,17 +782,17 @@ namespace WebMap
                             if (messageParts.Length > 1)
                                 pinText = string.Join(" ", messageParts, 1, messageParts.Length - 1);
 
-                            int pinIdx = mapDataServer.pins.FindLastIndex(pin =>
+                            bool took = false;
+                            lock (mapDataServer.pins)
                             {
-                                string[] pinParts = pin.Split(',');
-                                return pinParts[0] == steamid && pinParts[pinParts.Length - 1] == pinText;
-                            });
-
-                            if (pinIdx > -1)
-                            {
-                                mapDataServer.RemovePin(pinIdx);
-                                SavePins();
+                                int pinIdx = mapDataServer.pins.FindLastIndex(pin =>
+                                {
+                                    string[] pinParts = pin.Split(',');
+                                    return pinParts[0] == steamid && pinParts[pinParts.Length - 1] == pinText;
+                                });
+                                if (pinIdx > -1) { mapDataServer.RemovePin(pinIdx); took = true; }
                             }
+                            if (took) SavePins();
                         }
                         else
                         {

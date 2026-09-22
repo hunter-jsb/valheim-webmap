@@ -21,6 +21,12 @@
 .namer .facts{color:var(--ink-2);font-size:.78rem;margin-top:.25rem}
 .namer .others{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
 .namer .others .chip{font-size:.68rem}
+/* the pin's own icons, shadowed as on the map so the gold ones hold on a gold chip */
+.namer .nm .ic{width:17px;height:17px;vertical-align:-3px;margin-right:.35rem;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+.namer .nm i{font-weight:400;color:var(--muted)}
+.namer .pick{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
+.namer .pick .chip{display:inline-flex;align-items:center;gap:.3rem}
+.namer .pick svg{width:13px;height:13px;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   html,body{height:100%}
   body{overflow:hidden}
 
@@ -68,6 +74,8 @@
     border-radius:var(--r-sm);white-space:nowrap}
   .marker .ic{display:block;flex:0 0 auto;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
   .marker.pin .ic{width:17px;height:17px}
+  .marker.pin{pointer-events:auto;cursor:pointer}   /* a tap opens its card */
+  .stage.placing{cursor:crosshair}                  /* a pin is being moved: the next tap is where */
   .marker.pin .nm{color:var(--gold)}
   /* parked kit, not people: visible on a look but never competing with players */
   .marker.veh .ic{opacity:.92}
@@ -251,6 +259,9 @@
       </div>
     </div>
 
+    <p style="margin-top:.8rem">Or on this map, signed in: tap walked ground and <b>Pin here</b>, or tap a
+       pin to relabel, retype, move or delete it.</p>
+
     <h3>Layers</h3>
     <p>Each row of the sidebar's <b>Legend</b> is a switch, remembered by this browser; the
        <b>Layers</b> card on the map holds presets of them, details (torches and fires,
@@ -333,7 +344,7 @@ function buildMarkers(players, pinList, vehicles){
     `<div class="marker" data-px="${m.px}" data-py="${m.py}">`
     + `<span class="dot"></span><span class="nm">${esc(m.name)}</span></div>`);
   const q = (pinList||[]).map(m =>
-    `<div class="marker pin" data-px="${m.px}" data-py="${m.py}" title="${esc(m.owner||"")}">`
+    `<div class="marker pin" data-id="${esc(m.id||"")}" data-px="${m.px}" data-py="${m.py}" title="${esc(m.owner||"")}">`
     + `<svg class="ic"><use href="#ic-${MapCore.PIN_ICON[m.type] || "pin-dot"}"></use></svg>`
     + (m.text ? `<span class="nm">${esc(m.text)}</span>` : "") + `</div>`);
   // named on hover only -- a harbour with six boats would be a wall of text.
@@ -580,10 +591,12 @@ stage.addEventListener("pointerdown", e => {
   // Don't start a drag on the controls: capturing the pointer here retargets
   // the pointerup to the stage, so the button never receives its click.
   if (e.target.closest && e.target.closest(".mapctl, .layers, #mini, #namer")) return;
-  if(!namer.hidden) closeCard();
+  if(!namer.hidden && !placing()) closeCard();
   stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  down = pts.size === 1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
+  // markers are rebuilt every tick, so the pin under the finger is kept by id
+  const pin = e.target.closest && e.target.closest(".marker.pin");
+  down = pts.size === 1 ? {x:e.clientX, y:e.clientY, id:e.pointerId, pin: pin ? pin.dataset.id : null} : null;
   if(pts.size === 1){ last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); }
   else if(pts.size === 2){ pinch = pinchState(); }
 });
@@ -604,8 +617,10 @@ stage.addEventListener("pointermove", e => {
 function endPtr(e){
   if(e.type === "pointerup" && down && down.id === e.pointerId && pts.size === 1
      && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5){
-    const r = stage.getBoundingClientRect();
-    tapName(e.clientX - r.left, e.clientY - r.top);
+    const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    if(placing()) movePin(CARD, x, y);
+    else if(down.pin) openPin(down.pin, x, y);
+    else tapName(x, y);
   }
   down = null;
   pts.delete(e.pointerId);
@@ -644,7 +659,7 @@ document.getElementById("helpBtn").addEventListener("click", e => { e.preventDef
 document.getElementById("helpClose").addEventListener("click", () => showHelp(false));
 helpEl.addEventListener("click", e => { if(e.target === helpEl) showHelp(false); });
 addEventListener("keydown", e => {
-  if(e.key === "Escape") showHelp(false);
+  if(e.key === "Escape"){ showHelp(false); if(placing()){ CARD.mode = "view"; renderCard(); } }
   else if((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey) nextGround();
 });
 
@@ -666,7 +681,7 @@ let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the sce
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-22b";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-22c";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -787,7 +802,7 @@ async function tickState(){
     if(DETAILS.has("deaths")) drawRaster();
   }
   LAST_REV = s.rev;
-  PINS = MapCore.parsePins(s.pins);
+  if(Date.now() - PINS_AT > 3000) PINS = MapCore.parsePins(s.pins);
   if(s.forest) FOREST = s.forest;
   renderTiles();
   if(s.messages){ MESSAGES = s.messages; renderFeed(); }
@@ -817,13 +832,15 @@ async function fetchFeatures(rev){
 // to the others at that spot. Signed in, the name is editable in place. Unwalked
 // ground gets no card: the fog holds on the server too.
 const namer = document.getElementById("namer");
-let CARD = null;                      // {here: [...], at: {x,z,biome,height}, i, editing}
+let CARD = null;                      // a place {here, at, i, tap, walked, editing, adding} or a pin {pin, mode}; both at x, y
 const KIND = {continent: "Continent", island: "Island", holm: "Holm", range: "Mountain range", lake: "Lake", bay: "Bay",
               river: "River", forest: "Black Forest", swamp: "Swamp", plains: "Plains", meadows: "Meadows",
               mistlands: "Mistlands", ashlands: "Ashlands", north: "Deep North"};
 const km2 = a => a >= 1 ? a.toFixed(1) + " km\u00b2" : Math.round(a*100) + " ha";
 function renderCard(){
   const c = CARD; if(!c) return;
+  stage.classList.toggle("placing", c.mode === "move");
+  if(c.pin || c.adding) return renderPin(c);
   const f = c.here[c.i], me = MapCore.user();
   const bits = [KIND[f.kind] || f.kind];
   bits.push(f.kind === "river" ? (f.area >= 1000 ? (f.area/1000).toFixed(1) + " km long" : Math.round(f.area) + " m long") : km2(f.area));
@@ -842,11 +859,10 @@ function renderCard(){
         : `<div class="nm">${esc(f.name)}${me ? ' <a href="#" class="edit" id="nameEdit" title="Rename">\u270e</a>' : ""}</div>`)
     + (facts.length ? `<div class="facts">${esc(facts.join(" \u00b7 "))}</div>` : "")
     + (others ? `<div class="others">${others}</div>` : "")
+    + (me && c.walked && !c.editing ? `<div class="btnrow"><button class="btn" id="pinHere">${pinIcon("dot")}Pin here</button></div>` : "")
     + `<div class="note" id="nameNote">${f.by ? "named by " + esc(f.by) : (me ? "the world's own name" : "the world's own name \u00b7 sign in to rename")}</div>`;
-  namer.hidden = false;
-  const r = stage.getBoundingClientRect();
-  namer.style.left = Math.max(8, Math.min(r.width - namer.offsetWidth - 8, c.x - namer.offsetWidth/2)) + "px";
-  namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, c.y + 14)) + "px";
+  placeCard(c);
+  const ph = document.getElementById("pinHere"); if(ph) ph.onclick = () => { c.adding = true; renderCard(); };
   namer.querySelectorAll(".others .chip").forEach(el => el.onclick = () => { c.i = +el.dataset.i; c.editing = false; renderCard(); });
   const ed = document.getElementById("nameEdit"); if(ed) ed.onclick = e => { e.preventDefault(); c.editing = true; renderCard(); };
   const inp = document.getElementById("nameIn");
@@ -858,7 +874,14 @@ function renderCard(){
     const rs = document.getElementById("nameReset"); if(rs) rs.onclick = () => saveName("");
   }
 }
-function closeCard(){ namer.hidden = true; CARD = null; }
+// beside the tap, kept inside the stage
+function placeCard(c){
+  namer.hidden = false;
+  const r = stage.getBoundingClientRect();
+  namer.style.left = Math.max(8, Math.min(r.width - namer.offsetWidth - 8, c.x - namer.offsetWidth/2)) + "px";
+  namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, c.y + 14)) + "px";
+}
+function closeCard(){ namer.hidden = true; CARD = null; stage.classList.remove("placing"); }
 async function saveName(name){
   const c = CARD; if(!c) return;
   const f = c.here[c.i];
@@ -873,25 +896,114 @@ async function saveName(name){
   }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; }
 }
 // open the card for a spot, or for a place (its own spot then); nothing for unwalked ground
-async function openCard(x, y, wx, wz, want){
+async function openCard(x, y, wx, wz, want, tap){
   let j = null;
   try{ j = await MapCore.fetchJSON(API, `/at?x=${wx.toFixed(1)}&z=${wz.toFixed(1)}`); }catch(e){}
   let here = (j && j.here) || [];
   if(want && !here.some(g => g.id === want.id)) here = [want].concat(here);
   if(!here.length) return;
   const i = want ? Math.max(0, here.findIndex(g => g.id === want.id)) : 0;
-  CARD = {here, at: j, i, x, y, editing: false};
+  // a pin goes where the tap was: /at has vouched for that ground, or on a name the fog must
+  tap = tap || {x: wx, z: wz};
+  const ok = want ? MapCore.explored(LAYERS.imgs.fog) : null, q = toPx(tap.x, tap.z);
+  CARD = {here, at: j, i, x, y, tap, walked: want ? !!(ok && ok(q.px, q.py)) : true, editing: false};
   renderCard();
 }
 namer.addEventListener("pointerdown", e => e.stopPropagation());
-document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.closest("#namer")) closeCard(); });
+document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.closest("#namer") && !placing()) closeCard(); });
 // a tap, as against a drag: on a name it opens that place; anywhere else, what is there
 function tapName(x, y){
   let f = null;
   if(NAMEVIEW && NAMEVIEW.scale === scale && NAMEBOXES.length)
     f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - tx), y + (NAMEVIEW.ty - ty));
-  const w = f ? {x: f.x, z: f.z} : MapCore.toWorld((x - tx)/scale, (y - ty)/scale);
-  openCard(x, y, w.x, w.z, f);
+  const t = MapCore.toWorld((x - tx)/scale, (y - ty)/scale), w = f ? {x: f.x, z: f.z} : t;
+  openCard(x, y, w.x, w.z, f, t);
+}
+
+// ---------- pins ----------
+// A tap on a pin opens its card; signed in, it can be relabelled, retyped, moved or
+// deleted, and the ground card offers a new one. Only ever on walked ground, the rule
+// the ground card keeps; the mod refuses anything else.
+const PIN_TYPES = Object.keys(MapCore.PIN_ICON);
+const pinIcon = t => `<svg class="ic"><use href="#ic-${MapCore.PIN_ICON[t] || "pin-dot"}"></use></svg>`;
+function placing(){ return !!(CARD && CARD.mode === "move"); }
+function renderPin(c){
+  const p = c.pin || {type: "dot", text: ""}, me = MapCore.user();
+  const form = c.adding || c.mode === "edit";
+  const head = c.adding ? "New pin" : c.mode === "edit" ? "Edit pin" : c.mode === "move" ? "Moving pin" : "Pin \u00b7 " + p.type;
+  const title = `<div class="nm">${pinIcon(p.type)}${p.text ? esc(p.text) : "<i>no label</i>"}`
+    + (me && c.mode === "view" ? ' <a href="#" class="edit" id="pinEdit" title="Relabel or retype">\u270e</a>' : "") + `</div>`;
+  const by = c.pin ? `<div class="facts">${c.pin.site ? "pinned on the site by " : "placed in game by "}${esc(c.pin.owner || "someone")}</div>` : "";
+  let body, note = c.msg || "";
+  if(form){
+    body = `<input class="field" id="pinText" maxlength="60" placeholder="a label, or none" value="${esc(p.text)}" autocomplete="off">`
+      + `<div class="pick">${PIN_TYPES.map(t => `<button class="chip${t === p.type ? " on" : ""}" data-t="${t}">${pinIcon(t)}${t}</button>`).join("")}</div>`
+      + `<div class="btnrow"><button class="btn" id="pinSave">${c.adding ? "Pin it" : "Save"}</button><button class="btn quiet" id="pinCancel">Cancel</button></div>`;
+  } else if(c.mode === "move"){
+    body = title + `<div class="btnrow"><button class="btn quiet" id="pinCancel">Cancel</button></div>`;
+    note = note || "Tap the map where it goes.";
+  } else if(c.mode === "confirm"){
+    body = title + by + `<div class="btnrow"><button class="btn" id="pinDelete">Delete</button><button class="btn quiet" id="pinCancel">Keep</button></div>`;
+  } else {
+    body = title + by + (me ? `<div class="btnrow"><button class="btn" id="pinMove">Move</button><button class="btn" id="pinAsk">Delete</button></div>` : "");
+    note = note || (me ? "" : "sign in to change it");
+  }
+  namer.innerHTML = `<div class="eyebrow">${esc(head)}</div>` + body
+    + `<div class="note${c.mode === "confirm" ? " bad" : ""}" id="nameNote">${esc(c.mode === "confirm" ? "Delete this pin for everyone?" : note)}</div>`;
+  placeCard(c);
+  const $ = id => document.getElementById(id), on = (id, f) => { const el = $(id); if(el) el.onclick = e => { e.preventDefault(); f(); }; };
+  const view = mode => { if(c.adding) c.adding = false; else c.mode = mode; c.msg = ""; renderCard(); };
+  on("pinEdit", () => view("edit"));
+  on("pinMove", () => view("move"));
+  on("pinAsk", () => view("confirm"));
+  on("pinCancel", () => view("view"));
+  on("pinDelete", async () => { if(await writePin({op: "delete", id: c.pin.id}) && CARD === c) closeCard(); });
+  namer.querySelectorAll(".pick .chip").forEach(el => el.onclick = () =>
+    namer.querySelectorAll(".pick .chip").forEach(b => b.classList.toggle("on", b === el)));
+  const inp = $("pinText");
+  if(inp){
+    const save = () => savePin(c, inp.value, (namer.querySelector(".pick .chip.on") || {dataset: {t: "dot"}}).dataset.t);
+    inp.focus();
+    inp.addEventListener("keydown", e => { if(e.key === "Enter") save(); if(e.key === "Escape") view("view"); });
+    on("pinSave", save);
+  }
+}
+function openPin(id, x, y, msg){
+  const pin = PINS.find(p => p.id === id);
+  if(!pin) return closeCard();
+  CARD = {pin, x, y, mode: "view", msg: msg || ""};
+  renderCard();
+}
+// Each write answers with the pins as they now stand. /state sits on the edge for
+// 2 s, so for a moment after a write that answer is the fresher, and the tick waits.
+let PINS_AT = 0;
+async function writePin(body){
+  const note = document.getElementById("nameNote");
+  note.className = "note"; note.textContent = "saving\u2026";
+  try{
+    const r = await MapCore.post(API, "/pins", body);
+    // a mod from before site pins answers a POST with its CSV: no answer at all
+    if(!r || !r.ok || !r.pins) throw new Error("the server takes pins from the site after its next restart");
+    PINS = MapCore.parsePins(r.pins); PINS_AT = Date.now();
+    renderTiles();
+    return r;
+  }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; return null; }
+}
+async function savePin(c, text, type){
+  if(c.busy) return;
+  c.busy = true;
+  const r = await writePin(c.adding ? {op: "add", x: +c.tap.x.toFixed(2), z: +c.tap.z.toFixed(2), type, text}
+                                    : {op: "edit", id: c.pin.id, type, text});
+  c.busy = false;
+  if(r && CARD === c) openPin(r.id, c.x, c.y, c.adding ? "pinned" : "saved");
+}
+async function movePin(c, x, y){
+  if(c.busy) return;
+  c.busy = true;
+  const w = MapCore.toWorld((x - tx)/scale, (y - ty)/scale);
+  const r = await writePin({op: "edit", id: c.pin.id, x: +w.x.toFixed(2), z: +w.z.toFixed(2)});
+  c.busy = false;
+  if(r && CARD === c) openPin(c.pin.id, x, y, "moved");
 }
 
 async function boot(){

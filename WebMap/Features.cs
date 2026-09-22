@@ -603,19 +603,8 @@ namespace WebMap
         // A body of {"id":"...","name":"..."}: the two strings, escapes honoured.
         public static bool ParseBody(string body, out string id, out string name)
         {
-            id = Field(body, "id"); name = Field(body, "name");
+            id = Body.Str(body, "id"); name = Body.Str(body, "name");
             return id != null && name != null;
-        }
-        private static string Field(string body, string key)
-        {
-            var m = Regex.Match(body ?? "", "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
-            if (!m.Success) return null;
-            return Regex.Replace(m.Groups[1].Value, @"\\(u[0-9a-fA-F]{4}|.)", mm =>
-            {
-                string v = mm.Groups[1].Value;
-                if (v[0] == 'u') return ((char)Convert.ToInt32(v.Substring(1), 16)).ToString();
-                switch (v) { case "n": return "\n"; case "t": return "\t"; default: return v; }
-            });
         }
     }
 }

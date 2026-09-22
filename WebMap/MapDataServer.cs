@@ -571,13 +571,7 @@ namespace WebMap
                     // when the picture changed. Each block is a string another thread
                     // already built; this is concatenation.
                     {
-                        string pinsJson;
-                        lock (pins)
-                        {
-                            var q = new List<string>(pins.Count);
-                            foreach (string line in pins) q.Add("\"" + JsonEscape(line) + "\"");
-                            pinsJson = "[" + string.Join(",", q) + "]";
-                        }
+                        string pinsJson = PinsJson();
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                             + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
                             + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev
@@ -640,30 +634,12 @@ namespace WebMap
                     // guards it, and the caller says who: the public Worker adds both
                     // once it has seen a signed-in Discord member.
                     {
-                        string want = Announce.Token;
-                        string got = req.Headers["X-Announce-Token"] ?? "";
-                        res.ContentType = "application/json";
-                        if (req.HttpMethod != "POST" || want == null || got != want)
-                        {
-                            res.StatusCode = 403;
-                            textBytes = Encoding.UTF8.GetBytes("{\"error\":\"forbidden\"}");
-                            res.ContentLength64 = textBytes.Length;
-                            res.Close(textBytes, true);
-                            return true;
-                        }
-                        string body;
-                        using (var sr = new StreamReader(req.InputStream, Encoding.UTF8))
-                            body = sr.ReadToEnd();
-                        string who = req.Headers["X-User"] ?? "";
-                        try { who = Uri.UnescapeDataString(who); } catch { }
+                        if (!SiteWrite(req, res, out string body, out string who)) return true;
                         string err = Features.ParseBody(body, out string id, out string name)
                             ? Features.SetName(id, name, who) : "expected {\"id\":..,\"name\":..}";
-                        res.StatusCode = err == null ? 200 : 400;
-                        textBytes = Encoding.UTF8.GetBytes(err == null
+                        Answer(res, err == null ? 200 : 400, err == null
                             ? "{\"ok\":true,\"rev\":" + Features.Rev + "}"
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
-                        res.ContentLength64 = textBytes.Length;
-                        res.Close(textBytes, true);
                         return true;
                     }
                 case "/announce":
@@ -703,6 +679,16 @@ namespace WebMap
                         return true;
                     }
                 case "/pins":
+                    // A POST places, changes or takes up a pin from the site, guarded like /names.
+                    if (req.HttpMethod == "POST")
+                    {
+                        if (!SiteWrite(req, res, out string body, out string who)) return true;
+                        string err = WritePin(body, who, out string pinId);
+                        Answer(res, err == null ? 200 : 400, err == null
+                            ? "{\"ok\":true,\"id\":\"" + JsonEscape(pinId) + "\",\"pins\":" + PinsJson() + "}"
+                            : "{\"error\":\"" + JsonEscape(err) + "\"}");
+                        return true;
+                    }
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "text/csv";
                     res.StatusCode = 200;
@@ -716,6 +702,131 @@ namespace WebMap
 
             return false;
         }
+
+        // A write from the site: the shared token says the Worker sent it, X-User which
+        // signed-in member. False when this has already answered 403.
+        private static bool SiteWrite(HttpListenerRequest req, HttpListenerResponse res, out string body, out string who)
+        {
+            body = who = null;
+            string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
+            if (req.HttpMethod != "POST" || want == null || got != want)
+            {
+                Answer(res, 403, "{\"error\":\"forbidden\"}");
+                return false;
+            }
+            using (var sr = new StreamReader(req.InputStream, Encoding.UTF8))
+                body = sr.ReadToEnd();
+            who = req.Headers["X-User"] ?? "";
+            try { who = Uri.UnescapeDataString(who); } catch { }
+            return true;
+        }
+
+        private static void Answer(HttpListenerResponse res, int status, string json)
+        {
+            res.ContentType = "application/json";
+            res.StatusCode = status;
+            byte[] b = Encoding.UTF8.GetBytes(json);
+            res.ContentLength64 = b.Length;
+            res.Close(b, true);
+        }
+
+        public string PinsJson()
+        {
+            lock (pins)
+            {
+                var q = new List<string>(pins.Count);
+                foreach (string line in pins) q.Add("\"" + JsonEscape(line) + "\"");
+                return "[" + string.Join(",", q) + "]";
+            }
+        }
+
+        // Pins from the site. Any signed-in member may change any pin -- one party --
+        // and the log says who did what. A site pin's placer field is "web", where a
+        // game pin has its player's platform id: the chat commands match on that id,
+        // so they never reach one. Its id is "w" + a millisecond stamp, apart from the
+        // game's "<seconds>-<random>". Null when the write took, else what was wrong.
+        public const string SitePlacer = "web";
+        private static readonly System.Text.RegularExpressions.Regex Unprintable =
+            new System.Text.RegularExpressions.Regex(@"[\p{Cc}\p{Cf}]");
+        public string WritePin(string body, string who, out string id)
+        {
+            string op = Body.Str(body, "op");
+            id = Body.Str(body, "id");
+            // the owner is a CSV field, so no commas; 32 is Discord's own cap on a name
+            who = Unprintable.Replace(who ?? "", "").Replace(",", "").Trim();
+            if (who.Length > 32) who = who.Substring(0, 32).Trim();
+            if (who.Length == 0) who = "someone";
+            if (op != "add" && op != "edit" && op != "delete") return "op is add, edit or delete";
+
+            string type = Body.Str(body, "type"), text = Body.Str(body, "text");
+            if (type != null && Array.IndexOf(WebMap.ALLOWED_PINS, type) < 0)
+                return "type is one of " + string.Join(", ", WebMap.ALLOWED_PINS);
+            if (text != null)
+            {
+                text = Unprintable.Replace(text, "").Trim();
+                if (text.Length > 60) return "a pin's text is at most 60 characters";
+            }
+            bool moves = op == "add" || Body.Has(body, "x") || Body.Has(body, "z");
+            double x = Body.Num(body, "x"), z = Body.Num(body, "z");
+            if (moves)
+            {
+                if (!(Math.Abs(x) <= 12000 && Math.Abs(z) <= 12000)) return "x and z are numbers within 12000 m of the centre";
+                // the honour system: the site pins only ground somebody has walked
+                if (!MapFog.Explored((float)x, (float)z)) return "nobody has walked there yet";
+            }
+            string sx = FixedValue((float)x), sz = FixedValue((float)z);
+
+            string[] was = null, now = null;
+            lock (pins)
+            {
+                if (op == "add")
+                {
+                    long t = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    do id = "w" + t++; while (FindPin(id) >= 0);
+                    string line = $"{SitePlacer},{id},{type ?? "dot"},{who},{sx},{sz},{text ?? ""}";
+                    pins.Add(line);
+                    now = line.Split(',');
+                }
+                else
+                {
+                    int i = string.IsNullOrEmpty(id) ? -1 : FindPin(id);
+                    if (i < 0) return "no such pin";
+                    was = pins[i].Split(',');
+                    if (op == "delete") pins.RemoveAt(i);
+                    else
+                    {
+                        string line = $"{was[0]},{was[1]},{type ?? was[2]},{was[3]},{(moves ? sx : was[4])},{(moves ? sz : was[5])},{text ?? PinText(was)}";
+                        pins[i] = line;
+                        now = line.Split(',');
+                    }
+                }
+            }
+            WebMap.SavePins();
+
+            // the websocket feed carries pins as they come and go
+            if (was != null) webSocketHandler.Sessions.Broadcast($"rmpin\n{was[1]}");
+            if (now != null)
+                webSocketHandler.Sessions.Broadcast($"pin\n{now[0]}\n{now[1]}\n{now[2]}\n{now[3]}\n{now[4]},{now[5]}\n{PinText(now)}");
+
+            if (op == "add")
+                ZLog.Log($"WebMap: {who} pinned a {now[2]} '{PinText(now)}' at {sx}, {sz} from the site");
+            else if (op == "delete")
+                ZLog.Log($"WebMap: {who} took up {was[3]}'s {was[2]} pin '{PinText(was)}' from the site");
+            else
+            {
+                var what = new List<string>();
+                if (now[2] != was[2]) what.Add("a " + now[2]);
+                if (PinText(now) != PinText(was)) what.Add($"'{PinText(now)}'");
+                if (now[4] != was[4] || now[5] != was[5]) what.Add($"moved to {now[4]}, {now[5]}");
+                ZLog.Log($"WebMap: {who} changed {was[3]}'s pin '{PinText(was)}' from the site: "
+                         + (what.Count > 0 ? string.Join(", ", what) : "no change"));
+            }
+            return null;
+        }
+        // under lock (pins); a line is placer,id,type,owner,x,z,text
+        private int FindPin(string id) => pins.FindIndex(l => { var f = l.Split(','); return f.Length >= 6 && f[1] == id; });
+        // the text is last and may hold commas
+        private static string PinText(string[] f) => f.Length > 6 ? string.Join(",", f, 6, f.Length - 6) : "";
 
         // Game thread only. Rebuilds what every other thread serves.
         public void RefreshPlayerSnapshot()
