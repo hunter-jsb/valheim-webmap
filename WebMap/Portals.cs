@@ -20,6 +20,7 @@ namespace WebMap
         private static readonly Dictionary<int, bool> isPortal = new Dictionary<int, bool>();
         private static readonly List<Entry> found = new List<Entry>();
         private static volatile string json = "{\"portals\":[],\"count\":0}";
+        public static volatile float[] Positions = new float[0];   // x, z pairs of the portals in walked ground
 
         // By component, so a portal added in a later patch counts without this
         // having to learn its prefab name.
@@ -69,6 +70,9 @@ namespace WebMap
             }
             sb.Append("],\"count\":").Append(n).Append("}");
             json = sb.ToString();
+            var pos = new List<float>();
+            foreach (var e in found) if (e.explored) { pos.Add(e.x); pos.Add(e.z); }
+            Positions = pos.ToArray();
         }
 
         public static string GetJson() => json;

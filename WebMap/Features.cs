@@ -30,6 +30,10 @@ namespace WebMap
         private static readonly Dictionary<string, Named> names = new Dictionary<string, Named>();
         private static Feature[] found = new Feature[0];
         private static readonly Dictionary<string, string> generated = new Dictionary<string, string>();
+        // what is where: per cell, 1 + the index into found of the landmass, the biome
+        // region, the lake or bay, and the range there; the biome and height too
+        private static volatile Grids grids;
+        private class Grids { public ushort[] land, region, water, range; public byte[] cls; public float[] hgt; public float cell; }
 
         private class Named { public string name, by; public long t; }
         private class Feature
@@ -38,6 +42,7 @@ namespace WebMap
             public float x, z;            // where its name sits: the point deepest inside it, or a river's middle
             public float w, h, area;      // extent in metres, area in km²
             public bool hasPeak; public float px, pz, py;
+            public bool hasElev; public float hmin, hmax, hmean;   // land, ranges and biome regions
             public List<float[]> line;    // rivers only: the path, [x, z] every ~50 m
         }
 
@@ -155,10 +160,12 @@ namespace WebMap
                 }
             }
 
+            var g = new Grids { land = new ushort[n], region = new ushort[n], water = new ushort[n], range = new ushort[n], cls = cls, hgt = hgt, cell = cell };
+
             // landmasses
             var land = new bool[n];
             for (int i = 0; i < n; i++) land[i] = cls[i] != 0;
-            Regions(land, cell, 20, area => area * cellKm2 >= 4f ? "continent" : area * cellKm2 >= 0.1f ? "island" : "holm", feats, null);
+            Regions(land, cell, 20, area => area * cellKm2 >= 4f ? "continent" : area * cellKm2 >= 0.1f ? "island" : "holm", feats, hgt, false, g.land);
 
             // still water: the outer sea is whatever touches the edge; the rest are lakes
             var water = new bool[n];
@@ -169,7 +176,7 @@ namespace WebMap
             for (int y = 0; y < N; y++) { atEdge[wl[y * N]] = true; atEdge[wl[y * N + N - 1]] = true; }
             var lakes = new bool[n];
             for (int i = 0; i < n; i++) lakes[i] = water[i] && !atEdge[wl[i]];
-            Regions(lakes, cell, 12, _ => "lake", feats, null);
+            Regions(lakes, cell, 12, _ => "lake", feats, null, false, g.water);
 
             // bays: what closing the coast by ~200 m fills in, on the open sea
             var sea = new bool[n];
@@ -177,13 +184,13 @@ namespace WebMap
             var closed = Erode(Dilate(land, 8), 8);
             var bays = new bool[n];
             for (int i = 0; i < n; i++) bays[i] = closed[i] && sea[i];
-            Regions(bays, cell, 40, _ => "bay", feats, null);
+            Regions(bays, cell, 40, _ => "bay", feats, null, false, g.water);
 
             // mountain ranges, each with its highest point
             var mtn = new bool[n];
             byte m = Class(Heightmap.Biome.Mountain);
             for (int i = 0; i < n; i++) mtn[i] = cls[i] == m;
-            Regions(mtn, cell, 40, _ => "range", feats, hgt);
+            Regions(mtn, cell, 40, _ => "range", feats, hgt, true, g.range);
 
             // the other biomes as regions, only where they are big enough to be a place
             var biomes = new[] {
@@ -195,7 +202,7 @@ namespace WebMap
                 byte c = Class(b);
                 var mask = new bool[n];
                 for (int i = 0; i < n; i++) mask[i] = cls[i] == c;
-                Regions(mask, cell, (int)(0.5f / cellKm2), _ => kind, feats, null);
+                Regions(mask, cell, (int)(0.5f / cellKm2), _ => kind, feats, hgt, false, g.region);
             }
 
             // rivers: the path thinned to every ~50 m, named at its middle
@@ -231,6 +238,7 @@ namespace WebMap
             lock (gate)
             {
                 found = feats.ToArray();
+                grids = g;
                 generated.Clear();
                 foreach (var kv in gen) generated[kv.Key] = kv.Value;
                 Rebuild();
@@ -250,7 +258,9 @@ namespace WebMap
         // Every connected blob of the mask big enough becomes a feature of the kind
         // the area says, named at the cell farthest from its edge; with heights, the
         // highest cell is its peak.
-        private static void Regions(bool[] mask, float cell, int minCells, Func<int, string> kindOf, List<Feature> feats, float[] hgt)
+        // hgt gives the elevation span; withPeak names its highest point too; into, when
+        // given, is filled with 1 + each kept feature's index in feats, cell by cell
+        private static void Regions(bool[] mask, float cell, int minCells, Func<int, string> kindOf, List<Feature> feats, float[] hgt, bool withPeak, ushort[] into)
         {
             int n = N * N;
             var lab = Label(mask, out int count, out int[] area);
@@ -258,8 +268,8 @@ namespace WebMap
             var depth = Depth(mask);
             var best = new int[count + 1]; var bestD = new int[count + 1];
             var minx = new int[count + 1]; var miny = new int[count + 1]; var maxx = new int[count + 1]; var maxy = new int[count + 1];
-            var peak = new int[count + 1]; var peakH = new float[count + 1];
-            for (int k = 1; k <= count; k++) { minx[k] = miny[k] = N; maxx[k] = maxy[k] = -1; bestD[k] = -1; peakH[k] = float.MinValue; }
+            var peak = new int[count + 1]; var peakH = new float[count + 1]; var low = new float[count + 1]; var sum = new double[count + 1];
+            for (int k = 1; k <= count; k++) { minx[k] = miny[k] = N; maxx[k] = maxy[k] = -1; bestD[k] = -1; peakH[k] = float.MinValue; low[k] = float.MaxValue; }
             for (int i = 0; i < n; i++)
             {
                 int k = lab[i]; if (k == 0) continue;
@@ -267,19 +277,31 @@ namespace WebMap
                 if (depth[i] > bestD[k]) { bestD[k] = depth[i]; best[k] = i; }
                 if (x < minx[k]) minx[k] = x; if (x > maxx[k]) maxx[k] = x;
                 if (y < miny[k]) miny[k] = y; if (y > maxy[k]) maxy[k] = y;
-                if (hgt != null && hgt[i] > peakH[k]) { peakH[k] = hgt[i]; peak[k] = i; }
+                if (hgt != null)
+                {
+                    if (hgt[i] > peakH[k]) { peakH[k] = hgt[i]; peak[k] = i; }
+                    if (hgt[i] < low[k]) low[k] = hgt[i];
+                    sum[k] += hgt[i];
+                }
             }
             float cellKm2 = cell * cell / 1e6f;
+            var index = new ushort[count + 1];
             for (int k = 1; k <= count; k++)
             {
                 if (area[k] < minCells) continue;
                 var f = new Feature { kind = kindOf(area[k]), area = R1(area[k] * cellKm2 * 100f) / 100f };
                 f.x = R1(World(best[k] % N, cell)); f.z = R1(World(best[k] / N, cell));
                 f.w = R1((maxx[k] - minx[k] + 1) * cell); f.h = R1((maxy[k] - miny[k] + 1) * cell);
-                if (hgt != null) { f.hasPeak = true; f.px = R1(World(peak[k] % N, cell)); f.pz = R1(World(peak[k] / N, cell)); f.py = R1(peakH[k]); }
+                if (hgt != null)
+                {
+                    f.hasElev = true; f.hmin = R1(low[k]); f.hmax = R1(peakH[k]); f.hmean = R1((float)(sum[k] / area[k]));
+                    if (withPeak) { f.hasPeak = true; f.px = R1(World(peak[k] % N, cell)); f.pz = R1(World(peak[k] / N, cell)); f.py = R1(peakH[k]); }
+                }
                 f.id = Id(f.kind, f.x, f.z);
+                if (feats.Count < ushort.MaxValue) index[k] = (ushort)(feats.Count + 1);
                 feats.Add(f);
             }
+            if (into != null) for (int i = 0; i < n; i++) if (lab[i] != 0 && index[lab[i]] != 0) into[i] = index[lab[i]];
         }
         private static float World(int c, float cell) => (c - N / 2f) * cell + cell / 2f;
 
@@ -403,9 +425,12 @@ namespace WebMap
                 uint h = (uint)Fnv.Of(seed + "|" + f.id + "|" + salt);
                 string stem = Stems[h % (uint)Stems.Length], end = Suffix(f.kind);
                 bool vowel = "aeiouy".IndexOf(char.ToLowerInvariant(stem[stem.Length - 1])) >= 0;
-                // two vowels meeting read badly (Isaá): the stem gives up its last
-                if (vowel && "aeiouyá".IndexOf(end[0]) >= 0) { stem = stem.Substring(0, stem.Length - 1); vowel = false; }
+                // two vowels meeting read badly (Isaá, Ravnuá): before a vowel ending the
+                // stem gives up its last vowel and the link is a consonant or nothing
+                bool vowelEnd = "aeiouyá".IndexOf(end[0]) >= 0;
+                if (vowel && vowelEnd) { stem = stem.Substring(0, stem.Length - 1); vowel = false; }
                 string link = vowel ? "" : Links[(h >> 8) % (uint)Links.Length];
+                if (vowelEnd && link.Length > 0 && "aeiou".IndexOf(link[link.Length - 1]) >= 0) link = "";
                 name = stem + link + end;
                 if (used.Add(name)) return name;
             }
@@ -413,6 +438,22 @@ namespace WebMap
         }
 
         // ---------- the document ----------
+        // one feature as JSON, without its closing brace so a caller can add to it
+        private static void Open(StringBuilder sb, Feature f)      // under gate
+        {
+            bool given = names.TryGetValue(f.id, out var nm) && !string.IsNullOrEmpty(nm.name);
+            string name = given ? nm.name : (generated.TryGetValue(f.id, out var g) ? g : f.kind);
+            sb.Append(Inv($"{{\"id\":\"{Esc(f.id)}\",\"kind\":\"{f.kind}\",\"name\":\"{Esc(name)}\",\"x\":{f.x:0.#},\"z\":{f.z:0.#},\"w\":{f.w:0.#},\"h\":{f.h:0.#},\"area\":{f.area:0.##}"));
+            if (given) sb.Append(Inv($",\"by\":\"{Esc(nm.by)}\",\"t\":{nm.t}"));
+            if (f.hasPeak) sb.Append(Inv($",\"peak\":{{\"x\":{f.px:0.#},\"z\":{f.pz:0.#},\"y\":{f.py:0.#}}}"));
+            if (f.hasElev) sb.Append(Inv($",\"elev\":{{\"min\":{f.hmin:0.#},\"max\":{f.hmax:0.#},\"mean\":{f.hmean:0.#}}}"));
+            if (f.line != null)
+            {
+                sb.Append(",\"line\":[");
+                for (int i = 0; i < f.line.Count; i++) { if (i > 0) sb.Append(','); sb.Append(Inv($"[{f.line[i][0]:0.#},{f.line[i][1]:0.#}]")); }
+                sb.Append(']');
+            }
+        }
         private static void Rebuild()      // under gate
         {
             var sb = new StringBuilder("{\"features\":[");
@@ -420,17 +461,7 @@ namespace WebMap
             foreach (var f in found)
             {
                 if (n++ > 0) sb.Append(',');
-                bool given = names.TryGetValue(f.id, out var nm) && !string.IsNullOrEmpty(nm.name);
-                string name = given ? nm.name : (generated.TryGetValue(f.id, out var g) ? g : f.kind);
-                sb.Append(Inv($"{{\"id\":\"{Esc(f.id)}\",\"kind\":\"{f.kind}\",\"name\":\"{Esc(name)}\",\"x\":{f.x:0.#},\"z\":{f.z:0.#},\"w\":{f.w:0.#},\"h\":{f.h:0.#},\"area\":{f.area:0.##}"));
-                if (given) sb.Append(Inv($",\"by\":\"{Esc(nm.by)}\",\"t\":{nm.t}"));
-                if (f.hasPeak) sb.Append(Inv($",\"peak\":{{\"x\":{f.px:0.#},\"z\":{f.pz:0.#},\"y\":{f.py:0.#}}}"));
-                if (f.line != null)
-                {
-                    sb.Append(",\"line\":[");
-                    for (int i = 0; i < f.line.Count; i++) { if (i > 0) sb.Append(','); sb.Append(Inv($"[{f.line[i][0]:0.#},{f.line[i][1]:0.#}]")); }
-                    sb.Append(']');
-                }
+                Open(sb, f);
                 sb.Append('}');
             }
             sb.Append("],\"count\":").Append(n);
@@ -452,6 +483,85 @@ namespace WebMap
         }
 
         public static string Json() => json;
+
+        // What is at a spot: the biome and height there, and the places it lies in,
+        // most particular first, each with how much of it has been walked and what
+        // stands on it. Null for ground nobody has walked: that stays a mystery.
+        public static string At(float x, float z)
+        {
+            var g = grids; if (g == null) return null;
+            int cx = (int)Math.Floor(x / g.cell + N / 2f), cz = (int)Math.Floor(z / g.cell + N / 2f);
+            if (cx < 0 || cz < 0 || cx >= N || cz >= N) return null;
+            if (!MapFog.Explored(x, z)) return null;
+            int i = cz * N + cx;
+            var sb = new StringBuilder();
+            sb.Append(Inv($"{{\"x\":{x:0.#},\"z\":{z:0.#},\"biome\":\"{BiomeName(g.cls[i])}\",\"height\":{g.hgt[i]:0.#},\"here\":["));
+            int n = 0;
+            lock (gate)
+            {
+                foreach (var layer in new[] { g.water, g.range, g.region, g.land })
+                {
+                    int k = layer[i]; if (k == 0 || k > found.Length) continue;
+                    var f = found[k - 1];
+                    if (n++ > 0) sb.Append(',');
+                    Open(sb, f);
+                    Measure(g, layer, (ushort)k, f, out float walked, out int builds, out int portals);
+                    sb.Append(Inv($",\"explored\":{walked:0.###},\"builds\":{builds},\"portals\":{portals}}}"));
+                }
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+        // the share of a place's cells someone has walked, and the pieces and portals in it
+        private static void Measure(Grids g, ushort[] layer, ushort k, Feature f, out float walked, out int builds, out int portals)
+        {
+            int cells = 0, seen = 0;
+            var fog = WebMap.mapDataServer != null ? WebMap.mapDataServer.fogRgba : null;
+            int size = TEXTURE_SIZE, per = size / N;
+            for (int z = 0; z < N; z++)
+            {
+                int row = z * N;
+                for (int x = 0; x < N; x++)
+                {
+                    if (layer[row + x] != k) continue;
+                    cells++;
+                    if (fog == null) { seen++; continue; }
+                    int px = x * per + per / 2, py = z * per + per / 2;
+                    if (fog[(py * size + px) * 4] > 127) seen++;
+                }
+            }
+            walked = cells == 0 ? 0f : (float)seen / cells;
+            builds = Count(g, layer, k, Pieces.Positions);
+            portals = Count(g, layer, k, Portals.Positions);
+        }
+        private static int Count(Grids g, ushort[] layer, ushort k, float[] pos)
+        {
+            int n = 0;
+            if (pos == null) return 0;
+            for (int i = 0; i + 1 < pos.Length; i += 2)
+            {
+                int cx = (int)Math.Floor(pos[i] / g.cell + N / 2f), cz = (int)Math.Floor(pos[i + 1] / g.cell + N / 2f);
+                if (cx < 0 || cz < 0 || cx >= N || cz >= N) continue;
+                if (layer[cz * N + cx] == k) n++;
+            }
+            return n;
+        }
+        private static string BiomeName(byte c)
+        {
+            if (c == 0) return "Ocean";
+            switch ((Heightmap.Biome)(1 << (c - 1)))
+            {
+                case Heightmap.Biome.Meadows: return "Meadows";
+                case Heightmap.Biome.BlackForest: return "Black Forest";
+                case Heightmap.Biome.Swamp: return "Swamp";
+                case Heightmap.Biome.Mountain: return "Mountain";
+                case Heightmap.Biome.Plains: return "Plains";
+                case Heightmap.Biome.Mistlands: return "Mistlands";
+                case Heightmap.Biome.AshLands: return "Ashlands";
+                case Heightmap.Biome.DeepNorth: return "Deep North";
+                default: return "Ocean";
+            }
+        }
 
         // A name given on the site (or cleared, so the generated one returns).
         // Returns null when it took, else what was wrong.

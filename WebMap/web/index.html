@@ -12,10 +12,15 @@
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
 <style>
-.namer{position:absolute;z-index:6;width:16rem;padding:.6rem .7rem;box-shadow:var(--shadow-lg)}
+.namer{position:absolute;z-index:6;width:17rem;padding:.6rem .75rem;box-shadow:var(--shadow-lg)}
 .namer .field{margin:.4rem 0 0}
 .namer .btnrow{margin-top:.5rem}
-.namer .nm{font-weight:600;margin-top:.25rem}
+.namer .nm{font-weight:700;font-size:1.05rem;margin-top:.2rem}
+.namer .nm .edit{color:var(--faint);font-size:.85rem;margin-left:.3rem;text-decoration:none}
+.namer .nm .edit:hover{color:var(--gold)}
+.namer .facts{color:var(--ink-2);font-size:.78rem;margin-top:.25rem}
+.namer .others{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
+.namer .others .chip{font-size:.68rem}
   html,body{height:100%}
   body{overflow:hidden}
 
@@ -575,6 +580,7 @@ stage.addEventListener("pointerdown", e => {
   // Don't start a drag on the controls: capturing the pointer here retargets
   // the pointerup to the stage, so the button never receives its click.
   if (e.target.closest && e.target.closest(".mapctl, .layers, #mini, #namer")) return;
+  if(!namer.hidden) closeCard();
   stage.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
   down = pts.size === 1 ? {x:e.clientX, y:e.clientY, id:e.pointerId} : null;
@@ -660,7 +666,7 @@ let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the sce
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-22a";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-22b";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -804,52 +810,88 @@ async function fetchFeatures(rev){
   }catch(e){ FEATURES_REV = null; }
 }
 
-// ---------- naming a place ----------
-// A tap on a name opens it: what it is and how big, and for a signed-in member
-// a field to rename it. The server keeps the name; everyone sees it on the next tick.
+// ---------- the place card ----------
+// A tap on the map asks the server what is there -- the biome patch, the landmass,
+// a range, lake or bay -- and the card shows the most particular first: kind, name,
+// size, how much of it has been walked, its heights, what stands on it. Chips switch
+// to the others at that spot. Signed in, the name is editable in place. Unwalked
+// ground gets no card: the fog holds on the server too.
 const namer = document.getElementById("namer");
-let NAMING = null;
-function openNamer(f, x, y){
-  NAMING = f;
-  const me = MapCore.user();
-  const size = f.kind === "river" ? (f.area >= 1000 ? (f.area/1000).toFixed(1) + " km long" : Math.round(f.area) + " m long")
-             : f.area >= 1 ? f.area.toFixed(1) + " km\u00b2" : Math.round(f.area*100) + " ha";
-  const peak = f.peak ? ` \u00b7 peak ${Math.round(f.peak.y)} m` : "";
-  namer.innerHTML = `<div class="eyebrow">${esc(f.kind)} \u00b7 ${esc(size)}${esc(peak)}</div>`
-    + (me ? `<input class="field" id="nameIn" maxlength="40" value="${esc(f.name)}" autocomplete="off">
-            <div class="btnrow"><button class="btn" id="nameSave">Save</button>${f.by ? '<button class="btn quiet" id="nameReset" title="Back to the name the world gave it">Own name</button>' : ""}</div>`
-          : `<div class="nm">${esc(f.name)}</div><div class="note">Sign in to rename it.</div>`)
-    + `<div class="note" id="nameNote">${f.by ? "named by " + esc(f.by) : "the world's own name"}</div>`;
+let CARD = null;                      // {here: [...], at: {x,z,biome,height}, i, editing}
+const KIND = {continent: "Continent", island: "Island", holm: "Holm", range: "Mountain range", lake: "Lake", bay: "Bay",
+              river: "River", forest: "Black Forest", swamp: "Swamp", plains: "Plains", meadows: "Meadows",
+              mistlands: "Mistlands", ashlands: "Ashlands", north: "Deep North"};
+const km2 = a => a >= 1 ? a.toFixed(1) + " km\u00b2" : Math.round(a*100) + " ha";
+function renderCard(){
+  const c = CARD; if(!c) return;
+  const f = c.here[c.i], me = MapCore.user();
+  const bits = [KIND[f.kind] || f.kind];
+  bits.push(f.kind === "river" ? (f.area >= 1000 ? (f.area/1000).toFixed(1) + " km long" : Math.round(f.area) + " m long") : km2(f.area));
+  if(f.explored != null) bits.push(Math.round(f.explored*100) + "% walked");
+  const facts = [];
+  if(f.elev) facts.push(f.kind === "range" ? `up to ${Math.round(f.elev.max)} m` : `${Math.round(Math.max(0, f.elev.min))}\u2013${Math.round(f.elev.max)} m`);
+  if(f.builds) facts.push(f.builds.toLocaleString() + (f.builds === 1 ? " piece built" : " pieces built"));
+  if(f.portals) facts.push(f.portals + (f.portals === 1 ? " portal" : " portals"));
+  const on = c.here.find((g, j) => j !== c.i && (g.kind === "continent" || g.kind === "island" || g.kind === "holm"));
+  if(on && f.kind !== "continent" && f.kind !== "island" && f.kind !== "holm") facts.push("on " + on.name);
+  const others = c.here.map((g, j) => j === c.i ? "" : `<button class="chip" data-i="${j}">${esc(g.name)} \u00b7 ${esc((KIND[g.kind] || g.kind).toLowerCase())}</button>`).join("");
+  namer.innerHTML = `<div class="eyebrow">${esc(bits.join(" \u00b7 "))}</div>`
+    + (c.editing
+        ? `<input class="field" id="nameIn" maxlength="40" value="${esc(f.name)}" autocomplete="off">
+           <div class="btnrow"><button class="btn" id="nameSave">Save</button>${f.by ? '<button class="btn quiet" id="nameReset" title="Back to the name the world gave it">Own name</button>' : ""}<button class="btn quiet" id="nameCancel">Cancel</button></div>`
+        : `<div class="nm">${esc(f.name)}${me ? ' <a href="#" class="edit" id="nameEdit" title="Rename">\u270e</a>' : ""}</div>`)
+    + (facts.length ? `<div class="facts">${esc(facts.join(" \u00b7 "))}</div>` : "")
+    + (others ? `<div class="others">${others}</div>` : "")
+    + `<div class="note" id="nameNote">${f.by ? "named by " + esc(f.by) : (me ? "the world's own name" : "the world's own name \u00b7 sign in to rename")}</div>`;
   namer.hidden = false;
   const r = stage.getBoundingClientRect();
-  namer.style.left = Math.max(8, Math.min(r.width - namer.offsetWidth - 8, x - namer.offsetWidth/2)) + "px";
-  namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, y + 14)) + "px";
+  namer.style.left = Math.max(8, Math.min(r.width - namer.offsetWidth - 8, c.x - namer.offsetWidth/2)) + "px";
+  namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, c.y + 14)) + "px";
+  namer.querySelectorAll(".others .chip").forEach(el => el.onclick = () => { c.i = +el.dataset.i; c.editing = false; renderCard(); });
+  const ed = document.getElementById("nameEdit"); if(ed) ed.onclick = e => { e.preventDefault(); c.editing = true; renderCard(); };
   const inp = document.getElementById("nameIn");
   if(inp){
     inp.focus(); inp.select();
-    inp.addEventListener("keydown", e => { if(e.key === "Enter") saveName(inp.value); if(e.key === "Escape") closeNamer(); });
+    inp.addEventListener("keydown", e => { if(e.key === "Enter") saveName(inp.value); if(e.key === "Escape"){ c.editing = false; renderCard(); } });
     document.getElementById("nameSave").onclick = () => saveName(inp.value);
+    document.getElementById("nameCancel").onclick = () => { c.editing = false; renderCard(); };
     const rs = document.getElementById("nameReset"); if(rs) rs.onclick = () => saveName("");
   }
 }
-function closeNamer(){ namer.hidden = true; NAMING = null; }
+function closeCard(){ namer.hidden = true; CARD = null; }
 async function saveName(name){
-  if(!NAMING) return;
+  const c = CARD; if(!c) return;
+  const f = c.here[c.i];
   const note = document.getElementById("nameNote");
   note.className = "note"; note.textContent = "saving\u2026";
   try{
-    const r = await MapCore.post(API, "/names", {id: NAMING.id, name});
-    closeNamer();
+    const r = await MapCore.post(API, "/names", {id: f.id, name});
     if(r && r.rev) await fetchFeatures(r.rev);
+    const fresh = (FEATURES || []).find(g => g.id === f.id);
+    if(fresh){ f.name = fresh.name; f.by = fresh.by; }
+    c.editing = false; renderCard();
   }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; }
 }
+// open the card for a spot, or for a place (its own spot then); nothing for unwalked ground
+async function openCard(x, y, wx, wz, want){
+  let j = null;
+  try{ j = await MapCore.fetchJSON(API, `/at?x=${wx.toFixed(1)}&z=${wz.toFixed(1)}`); }catch(e){}
+  let here = (j && j.here) || [];
+  if(want && !here.some(g => g.id === want.id)) here = [want].concat(here);
+  if(!here.length) return;
+  const i = want ? Math.max(0, here.findIndex(g => g.id === want.id)) : 0;
+  CARD = {here, at: j, i, x, y, editing: false};
+  renderCard();
+}
 namer.addEventListener("pointerdown", e => e.stopPropagation());
-document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.closest("#namer")) closeNamer(); });
-// a tap, as against a drag: the pointer came down and went up within a few pixels
+document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.closest("#namer")) closeCard(); });
+// a tap, as against a drag: on a name it opens that place; anywhere else, what is there
 function tapName(x, y){
-  if(!NAMEVIEW || NAMEVIEW.scale !== scale || !NAMEBOXES.length) return;
-  const f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - tx), y + (NAMEVIEW.ty - ty));
-  if(f) openNamer(f, x, y);
+  let f = null;
+  if(NAMEVIEW && NAMEVIEW.scale === scale && NAMEBOXES.length)
+    f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - tx), y + (NAMEVIEW.ty - ty));
+  const w = f ? {x: f.x, z: f.z} : MapCore.toWorld((x - tx)/scale, (y - ty)/scale);
+  openCard(x, y, w.x, w.z, f);
 }
 
 async function boot(){

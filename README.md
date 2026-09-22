@@ -90,6 +90,7 @@ Standard BepInEx config, plus:
 | `/trails` | where players have walked: a count per map pixel, drawn as a faint blue band; 503 until the first sweep after someone walks (PNG) |
 | `/features` | the world's geography with its names: landmasses, ranges (with peaks), lakes, bays, rivers (with their course), biome regions; `?v=` from `rev.features` |
 | `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own); needs `X-Announce-Token`, credits `X-User` |
+| `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |

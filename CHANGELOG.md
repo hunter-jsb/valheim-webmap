@@ -13,6 +13,12 @@
   returns the world's own), guarded by the announce token and attributed to an `X-User`
   header; the hosted site's Worker adds both for a signed-in Discord member, who taps a
   name on the map to rename it.
+* What is here. `GET /at?x=&z=` answers for a spot in walked ground: the biome and
+  height there, and the places it lies in -- lake or bay, range, biome region, landmass --
+  each with how much of it has been walked, its elevation span, and the pieces and
+  portals standing on it. Unwalked ground gets nothing. On the map a tap anywhere opens
+  a place card from it, most particular place first with chips for the others; a tap on
+  a name opens that place. Signed in, the name is editable in the card.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 

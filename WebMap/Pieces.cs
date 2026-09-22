@@ -26,6 +26,7 @@ namespace WebMap
         // the pieces that burn: their fuel says whether anyone still tends the place
         private static readonly Regex Fire = new Regex("torch|fire_pit|bonfire|hearth|brazier|sconce|fairylight|candle|lantern", RegexOptions.Compiled);
         private static volatile string json = "{\"prefabs\":[],\"pieces\":[],\"count\":0}";
+        public static volatile float[] Positions = new float[0];   // x, z pairs of every piece, for what stands on a place
 
         private static string Inv(System.FormattableString f) => f.ToString(CultureInfo.InvariantCulture);
 
@@ -99,6 +100,9 @@ namespace WebMap
             sb.Append("],\"count\":").Append(found.Count).Append('}');
             string s = sb.ToString();
             json = s; Rev = Fnv.Of(s);
+            var pos = new float[found.Count * 2];
+            for (int i = 0; i < found.Count; i++) { pos[i * 2] = found[i].x; pos[i * 2 + 1] = found[i].z; }
+            Positions = pos;
         }
 
         public static string GetJson() => json;

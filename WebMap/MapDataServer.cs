@@ -611,6 +611,21 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/at":
+                    // what is at a spot, for a click on the map; nothing for unwalked ground
+                    {
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                        res.ContentType = "application/json";
+                        string body = null;
+                        if (float.TryParse(req.QueryString["x"], NumberStyles.Float, CultureInfo.InvariantCulture, out float ax)
+                            && float.TryParse(req.QueryString["z"], NumberStyles.Float, CultureInfo.InvariantCulture, out float az))
+                            body = Features.At(ax, az);
+                        res.StatusCode = body == null ? 404 : 200;
+                        textBytes = Encoding.UTF8.GetBytes(body ?? "{\"error\":\"unexplored\"}");
+                        res.ContentLength64 = textBytes.Length;
+                        res.Close(textBytes, true);
+                        return true;
+                    }
                 case "/features":
                     // the world's geography with its names; the fog is the viewer's to apply
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
