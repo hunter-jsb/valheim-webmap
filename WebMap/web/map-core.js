@@ -524,6 +524,47 @@ if(typeof document !== "undefined"){
     if(PHONE.matches && sideOpen && !e.target.closest(".sidebar, .nav")) toggleSide(false);
   });
 }
+// ---------- who you are ----------
+// A deployment's Worker signs people in with Discord and sends the page back with
+// a session token in its hash; the page keeps the token and sends it as a bearer.
+// Served by the mod alone there is no /auth route, and the bar shows nothing.
+let session = null, me = null;
+try{
+  const parts = location.hash.replace(/^#/, "").split("&").filter(Boolean);
+  const got = parts.find(q => q.startsWith("session="));
+  if(got){
+    localStorage.setItem("xnv.session", got.slice(8));
+    const rest = parts.filter(q => q !== got).join("&");
+    history.replaceState(null, "", location.pathname + location.search + (rest ? "#" + rest : ""));
+  }
+  session = localStorage.getItem("xnv.session");
+}catch(e){}
+const authHeaders = () => session ? {authorization: "Bearer " + session} : {};
+const user = () => me;
+async function whoami(){
+  let r;
+  try{ r = await fetch(cfg.api + "/auth/me", {headers: authHeaders(), cache: "no-store"}); }catch(e){ return null; }
+  if(r.status === 200){ me = await r.json(); }
+  else if(r.status === 401){ me = null; if(session){ session = null; try{ localStorage.removeItem("xnv.session"); }catch(e){} } }
+  else return null;                        // no sign-in here
+  renderWho();
+  return me;
+}
+function signIn(){ location.href = cfg.api + "/auth/login?to=" + encodeURIComponent(location.href); }
+function signOut(){
+  session = null; me = null;
+  try{ localStorage.removeItem("xnv.session"); }catch(e){}
+  renderWho();
+}
+function renderWho(){
+  const el = navEl && navEl.querySelector(".who"); if(!el) return;
+  if(!me){ el.innerHTML = '<a href="#" class="in">Sign in</a>'; el.querySelector(".in").onclick = e => { e.preventDefault(); signIn(); }; return; }
+  const av = me.avatar ? `<img class="av" alt="" src="https://cdn.discordapp.com/avatars/${encodeURIComponent(me.id)}/${encodeURIComponent(me.avatar)}.png?size=64">`
+                       : `<span class="av">${esc((me.name || "?").slice(0, 1))}</span>`;
+  el.innerHTML = av + `<span class="nm">${esc(me.name || "")}</span><a href="#" class="out" title="Sign out">&times;</a>`;
+  el.querySelector(".out").onclick = e => { e.preventDefault(); signOut(); };
+}
+
 // current defaults to the nav element's data-page; a nav with data-side gets the ☰
 function nav(current, el){
   el = el || document.querySelector("nav.nav");
@@ -537,8 +578,9 @@ function nav(current, el){
     + NAV_PAGES.map(([p, label]) => `<a${mark(p)} href="${p}.html">${label}</a>`).join("")
     + '<span class="ext">'
     + cfg.links.map(l => `<a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")
-    + '</span></div>';
+    + '</span><span class="who"></span></div>';
   if(side){ el.querySelector(".sidebtn").addEventListener("click", () => toggleSide()); applySide(); }
+  whoami();
   setTitle(current);
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", credits, {once: true});
   else credits();
@@ -550,5 +592,5 @@ return {cfg, brand, setTitle, credits, toggleSide,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
         drawRasters, kindOf, ORDER, shade, parsePieces, filterExplored, drawPieces, drawFires, drawDeaths, viewCache,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
-        parsePins, ago, esc, nav};
+        parsePins, ago, esc, nav, user, authHeaders, whoami, signIn, signOut};
 })();

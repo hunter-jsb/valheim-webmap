@@ -134,6 +134,12 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
 .navlinks .ext{display:flex;gap:1.1rem;padding-left:1.1rem;border-left:1px solid var(--line);align-self:stretch}
 .navlinks .ext a{color:var(--muted)}
 .navlinks .ext a::after{content:"\2197";font-size:.7em;margin-left:.25em;opacity:.7}
+.navlinks .who{display:flex;align-items:center;gap:.45rem;align-self:stretch;color:var(--muted);font-size:.85rem}
+.navlinks .who:empty{display:none}
+.who .av{width:22px;height:22px;border-radius:50%;background:var(--card-2);display:inline-flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--ink-2);object-fit:cover}
+.who .in{color:var(--gold)}
+.who .out{color:var(--faint);font-size:1.05rem;line-height:1}
+.who .out:hover{color:var(--off);text-decoration:none}
 .navlinks a.here{color:var(--gold)}
 .navlinks a.here::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--gold)}
 /* on a phone the bar swipes; a fade at the edge says so, over blank padding so the
