@@ -803,10 +803,15 @@ namespace WebMap
             }
             WebMap.SavePins();
 
-            // the websocket feed carries pins as they come and go
-            if (was != null) webSocketHandler.Sessions.Broadcast($"rmpin\n{was[1]}");
-            if (now != null)
-                webSocketHandler.Sessions.Broadcast($"pin\n{now[0]}\n{now[1]}\n{now[2]}\n{now[3]}\n{now[4]},{now[5]}\n{PinText(now)}");
+            // the websocket feed carries pins as they come and go; the pin is saved
+            // by now, so a feed that cannot take it must not fail the write
+            try
+            {
+                if (was != null) webSocketHandler.Sessions.Broadcast($"rmpin\n{was[1]}");
+                if (now != null)
+                    webSocketHandler.Sessions.Broadcast($"pin\n{now[0]}\n{now[1]}\n{now[2]}\n{now[3]}\n{now[4]},{now[5]}\n{PinText(now)}");
+            }
+            catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: pin not broadcast: " + e.Message); }
 
             if (op == "add")
                 ZLog.Log($"WebMap: {who} pinned a {now[2]} '{PinText(now)}' at {sx}, {sz} from the site");
