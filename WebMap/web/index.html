@@ -117,6 +117,22 @@
   .gcard:hover,.gcard.on{color:var(--ink)}
   .gcard.on canvas{border-color:var(--gold)}
   .presets{display:flex;gap:.35rem;flex-wrap:wrap;min-width:0}   /* wraps on a phone, never spills */
+  /* one chip for all the names; hovering it (or its caret) opens the kinds */
+  .fly{position:relative;display:inline-flex;align-items:stretch}
+  .fly .caret{padding:0 .35rem;border:1px solid var(--line);border-left:0;border-radius:0 var(--pill) var(--pill) 0;
+    background:var(--card);color:var(--faint);font-size:.7rem;cursor:pointer;margin-left:-1px}
+  .fly .chip{border-top-right-radius:0;border-bottom-right-radius:0}
+  .fly .caret:hover,.fly.open .caret{color:var(--gold)}
+  .flyout{display:none;position:absolute;left:0;bottom:calc(100% + .4rem);z-index:3;width:17.5rem;padding:.5rem .7rem;
+    box-shadow:var(--shadow-lg);columns:2;column-gap:.6rem}
+  .flyout .eyebrow{display:block;margin:.15rem 0 .1rem;break-inside:avoid}
+  .flyout .frow{display:flex;align-items:center;gap:.4rem;padding:.14rem 0;cursor:pointer;color:var(--ink-2);break-inside:avoid;white-space:nowrap}
+  .flyout .frow .sw{width:.55rem;height:.55rem;border-radius:50%;flex:0 0 auto}
+  .flyout .frow.off{color:var(--faint)}
+  .flyout .frow.off .sw{opacity:.25}
+  .flyout .frow:hover{color:var(--ink)}
+  @media (hover:hover){ .fly:hover .flyout{display:block} }
+  .fly.open .flyout{display:block}
 
   /* ---------- help ---------- */
   .modal{position:fixed;inset:0;z-index:100;background:rgba(4,6,4,.72);
@@ -218,7 +234,10 @@
         <div class="trow"><span class="tk eyebrow">Ground</span><div class="grounds" id="grounds"></div></div>
         <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="presets"></div></div>
         <div class="trow"><span class="tk eyebrow">Details</span><div class="presets" id="details">
-          <button class="chip" data-detail="names" title="The names of the land: continents, islands, ranges, lakes, rivers. Signed in, tap one to rename it">Names</button>
+          <span class="fly" id="namesFly">
+            <button class="chip" data-detail="names" title="The names of the land. Signed in, tap one on the map to rename it">Names</button><button class="caret" id="namesCaret" type="button" title="Which names">&#9662;</button>
+            <div class="flyout glass" id="namesMenu"></div>
+          </span>
           <button class="chip" data-detail="fires" title="Torches, fire pits and hearths; a grey ring has burnt out">Torches &amp; fires</button>
           <button class="chip" data-detail="deaths" title="Where people died, fading over a month">Deaths</button>
           <button class="chip" data-detail="trails" title="Where people have walked">Trails</button>
@@ -301,7 +320,7 @@ function renderScene(g, v){
     MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
   if(PIECES && DETAILS.has("fires")) MapCore.drawFires(g, v, PIECES);
   if(DETAILS.has("deaths")) MapCore.drawDeaths(g, v, DEATHS);
-  NAMEBOXES = showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog)) : [];
+  NAMEBOXES = showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog), {hide: hiddenKinds()}) : [];
   NAMEVIEW = v;
 }
 const SCENE = MapCore.viewCache(renderScene, () => apply());
@@ -453,6 +472,34 @@ try{ (JSON.parse(localStorage.getItem("xnv.details") || "[]")).forEach(k => DETA
 const DEFAULT_ON = new Set(["names"]), OFF = new Set();
 try{ (JSON.parse(localStorage.getItem("xnv.off") || "[]")).forEach(k => OFF.add(k)); }catch(e){}
 const showDetail = k => DEFAULT_ON.has(k) ? !OFF.has(k) : DETAILS.has(k);
+// which names: groups of kinds, each its own switch under the Names chip
+const NAME_GROUPS = [
+  ["Land",   [["land", "Continents & islands", ["continent", "island"], "#f1ecdc"], ["holm", "Holms", ["holm"], "#d8d2c2"]]],
+  ["Water",  [["still", "Lakes & bays", ["lake", "bay"], "#9fd0e6"], ["river", "Rivers", ["river"], "#9fd0e6"]]],
+  ["Height", [["range", "Mountain ranges", ["range"], "#ffffff"]]],
+  ["Biomes", [["forest", "Black forest", ["forest"], "#a6c48a"], ["swamp", "Swamp", ["swamp"], "#caa27b"], ["plains", "Plains", ["plains"], "#e2c98f"],
+              ["meadows", "Meadows", ["meadows"], "#c2d69a"], ["mistlands", "Mistlands", ["mistlands"], "#c4a4dc"],
+              ["ashlands", "Ashlands", ["ashlands"], "#e6907e"], ["north", "Deep north", ["north"], "#dde8f2"]]],
+];
+const NAMES_OFF = new Set();
+try{ (JSON.parse(localStorage.getItem("xnv.names.off") || "[]")).forEach(k => NAMES_OFF.add(k)); }catch(e){}
+const hiddenKinds = () => { const h = new Set(); for(const [, rows] of NAME_GROUPS) for(const [key, , kinds] of rows) if(NAMES_OFF.has(key)) kinds.forEach(k => h.add(k)); return h; };
+const namesMenu = document.getElementById("namesMenu"), namesFly = document.getElementById("namesFly");
+namesMenu.innerHTML = NAME_GROUPS.map(([title, rows]) => `<b class="eyebrow">${title}</b>` + rows.map(([key, label, , ink]) =>
+  `<div class="frow" data-group="${key}"><span class="sw" style="background:${ink}"></span>${label}</div>`).join("")).join("");
+function markNames(){
+  namesMenu.querySelectorAll(".frow").forEach(el => el.classList.toggle("off", NAMES_OFF.has(el.dataset.group)));
+  try{ localStorage.setItem("xnv.names.off", JSON.stringify([...NAMES_OFF])); }catch(e){}
+}
+namesMenu.addEventListener("click", e => {
+  const el = e.target.closest(".frow"); if(!el) return;
+  const k = el.dataset.group;
+  NAMES_OFF.has(k) ? NAMES_OFF.delete(k) : NAMES_OFF.add(k);
+  markNames(); drawRaster();
+});
+document.getElementById("namesCaret").addEventListener("click", e => { e.stopPropagation(); namesFly.classList.toggle("open"); });
+document.addEventListener("pointerdown", e => { if(!e.target.closest("#namesFly")) namesFly.classList.remove("open"); });
+markNames();
 function markDetails(){
   document.querySelectorAll("#details .chip").forEach(el => el.classList.toggle("on", showDetail(el.dataset.detail)));
   try{ localStorage.setItem("xnv.details", JSON.stringify([...DETAILS])); localStorage.setItem("xnv.off", JSON.stringify([...OFF])); }catch(e){}
@@ -681,7 +728,7 @@ let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the sce
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-22c";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-22d";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 

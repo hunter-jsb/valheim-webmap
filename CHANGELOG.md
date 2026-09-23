@@ -19,6 +19,9 @@
   portals standing on it. Unwalked ground gets nothing. On the map a tap anywhere opens
   a place card from it, most particular place first with chips for the others; a tap on
   a name opens that place. Signed in, the name is editable in the card.
+* Which names: the Names chip in the Layers card switches every label, and hovering it
+  (or its caret, on a phone) opens the kinds -- continents and islands, holms, lakes and
+  bays, rivers, mountain ranges, and each biome -- as switches of their own.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 * Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin

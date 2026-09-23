@@ -395,7 +395,8 @@ function drawNames(g, v, features, ok, o){
   g.textBaseline = "middle";
   const sx = (x, z) => { const p = toPx(x, z); return [v.tx + p.px*s, v.ty + p.py*s]; };
   const seen = (x, z) => { const p = toPx(x, z); return ok(p.px, p.py); };
-  const list = features.filter(f => NAME_STYLE[f.kind]).slice()
+  const hide = (o && o.hide) || null;
+  const list = features.filter(f => NAME_STYLE[f.kind] && !(hide && hide.has(f.kind))).slice()
     .sort((a, b) => NAME_STYLE[a.kind].tier - NAME_STYLE[b.kind].tier || b.area - a.area);
   for(const f of list){
     const st = NAME_STYLE[f.kind];
