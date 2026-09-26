@@ -91,7 +91,7 @@ Standard BepInEx config, plus:
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
 | `/trails` | where players have walked: a count per map pixel, drawn as a faint blue band; 503 until the first sweep after someone walks (PNG) |
 | `/features` | the world's geography with its names: landmasses, ranges (with peaks), lakes, bays, rivers (with their course), biome regions; `?v=` from `rev.features` |
-| `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own); needs `X-Announce-Token`, credits `X-User` |
+| `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own) or, with an id of `hub@x,z`, a portal hub standing there; needs `X-Announce-Token`, credits `X-User` |
 | `/pins` (POST) | `{"op":"add","x","z","type","text"}`, `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text`, or `{"op":"delete","id"}`: places, changes or takes up a pin, only ever on walked ground; answers `{"ok","id","pins"}`, 400 with `{"error"}`. Needs `X-Announce-Token`; `X-User` owns a new pin and is logged for every write |
 | `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |

@@ -22,6 +22,16 @@
 * Which names: the Names chip in the Layers card switches every label, and hovering it
   (or its caret, on a phone) opens the kinds -- continents and islands, holms, lakes and
   bays, rivers, mountain ranges, and each biome -- as switches of their own.
+* The portals atlas for big hubs and several of them. A hub can be named on the page
+  (a pencil beside its title, signed in; the name is kept by the server as a spot,
+  `hub@x,z`, through `POST /names`, and a house pin still names a hub with no given
+  name); the tags become a detail line. A big hub's panel shows the gates you can act
+  on and folds the linked ones behind a count that opens on a tap; its card lists spokes
+  by compass sector, nearest first, with a box to find a gate past ten. With more than
+  one hub, chips at the top pick one: the view fits its reach and the rest fade. A
+  tagged portal standing unlinked now draws one dashed line, to the only hub with a
+  gate to spare, else the hub it last led to, else the nearest -- the mod remembers each
+  portal's last twin (`portals.tsv`, `last` on the portal) across restarts.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 * Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin

@@ -43,6 +43,22 @@
   .spokes .st{margin-left:auto;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
   .spokes .on{color:var(--portal)}
   .spokes .dial{color:var(--unknown)}
+  /* many gates read by direction: a sector's rows under its heading, nearest first */
+  .sector{font-size:.62rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+    margin:.45rem 0 .1rem;display:flex;gap:.4rem;align-items:baseline}
+  .sector:first-child{margin-top:0}
+  .sector b{color:var(--muted)}
+  .spokes li.hid{display:none}
+  .find{margin:.5rem 0 .15rem}
+  .find .field{font-size:.78rem;padding:.3rem .45rem}
+  #hubs{margin:.55rem 0 .2rem}
+  #hubs .chip .n{color:var(--faint);font-weight:400;margin-left:.3rem}
+  /* renaming a hub happens in its own title */
+  .card h3 .edit{color:var(--faint);font-size:.8rem;text-decoration:none;margin-left:.15rem;align-self:baseline}
+  .card h3 .edit:hover{color:var(--gold)}
+  .card h3 .tags{display:block;font-weight:400;font-size:.72rem;color:var(--muted);margin-top:.1rem}
+  .rename{display:grid;gap:.4rem;margin:.2rem 0 .4rem}
+  .rename .field{font-size:.85rem}
 
   /* ---------- the diagram ---------- */
   /* Screen-space canvas, HTML nodes placed by left/top: nothing crisp ever sits
@@ -82,6 +98,14 @@
   .gate.on{background:rgba(111,216,230,.14);border-color:rgba(111,216,230,.5);color:#bdf1f8}
   .gate.free{background:#1b211f;border-color:#39423c;color:var(--muted)}
   .gate:hover,.gate.hl{background:var(--portal);border-color:var(--portal);color:#06282d;text-decoration:none}
+  /* a big hub shows the gates you can act on; the linked ones fold behind a count */
+  .panel.big .gate.on{display:none}
+  .panel.big.open .gate.on{display:inline-block}
+  .gate.sum{background:transparent;border-color:#3a5a65;color:#8fb5c0;cursor:pointer}
+  .panel.big.open .gate.sum{color:var(--bright)}
+  /* out of the picked hub's reach: still there, but faint */
+  .node.dim{opacity:.35}
+  .node.dim .panel{opacity:.55}
   .rose,.sbar{position:absolute;left:.65rem;color:var(--muted);font-size:.68rem;letter-spacing:.06em;text-shadow:0 1px 3px #000}
   .rose{top:.5rem;font-weight:600}
   .sbar{bottom:.5rem;display:flex;align-items:flex-end;gap:.35rem}
@@ -112,6 +136,7 @@
     <p class="note bad" id="note"></p>
     <p class="key"><span class="k"></span> a standing link &#183; <span class="k dash"></span> one retag away
       &#183; drag to pan, scroll or pinch to zoom</p>
+    <div class="btnrow" id="hubs" hidden></div>
     <div class="list" id="list"></div>
     <p class="foot"><span id="stamp"></span> &#183; a node opens the map on that portal<span class="credits"> &#183;
       <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
@@ -135,7 +160,11 @@ const PIN_R  = 120;   // a house pin this close gives that place its name
 const ZMAX   = 6;     // two sites are 80 m apart at the closest: past this there is nothing left to separate
 const esc = MapCore.esc, GEOM = MapCore.geom;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-let WORLD = "", PINS = [], LAST = "", LAST_HEAD = "", LAST_NET = "";
+let WORLD = "", PINS = [], NAMED = [], LAST = "", LAST_HEAD = "", LAST_NET = "";
+let FOCUS = null, EDITING = null, HUBS = [];           // the hub picked in the chips; a hub whose name is being typed
+const FILTER = new Map();                              // a big hub's search text, by hub id
+const HUB_R = 150;                                     // a hub's name, or a gate's memory, counts this close
+const hubId = s => `hub@${Math.round(s.x)},${Math.round(s.z)}`;
 
 function plural(n, w){ return n + " " + w + (n === 1 ? "" : "s"); }
 
@@ -178,12 +207,21 @@ function cluster(list){
     const x = portals.reduce((t, p) => t+p.x, 0)/portals.length;
     const z = portals.reduce((t, p) => t+p.z, 0)/portals.length;
     const nm = siteName(portals), q = MapCore.toPx(x, z);
-    return {portals, x, z, px: q.px, py: q.py, pin: nm.pin, label: nm.label};
+    return {portals, x, z, px: q.px, py: q.py, pin: nm.pin, label: nm.label, given: nm.given, by: nm.by, tags: nm.tags};
   });
 }
-// A house pin standing in the place names it; failing that the portals name
-// themselves by their tags, which is what players actually say out loud.
+// A name given on the site wins; then a house pin standing in the place; failing
+// both the portals name themselves by their tags, which is what players say out loud.
 function siteName(portals){
+  const cx = portals.reduce((t, p) => t+p.x, 0)/portals.length, cz = portals.reduce((t, p) => t+p.z, 0)/portals.length;
+  let given = null, gd = HUB_R;
+  for(const nm of NAMED){
+    const d = Math.hypot(nm.x-cx, nm.z-cz);
+    if(d < gd){ gd = d; given = nm; }
+  }
+  const tags = [...new Set(portals.map(p => p.name).filter(Boolean))]
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  if(given) return {pin: given.name, label: given.name, given: given.name, by: given.by, tags};
   let best = null, bd = PIN_R;
   for(const pin of PINS){
     if(pin.type !== "house" || !pin.text) continue;
@@ -192,10 +230,8 @@ function siteName(portals){
       if(d < bd){ bd = d; best = pin; }
     }
   }
-  if(best) return {pin: best.text, label: best.text};
-  const tags = [...new Set(portals.map(p => p.name).filter(Boolean))]
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  return {pin: null, label: tags.length ? tags.join(" · ") : "unnamed site"};
+  if(best) return {pin: best.text, label: best.text, given: null, by: null, tags};
+  return {pin: null, label: tags.length ? tags.join(" · ") : "unnamed site", given: null, by: null, tags};
 }
 
 // ---------- the diagram ----------
@@ -345,11 +381,12 @@ function drawSpokes(v){
     const t1 = len - Math.hypot(B.sx-q.x, B.sy-q.y);
     if(t1 - t0 < 4) continue;                  // the panel already covers the whole run
     const on = HOVER.has(s.k), dial = s.kind === "dial";
+    const dim = FOCUS && s.a !== FOCUS && s.b !== FOCUS && !on;
     g.setLineDash(dial ? [6, 6] : []);
     g.lineWidth = dial ? (on ? 2.6 : 1.5) : (on ? 3.4 : 2.1);
-    g.strokeStyle = on ? "#e4feff" : dial ? "rgba(151,196,208,.62)" : "rgba(111,216,230,.85)";
+    g.strokeStyle = on ? "#e4feff" : dim ? (dial ? "rgba(151,196,208,.18)" : "rgba(111,216,230,.22)") : dial ? "rgba(151,196,208,.62)" : "rgba(111,216,230,.85)";
     g.shadowColor = "rgba(111,216,230,.85)";
-    g.shadowBlur = on ? 12 : 4;
+    g.shadowBlur = on ? 12 : dim ? 0 : 4;
     g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(q.x, q.y); g.stroke();
   }
   g.shadowBlur = 0; g.setLineDash([]);
@@ -476,6 +513,8 @@ function setHover(keys){
 }
 
 // ---------- the hub, as a node and as rows ----------
+// The panel shows the gates you can do something with -- free, or tagged and
+// waiting -- and folds the linked ones behind a count once there are many.
 function panel(site, sps){
   const rank = g => { const i = sps.findIndex(s => s.gate === g); return i < 0 ? 900 : i; };
   const chip = g => {
@@ -484,31 +523,113 @@ function panel(site, sps){
       + (s ? ` data-s="${s.k}"` : "") + `>${esc(g.name || (s ? "untagged" : "free"))}</a>`;
   };
   const gates = site.portals.slice().sort((a, b) => rank(a) - rank(b));
-  return `<div class="panel"><div class="ttl">`
+  const linked = gates.filter(g => sps.some(x => x.gate === g)).length, big = gates.length > 6;
+  const sum = big ? `<a class="gate sum" tabindex="-1" title="Show or hide the linked gates">${linked} linked</a>` : "";
+  return `<div class="panel${big ? " big" : ""}"><div class="ttl">`
     + `<a href="${link(site.portals[0].id)}" tabindex="-1">${site.pin ? esc(site.pin) : "Hub"}</a>`
     + `<span class="n">${plural(site.portals.length, "gate")}</span></div>`
-    + `<div class="gates">${gates.map(chip).join("")}</div></div>`;
+    + `<div class="gates">${gates.filter(g => !sps.some(x => x.gate === g)).map(chip).join("")}${sum}${gates.filter(g => sps.some(x => x.gate === g)).map(chip).join("")}</div></div>`;
 }
+// A hub's card: its name (a pencil renames it, signed in), where it stands, then
+// its spokes by compass sector, nearest first; past ten, a box to find a gate.
 function hubCard(hub, sps){
-  const d = Math.hypot(hub.x, hub.z);
+  const d = Math.hypot(hub.x, hub.z), id = hubId(hub), me = MapCore.user();
   const free = hub.portals.filter(p => !p.to).length;
   const meta = `${plural(hub.portals.length, "gate")}${free ? ` (${free} free)` : ""} &#183; `
     + `<span class="xz">${Math.round(hub.x)}, ${Math.round(hub.z)}</span> &#183; `
     + (d < 50 ? "the world centre" : `${bearing(hub.x, hub.z)}, ${span(d)} out`);
   const one = sps.filter(s => s.kind === "link").length === 1;
-  const li = s => `<li><a href="${link(s.target)}">`
+  const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a href="${link(s.target)}">`
     + `<span class="g">${s.kind === "dial" ? "dial " : ""}${esc(s.tag)}</span><span class="arr">&#8594;</span>`
     + `<span class="to">${esc(s.dst.label)}</span> <span>&#183; ${span(s.d)} ${s.ab}</span>`
     + `<span class="st ${s.kind === "dial" ? "dial" : "on"}">`
     + (s.kind === "dial" ? "one retag away" : one ? "dialled now" : "linked") + `</span></a></li>`;
-  return `<section class="card"><h3><svg class="ic"><use href="#ic-portal"></use></svg>`
-    + `<span>${esc(hub.label)}</span></h3><p class="meta">${meta}</p>`
-    + (sps.length ? `<ul class="spokes">${sps.map(li).join("")}</ul>`
-                  : `<p class="empty">No gate here reaches anywhere yet.</p>`)
+  const bySector = new Map();
+  for(const s of sps){ const k = Math.round(s.br/45) % 8; (bySector.get(k) || bySector.set(k, []).get(k)).push(s); }
+  const groups = [...bySector.keys()].sort((a, b) => a - b).map(k =>
+    `<li class="sector"><b>${ABBR[k]}</b>${DIRS[k]} &#183; ${bySector.get(k).length}</li>` + bySector.get(k).map(li).join("")).join("");
+  const title = EDITING === id
+    ? `<form class="rename" data-hub="${esc(id)}"><input class="field" name="name" maxlength="40" value="${esc(hub.given || "")}" placeholder="${esc(hub.pin || "name this hub")}" autocomplete="off">`
+      + `<div class="btnrow"><button class="btn" type="submit">Save</button>${hub.given ? '<button class="btn quiet" type="button" data-clear>Back to its gates</button>' : ""}<button class="btn quiet" type="button" data-cancel>Cancel</button></div></form>`
+    : `<h3><svg class="ic"><use href="#ic-portal"></use></svg><span>${esc(hub.label)}`
+      + (me ? ` <a href="#" class="edit" data-rename="${esc(id)}" title="Rename this hub">&#9998;</a>` : "")
+      + (hub.given && hub.tags.length ? `<span class="tags">${esc(hub.tags.join(" · "))}</span>` : "") + `</span></h3>`;
+  const find = sps.length > 10 ? `<div class="find"><input class="field" type="search" data-find="${esc(id)}" placeholder="find a gate&#8230;" value="${esc(FILTER.get(id) || "")}" autocomplete="off"></div>` : "";
+  return `<section class="card" data-hub="${esc(id)}">${title}<p class="meta">${meta}${hub.by ? ` &#183; named by ${esc(hub.by)}` : ""}</p>${find}`
+    + (sps.length ? `<ul class="spokes">${groups}</ul>` : `<p class="empty">No gate here reaches anywhere yet.</p>`)
     + `</section>`;
 }
+function applyFilter(card){
+  const id = card.dataset.hub, q = (FILTER.get(id) || "").trim().toLowerCase();
+  card.querySelectorAll(".spokes li[data-q]").forEach(li => li.classList.toggle("hid", !!q && !li.dataset.q.includes(q)));
+  card.querySelectorAll(".spokes .sector").forEach(h => {
+    let n = h.nextElementSibling, any = false;
+    while(n && !n.classList.contains("sector")){ if(!n.classList.contains("hid")) any = true; n = n.nextElementSibling; }
+    h.classList.toggle("hid", !any);
+  });
+}
+const listEl = document.getElementById("list");
+listEl.addEventListener("input", e => {
+  const inp = e.target.closest("[data-find]"); if(!inp) return;
+  FILTER.set(inp.dataset.find, inp.value);
+  applyFilter(inp.closest(".card"));
+});
+listEl.addEventListener("click", e => {
+  const pen = e.target.closest("[data-rename]");
+  if(pen){ e.preventDefault(); EDITING = pen.dataset.rename; LAST = ""; render(LIST); const f = listEl.querySelector(".rename input"); if(f){ f.focus(); f.select(); } return; }
+  if(e.target.closest("[data-cancel]")){ EDITING = null; LAST = ""; render(LIST); return; }
+  if(e.target.closest("[data-clear]")){ saveHubName(e.target.closest(".rename").dataset.hub, ""); }
+});
+listEl.addEventListener("submit", e => {
+  const f = e.target.closest(".rename"); if(!f) return;
+  e.preventDefault(); saveHubName(f.dataset.hub, f.name.value);
+});
+async function saveHubName(id, name){
+  const note = document.getElementById("note");
+  try{
+    await MapCore.post(API, "/names", {id, name});
+    EDITING = null; note.textContent = "";
+    await load();
+  }catch(err){ note.textContent = err.message || "could not save the name"; }
+}
 
+// ---------- the picked hub ----------
+// With more than one hub, chips pick one: the view fits its reach and the
+// others fade. Picking it again lets go.
+function renderHubChips(hubs){
+  const el = document.getElementById("hubs");
+  el.hidden = hubs.length < 2;
+  if(el.hidden){ FOCUS = null; return; }
+  const html = hubs.map((h, i) => `<button class="chip${FOCUS === h ? " on" : ""}" data-hub="${i}">${esc(h.label.length > 24 ? h.label.slice(0, 22) + "…" : h.label)}<span class="n">${h.portals.length}</span></button>`).join("");
+  if(el.innerHTML !== html) el.innerHTML = html;
+}
+document.getElementById("hubs").addEventListener("click", e => {
+  const b = e.target.closest("[data-hub]"); if(!b) return;
+  const h = HUBS[+b.dataset.hub];
+  FOCUS = FOCUS === h ? null : h;
+  renderHubChips(HUBS); applyFocus();
+  if(FOCUS) fitHub(FOCUS); else fitAll();
+});
+function applyFocus(){
+  for(const n of NODES){
+    const near = !FOCUS || n.site === FOCUS || (SPOKES.some(s => (s.a === FOCUS && s.b === n.site) || (s.b === FOCUS && s.a === n.site)));
+    n.el.classList.toggle("dim", !near);
+  }
+  draw();
+}
+function fitHub(hub){
+  const pts = [hub].concat(SPOKES.filter(s => s.a === hub || s.b === hub).map(s => s.a === hub ? s.b : s.a));
+  const b = pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9});
+  const W = stage.clientWidth, H = stage.clientHeight, m = Math.min(84, W*0.12, H*0.12);
+  const bw = Math.max(b.x1-b.x0, 6), bh = Math.max(b.y1-b.y0, 6);
+  scale = clamp(Math.min((W-2*m)/bw, (H-2*m)/bh), fit*0.4, ZMAX);
+  tx = W/2 - (b.x0 + bw/2)*scale; ty = H/2 - (b.y0 + bh/2)*scale;
+  draw();
+}
+
+let LIST = [];
 function render(list){
+  LIST = list;
   const by = new Map(list.map(p => [p.id, p]));
   const twin = p => { const q = (p.to && p.to !== "0") ? by.get(p.to) : null; return (q && q.id !== p.id) ? q : null; };
   const sites = cluster(list);
@@ -516,6 +637,8 @@ function render(list){
   sites.forEach(s => s.portals.forEach(p => siteOf.set(p.id, s)));
   const hubs = sites.filter(s => s.portals.length > 1)
     .sort((a, b) => b.portals.length - a.portals.length || a.label.localeCompare(b.label));
+  if(FOCUS){ FOCUS = hubs.find(h => Math.hypot(h.x-FOCUS.x, h.z-FOCUS.z) < HUB_R) || null; }
+  HUBS = hubs;
 
   const pairs = [], seen = new Set();
   for(const p of list){
@@ -523,16 +646,27 @@ function render(list){
     const q = twin(p);
     if(q){ seen.add(p.id); seen.add(q.id); pairs.push([p, q]); }
   }
-  // A tagged portal standing unlinked is a number you can dial: any free gate
-  // retagged to match will open onto it. Untagged and unlinked is just stone.
+  // A tagged portal standing unlinked is a number you can dial: a free gate
+  // retagged to match will open onto it. It belongs to one hub on the atlas: the
+  // only hub with a gate to spare, else the hub it last led to, else the nearest.
   const dials = list.filter(p => !twin(p) && p.name);
   const atHub = p => siteOf.get(p.id).portals.length > 1;
+  const spare = hubs.filter(h => h.portals.some(p => !twin(p)));
+  const nearest = (x, z, pool) => pool.reduce((b, h) => { const d = Math.hypot(h.x-x, h.z-z); return !b || d < b.d ? {h, d} : b; }, null);
+  const dialHub = p => {
+    if(!hubs.length) return null;
+    if(spare.length === 1 && siteOf.get(p.id) !== spare[0]) return spare[0];
+    if(p.last){ const n = nearest(p.last.x, p.last.z, hubs.filter(h => h !== siteOf.get(p.id))); if(n && n.d < HUB_R) return n.h; }
+    const n = nearest(p.x, p.z, (spare.length ? spare : hubs).filter(h => h !== siteOf.get(p.id)));
+    return n ? n.h : null;
+  };
   const elsewhere = pairs.filter(([a, b]) => !atHub(a) && !atHub(b));
   const loose = list.filter(p => !twin(p) && (!p.name || !hubs.length));
 
   const head = (WORLD ? `<b>${esc(WORLD)}</b> &#183; ` : "") + plural(list.length, "portal")
     + ` &#183; ${plural(hubs.length, "hub")} &#183; ${plural(pairs.length, "pair")} &#183; ${loose.length} loose`;
   if(head !== LAST_HEAD){ document.getElementById("count").innerHTML = head; LAST_HEAD = head; }
+  renderHubChips(hubs);
 
   // ---- spokes ----
   const spokes = [], touching = new Map(), hubSpokes = new Map();
@@ -548,7 +682,7 @@ function render(list){
       sps.push({kind: "link", tag: g.name || "untagged", gate: g, dst, target: g.id});
     }
     for(const p of dials){
-      const dst = siteOf.get(p.id); if(dst === hub) continue;
+      const dst = siteOf.get(p.id); if(dst === hub || dialHub(p) !== hub) continue;
       sps.push({kind: "dial", tag: p.name, dst, target: p.id});
     }
     for(const s of sps){
@@ -609,7 +743,12 @@ function render(list){
       const dx = o ? n.site.px - o.px : 0, dy = o ? n.site.py - o.py : 1, L = Math.hypot(dx, dy) || 1;
       n.u = {x: dx/L, y: dy/L};
     });
+    // a big panel's fold: click its count to open or close, remeasure, and lay out again
+    net.querySelectorAll(".panel.big .gate.sum").forEach(el => el.addEventListener("click", e => {
+      e.preventDefault(); const pn = el.closest(".panel"); pn.classList.toggle("open"); measure(); draw();
+    }));
     measure();
+    if(FOCUS) applyFocus();
     BBOX = sites.length ? sites.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py),
       x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}) : null;
     if(!FITTED && sites.length){ FITTED = true; fitAll(); } else draw();
@@ -621,8 +760,8 @@ function render(list){
   if(elsewhere.length) html += `<h2 class="eyebrow section">Elsewhere</h2><div class="rows">${elsewhere.map(row).join("")}</div>`;
   if(loose.length) html += `<h2 class="eyebrow section">Loose</h2><div class="rows">${loose.map(p => row([p])).join("")}</div>`;
   if(!list.length) html = `<p class="empty">No portals standing in this world yet.</p>`;
-  const el = document.getElementById("list");
-  if(html !== LAST){ el.innerHTML = html; LAST = html; }   // untouched DOM, so no flicker on the minute
+  // untouched DOM on the minute, so no flicker; and never under someone's typing
+  if(html !== LAST && !(EDITING && LAST && listEl.querySelector(".rename"))){ listEl.innerHTML = html; LAST = html; listEl.querySelectorAll(".card[data-hub]").forEach(applyFilter); }
 }
 
 // One /state carries the portals, the pins and the fog's revision; the fog itself
@@ -632,6 +771,7 @@ async function load(){
   try{
     const s = await MapCore.fetchState(API);
     PINS = MapCore.parsePins(s.pins);
+    NAMED = ((s.portals || {}).named) || [];
     if(s.rev && s.rev.fog !== FOG_REV){ FOG_REV = s.rev.fog; LAY.load("fog", "/fog", FOG_REV); }
     // the chart is one image per world; its revision arrives with the state like the others
     // a server that does not yet say which chart it has still has one: ask for it by the old name

@@ -1,5 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
 namespace WebMap
@@ -21,6 +25,34 @@ namespace WebMap
         private static readonly List<Entry> found = new List<Entry>();
         private static volatile string json = "{\"portals\":[],\"count\":0}";
         public static volatile float[] Positions = new float[0];   // x, z pairs of the portals in walked ground
+
+        // Where each portal last led: a gate retagged and standing unlinked still
+        // belongs, on the atlas, to the hub it was dialled from. Kept across restarts.
+        private struct Last { public string to; public float x, z; }
+        private static readonly Dictionary<string, Last> last = new Dictionary<string, Last>();
+        private const string LastFile = "portals.tsv";
+        private static string dir;
+        private static bool saving;
+
+        public static void Load(string worldDataPath)
+        {
+            dir = worldDataPath;
+            last.Clear();
+            try
+            {
+                string path = Path.Combine(dir, LastFile);
+                if (File.Exists(path))
+                    foreach (string line in File.ReadAllLines(path))
+                    {
+                        var f = line.Split('\t');
+                        if (f.Length < 4) continue;
+                        if (float.TryParse(f[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+                            && float.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+                            last[f[0]] = new Last { to = f[1], x = x, z = z };
+                    }
+            }
+            catch (Exception e) { ZLog.LogWarning("WebMap: portal history not loaded: " + e.Message); }
+        }
 
         // By component, so a portal added in a later patch counts without this
         // having to learn its prefab name.
@@ -56,6 +88,16 @@ namespace WebMap
 
         public static void Finish()
         {
+            var by = new Dictionary<string, Entry>();
+            foreach (var e in found) by[e.id] = e;
+            bool changed = false;
+            foreach (var e in found)
+            {
+                if (e.to.Length == 0 || !by.TryGetValue(e.to, out var twin)) continue;
+                if (last.TryGetValue(e.id, out var was) && was.to == e.to) continue;
+                last[e.id] = new Last { to = e.to, x = twin.x, z = twin.z };
+                changed = true;
+            }
             var sb = new StringBuilder();
             sb.Append("{\"portals\":[");
             int n = 0;
@@ -66,10 +108,35 @@ namespace WebMap
                 n++;
                 string name = e.name.Replace("\\", "").Replace("\"", "");
                 sb.Append(System.FormattableString.Invariant(
-                    $"{{\"id\":\"{e.id}\",\"name\":\"{name}\",\"to\":\"{e.to}\",\"x\":{e.x:0.#},\"z\":{e.z:0.#}}}"));
+                    $"{{\"id\":\"{e.id}\",\"name\":\"{name}\",\"to\":\"{e.to}\",\"x\":{e.x:0.#},\"z\":{e.z:0.#}"));
+                // unlinked, but it once led somewhere: the spot its twin stood at
+                if ((e.to.Length == 0 || !by.ContainsKey(e.to)) && last.TryGetValue(e.id, out var l))
+                    sb.Append(System.FormattableString.Invariant($",\"last\":{{\"x\":{l.x:0.#},\"z\":{l.z:0.#}}}"));
+                sb.Append('}');
             }
-            sb.Append("],\"count\":").Append(n).Append("}");
+            sb.Append("],\"count\":").Append(n).Append(",\"named\":").Append(Features.HubNamesJson()).Append("}");
             json = sb.ToString();
+            if (changed && !saving && dir != null)
+            {
+                saving = true;
+                var lines = new StringBuilder();
+                foreach (var kv in last)
+                    lines.Append(kv.Key).Append('\t').Append(kv.Value.to).Append('\t')
+                         .Append(kv.Value.x.ToString("0.#", CultureInfo.InvariantCulture)).Append('\t')
+                         .Append(kv.Value.z.ToString("0.#", CultureInfo.InvariantCulture)).Append('\n');
+                string text = lines.ToString();
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        string path = Path.Combine(dir, LastFile), tmp = path + ".new";
+                        File.WriteAllText(tmp, text);
+                        if (File.Exists(path)) File.Replace(tmp, path, null); else File.Move(tmp, path);
+                    }
+                    catch (Exception ex) { ZLog.LogWarning("WebMap: portal history not saved: " + ex.Message); }
+                    finally { saving = false; }
+                });
+            }
             var pos = new List<float>();
             foreach (var e in found) if (e.explored) { pos.Add(e.x); pos.Add(e.z); }
             Positions = pos.ToArray();

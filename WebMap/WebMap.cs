@@ -131,6 +131,7 @@ namespace WebMap
             Trails.Load(worldDataPath);
             Chart.Load(worldDataPath);
             Features.Load(worldDataPath);
+            Portals.Load(worldDataPath);
 
             if (mapDataServer == null)
             {

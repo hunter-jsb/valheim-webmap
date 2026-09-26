@@ -570,6 +570,7 @@ namespace WebMap
             id = (id ?? "").Trim(); by = (by ?? "").Trim();
             name = Regex.Replace(name ?? "", @"[\p{C}]", "").Trim();
             if (name.Length > 40) return "a name is at most 40 characters";
+            if (id.StartsWith("hub@")) return SetHubName(id, name, by);
             lock (gate)
             {
                 Feature f = null;
@@ -583,6 +584,54 @@ namespace WebMap
                 ZLog.Log($"WebMap: {(by.Length > 0 ? by : "someone")} named the {f.kind} '{was}' " + (name.Length == 0 ? "back to its own name" : $"'{name}'"));
             }
             return null;
+        }
+
+        // ---------- hubs ----------
+        // A hub is a spot the viewer finds by clustering portals, so its name is a
+        // named spot: kept as hub@x,z and matched by nearness. Naming near an old
+        // name replaces it, so a hub that grew keeps one name.
+        private const float HubReach = 150f;
+        private static bool ParseHub(string id, out float x, out float z)
+        {
+            x = z = 0f;
+            var m = Regex.Match(id, @"^hub@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$");
+            return m.Success && float.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                             && float.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out z);
+        }
+        private static string SetHubName(string id, string name, string by)
+        {
+            if (!ParseHub(id, out float x, out float z)) return "no such place";
+            var pos = Portals.Positions;
+            bool near = false;
+            for (int i = 0; i + 1 < pos.Length; i += 2)
+                if (Math.Abs(pos[i] - x) < HubReach && Math.Abs(pos[i + 1] - z) < HubReach && Math.Sqrt((pos[i] - x) * (pos[i] - x) + (pos[i + 1] - z) * (pos[i + 1] - z)) < HubReach) { near = true; break; }
+            if (!near) return "no portal stands there";
+            string key = Inv($"hub@{Math.Round(x)},{Math.Round(z)}");
+            lock (gate)
+            {
+                string was = "";
+                foreach (var k in new List<string>(names.Keys))
+                    if (k.StartsWith("hub@") && ParseHub(k, out float hx, out float hz) && Math.Sqrt((hx - x) * (hx - x) + (hz - z) * (hz - z)) < HubReach)
+                    { was = names[k].name; names.Remove(k); }
+                if (name.Length > 0) names[key] = new Named { name = name, by = by, t = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+                Save();
+                ZLog.Log($"WebMap: {(by.Length > 0 ? by : "someone")} named the hub " + (was.Length > 0 ? $"'{was}' " : "") + (name.Length == 0 ? "back to its gates" : $"'{name}'"));
+            }
+            return null;
+        }
+        // every named hub spot, for the portals block of /state
+        public static string HubNamesJson()
+        {
+            var sb = new StringBuilder("[");
+            int n = 0;
+            lock (gate)
+                foreach (var kv in names)
+                {
+                    if (!kv.Key.StartsWith("hub@") || !ParseHub(kv.Key, out float x, out float z)) continue;
+                    if (n++ > 0) sb.Append(',');
+                    sb.Append(Inv($"{{\"id\":\"{Esc(kv.Key)}\",\"x\":{x:0.#},\"z\":{z:0.#},\"name\":\"{Esc(kv.Value.name)}\",\"by\":\"{Esc(kv.Value.by)}\"}}"));
+                }
+            return sb.Append(']').ToString();
         }
 
         private static void Save()        // under gate
