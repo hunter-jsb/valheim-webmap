@@ -132,6 +132,43 @@ namespace WebMap
             catch (Exception ex) { WarnOnce(ref warnedMessages, "read messages", ex); return null; }
         }
 
+        // Discord writes a mention as <@id>, a role as <@&id>, a channel as <#id> and an
+        // emoji as <:name:id>; in game they read as the names people would say.
+        internal static string Plain(string content, string item)
+        {
+            if (string.IsNullOrEmpty(content)) return content;
+            var names = new Dictionary<string, string>();
+            foreach (var u in Body.Items(Body.Arr(item ?? "", "mentions") ?? "[]"))
+            {
+                string id = Body.Str(u, "id"); if (id == null) continue;
+                names[id] = Body.Str(u, "global_name") ?? Body.Str(u, "username") ?? "someone";
+            }
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"<@!?(\d+)>", m => "@" + (names.TryGetValue(m.Groups[1].Value, out var n) ? n : "someone"));
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"<@&(\d+)>", m => "@" + RoleName(m.Groups[1].Value));
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"<#(\d+)>", "#channel");
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"<a?:(\w+):\d+>", ":$1:");
+            return content;
+        }
+        private static Dictionary<string, string> roleNames;
+        private static DateTime rolesAt;
+        private static string RoleName(string id)
+        {
+            try
+            {
+                if (roleNames == null || (DateTime.UtcNow - rolesAt).TotalMinutes > 10)
+                {
+                    var map = new Dictionary<string, string>();
+                    string guild = WebMapConfig.DISCORD_GUILD;
+                    if (!string.IsNullOrEmpty(guild))
+                        foreach (var r in Body.Items(Call("GET", $"/guilds/{guild}/roles", null).Body))
+                        { string rid = Body.Str(r, "id"), name = Body.Str(r, "name"); if (rid != null && name != null) map[rid] = name; }
+                    roleNames = map; rolesAt = DateTime.UtcNow;
+                }
+                return roleNames.TryGetValue(id, out var n) ? n : "role";
+            }
+            catch { return "role"; }
+        }
+
         private static DiscordMessage Parse(string item)
         {
             string author = Body.Obj(item, "author") ?? "{}";
@@ -142,7 +179,7 @@ namespace WebMap
             return new DiscordMessage
             {
                 Id = Body.Str(item, "id"),
-                Content = Body.Str(item, "content") ?? "",
+                Content = Plain(Body.Str(item, "content") ?? "", item),
                 Bot = Body.Bool(author, "bot"),
                 Webhook = Body.Has(item, "webhook_id"),
                 DisplayName = !string.IsNullOrEmpty(nick) ? nick : !string.IsNullOrEmpty(global) ? global : user,

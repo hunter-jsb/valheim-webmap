@@ -63,6 +63,24 @@ namespace WebMap
 
         // A nested object member's own substring (e.g. a message's "author"), brace
         // matched from its opening {; null when the key is absent or not an object.
+        // the array a key holds, brackets and all, or null
+        public static string Arr(string json, string key)
+        {
+            var m = Regex.Match(json ?? "", "\"" + key + "\"\\s*:\\s*\\[");
+            if (!m.Success) return null;
+            int i = m.Index + m.Length - 1, depth = 0; bool inStr = false, esc = false;
+            for (int j = i; j < json.Length; j++)
+            {
+                char c = json[j];
+                if (esc) { esc = false; continue; }
+                if (c == '\\' && inStr) { esc = true; continue; }
+                if (c == '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (c == '[') depth++;
+                else if (c == ']') { depth--; if (depth == 0) return json.Substring(i, j - i + 1); }
+            }
+            return null;
+        }
         public static string Obj(string json, string key)
         {
             var m = Regex.Match(json ?? "", "\"" + key + "\"\\s*:\\s*\\{");

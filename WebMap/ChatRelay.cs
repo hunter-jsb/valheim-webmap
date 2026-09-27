@@ -13,6 +13,7 @@ namespace WebMap
         internal const int Cap = 5;      // a flood in Discord must not flood the server
 
         private static System.Threading.Timer timer;
+        private static int polling;             // a poll still on the wire: the next tick waits, or the same line speaks twice
         private static string afterId;          // null until seeded
         private static string seededChannel;    // which channel afterId belongs to
         private static int warned;
@@ -20,7 +21,12 @@ namespace WebMap
         public static void Start()
         {
             if (timer != null) return;
-            timer = new System.Threading.Timer(_ => { try { Poll(); } catch (Exception ex) { WarnOnce(ex); } }, null, PollMs, PollMs);
+            timer = new System.Threading.Timer(_ =>
+            {
+                if (Interlocked.CompareExchange(ref polling, 1, 0) != 0) return;
+                try { Poll(); } catch (Exception ex) { WarnOnce(ex); }
+                finally { polling = 0; }
+            }, null, PollMs, PollMs);
         }
 
         private static void Poll()
@@ -42,8 +48,17 @@ namespace WebMap
 
             var msgs = Discord.MessagesAfter(channel, afterId, 50);
             if (msgs.Count == 0) return;
-            afterId = msgs[0].Id;   // newest first; the cursor moves past everything fetched, spoken or not
+            afterId = Newest(msgs, afterId);   // past everything fetched, spoken or not, whatever order they came in
             foreach (string line in LinesToSpeak(msgs)) Announce.Enqueue(line);
+        }
+
+        // Snowflakes grow with time, so the newest is the largest number
+        internal static string Newest(List<DiscordMessage> msgs, string current)
+        {
+            ulong best = 0; string id = current;
+            ulong.TryParse(current ?? "", out best);
+            foreach (var m in msgs) if (ulong.TryParse(m.Id ?? "", out ulong v) && v > best) { best = v; id = m.Id; }
+            return id;
         }
 
         // The pure decision: which of a poll's messages (newest first, as Discord
@@ -69,6 +84,6 @@ namespace WebMap
         }
 
         // for the tests: back to unseeded, as at boot
-        internal static void ResetForTests() { timer = null; afterId = null; seededChannel = null; warned = 0; }
+        internal static void ResetForTests() { timer = null; afterId = null; seededChannel = null; warned = 0; polling = 0; }
     }
 }
