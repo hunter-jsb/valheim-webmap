@@ -106,6 +106,26 @@ namespace WebMap.Tests
         }
 
         [Fact]
+        public void AWalkedSpotNamesThePlacesItLiesInMostParticularFirstAndUnwalkedGroundNothing()
+        {
+            new Grid().Box(400, 400, 500, 500).Box(440, 440, 460, 460, Grid.Mountain).Read();
+            var fog = new MapDataServer(true);
+            int size = WebMapConfig.TEXTURE_SIZE;
+            fog.fogRgba = new byte[size * size * 4];
+            float x = Grid.W(450), z = Grid.W(450);
+            try
+            {
+                global::WebMap.WebMap.mapDataServer = fog;
+                Assert.Null(Features.At(x, z));
+                int px = (int)(x / WebMapConfig.PIXEL_SIZE) + size / 2, py = (int)(z / WebMapConfig.PIXEL_SIZE) + size / 2;
+                fog.fogRgba[(py * size + px) * 4] = 255;
+                var here = J.Parse(Features.At(x, z)).GetProperty("here").EnumerateArray().Select(f => f.Str("kind"));
+                Assert.Equal(new[] { "range", "continent" }, here);
+            }
+            finally { global::WebMap.WebMap.mapDataServer = null; }
+        }
+
+        [Fact]
         public void ClassAtIsMinusOneBeforeTheWorldIsReadAndOffTheGrid()
         {
             Assert.Equal(-1, Features.ClassAt(0, 0));
