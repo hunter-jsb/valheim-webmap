@@ -86,6 +86,18 @@ namespace WebMap.Tests
         }
 
         [Fact]
+        public void ADeathDuringAWalkWaitsForTheNextSweep()
+        {
+            Stats.BeginSweep();                      // the walk has passed the spot before the tombstone lands
+            At(0, 0); Stats.Death(A); At(5000, 0);
+            Stats.PublishSweep();
+            Assert.Equal(1, Run("open"));
+            Stats.BeginSweep(); Stats.ObserveGrave(A, 0f, 0f); Stats.PublishSweep();
+            Stats.BeginSweep(); Stats.PublishSweep();
+            Assert.Equal(1, Run("rescued"));
+        }
+
+        [Fact]
         public void ABossIsRecordedOnceAndOtherKeysNotAtAll()
         {
             Stats.ObserveKeys(new[] { "defeated_eikthyr", "KilledTroll" });
@@ -123,7 +135,7 @@ namespace WebMap.Tests
         static string Tallies(JsonElement doc) => string.Join(",", doc.GetProperty("players")[0].EnumerateObject()
             .Where(p => !Live.Contains(p.Name)).Select(p => p.Name + "=" + p.Value.GetRawText()));
 
-        [Fact(Skip = "Mistlands is 0x200, biome class 10, one past Stats.Biomes (10): its metres and deaths are dropped")]
+        [Fact]
         public void AWalkInTheMistlandsCounts()
         {
             new Grid().Box(480, 480, 560, 560, Grid.Mistlands).Read();
