@@ -12,6 +12,9 @@ using System.Runtime.InteropServices;
 using System.Collections;
 using System.Dynamic;
 
+// the tests reach the internal static classes directly: WebMap.Tests
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WebMap.Tests")]
+
 namespace WebMap
 {
     //This attribute is required, and lists metadata for your plugin.
@@ -59,6 +62,7 @@ namespace WebMap
             Directory.CreateDirectory(mapDataPath);
 
             WebMapConfig.ReadConfigFile(Config);
+            Settings.Load(mapDataPath);                       // what admins set on the site lies over the config
 
             discordWebHook = new DiscordWebHook(WebMapConfig.DISCORD_WEBHOOK);
         }

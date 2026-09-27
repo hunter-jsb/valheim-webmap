@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* Admins, and settings from the site. A signed-in member who owns the Discord guild, holds
+  a role with its administrator permission, or holds the role the deployment names is an
+  admin: the bar shows a gear, and `settings.html` lists the mod's settings with what each
+  does and whether it applies live or at the next restart. The mod keeps what admins set in
+  `settings.tsv` beside the map data and lays it over the BepInEx config, which the host
+  rewrites on restart. `GET`/`POST /settings` behind the shared token and an `X-Admin` the
+  Worker sets after checking the member's roles again.
+* Every write from the site -- a name, a pin, a setting -- answers with the line it logged,
+  and the Worker posts it to the guild's channel through the bot.
 * The world in 3D. `view.html#at=x,z` stands you on a walked spot at eye height, looking
   north, like a street view: drag to look, wheel or pinch to zoom the eye, WASD or the
   arrows to walk, a click on the ground to walk there, and an Overview button for an orbit
@@ -27,6 +36,8 @@
   `extract_meshes`, `export_ms_per_frame`, `texture_max_size`, `object_categories`.
 * The mod serves subfolders of `web/` now (the vendored three.js keeps its layout), and
   gzips text and the 3D chunks for a client that takes it.
+
+## 2.13.0
 
 * The land has names. Once per world the mod reads the generator's own geography --
   landmasses, lakes, bays and mountain ranges from a sampled grid of biome and height,
@@ -91,6 +102,12 @@
   card); the ground card offers **Pin here**. The chat commands now find and remove under
   the pin list's lock, and `pins.csv` is written from a snapshot, since the site writes
   from HTTP threads.
+* Tests, where there were none. `dotnet test WebMap.Tests` runs the mod's logic from the
+  built DLL on .NET 10 -- the geography and its names, hub names, the stats walk and its
+  save, portal memory, pin writes from the site -- and `node --test` runs `map-core.js`'s
+  pure functions; CI runs both on every push and pull request. `tools/check.mjs` replaces
+  `shoot.mjs`: every page in a headless Chrome over a live server, one line per check and
+  a failing exit when one fails. `TESTING.md` ranks what is covered and what is not.
 
 ## 2.12.0
 

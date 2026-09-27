@@ -144,5 +144,16 @@ namespace WebMap
 
         // the hub names ride along as they are now, not as they were at the last sweep
         public static string GetJson() => json + ",\"named\":" + Features.HubNamesJson() + "}";
+
+        // ---------- for the tests (WebMap.Tests) ----------
+        // a save still in flight lands in the last case's directory, not the next one's
+        internal static void ResetForTests(string worldDataPath)
+        {
+            System.Threading.SpinWait.SpinUntil(() => !saving, 5000);
+            Load(worldDataPath); found.Clear();
+        }
+        // a portal as the sweep would see it, without a ZDO or the fog
+        internal static void ObserveForTests(string id, string name, string to, float x, float z, bool explored = true) =>
+            found.Add(new Entry { id = id, name = name, to = to, x = x, z = z, explored = explored });
     }
 }

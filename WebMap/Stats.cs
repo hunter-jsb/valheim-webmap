@@ -42,8 +42,8 @@ namespace WebMap
             public List<Spot> open = new List<Spot>();   // deaths not yet reached
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
-        private class Spot { public float x, z; public double distAt; public long t; public bool seen; }
-        private const int Biomes = 10;
+        private class Spot { public float x, z; public double distAt; public long t; public bool seen; public int sweep; }
+        private const int Biomes = 11;   // classes 1..10: Meadows through Mistlands (0x200 -> 10); 0 is water
         private const float ReachM = 8f, FailM = 200f, GraveM = 30f;
         private struct Boss { public string key; public long t; }
         private static readonly List<Boss> bosses = new List<Boss>();
@@ -127,7 +127,7 @@ namespace WebMap
                     // dying beside your own grave is the corpse run that failed
                     foreach (var o in p.open)
                         if (Dist(o.x, o.z, p.lx, p.lz) < FailM) { p.runsFailed++; break; }
-                    p.open.Add(new Spot { x = p.lx, z = p.lz, distAt = p.dist, t = Now() });
+                    p.open.Add(new Spot { x = p.lx, z = p.lz, distAt = p.dist, t = Now(), sweep = sweeps });
                     if (p.open.Count > 20) p.open.RemoveAt(0);
                 }
                 p.hasPos = false; Touch(p);
@@ -227,7 +227,8 @@ namespace WebMap
         }
 
         // Sweep: game thread during the walk, then the pool thread once.
-        public static void BeginSweep() { sweepById.Clear(); sweepGraves.Clear(); sweepGraveAt.Clear(); }
+        private static int sweeps;         // walks begun; a death spot remembers which it fell in
+        public static void BeginSweep() { sweepById.Clear(); sweepGraves.Clear(); sweepGraveAt.Clear(); sweeps++; }
 
         public static void ObservePiece(long creator, bool portal, bool ship)
         {
@@ -266,8 +267,10 @@ namespace WebMap
                         foreach (var g in sweepGraveAt)
                             if (g.name == p.name && Dist(g.x, g.z, o.x, o.z) < GraveM) { standing = true; break; }
                         if (standing) { o.seen = true; continue; }
+                        // a death during this walk: its tombstone may have landed behind the walk
+                        if (!o.seen && o.sweep >= sweeps) continue;
                         if (o.seen) p.runsRescued++;
-                        p.open.RemoveAt(i);      // never seen: nothing was ever lying there
+                        p.open.RemoveAt(i);      // never seen by a whole sweep: nothing was ever lying there
                     }
                 jsonStale = true;
             }

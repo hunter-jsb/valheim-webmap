@@ -1,0 +1,136 @@
+// The viewer end to end: each page in a headless Chrome over the DevTools protocol,
+// against a live server behind tools/sameorigin.py. One line per check, and a
+// non-zero exit if any failed. Needs Chrome listening on --remote-debugging-port.
+//
+//   python3 tools/sameorigin.py WebMap/web http://your_ip:port 8766 &
+//   flatpak run com.google.Chrome --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --remote-debugging-port=9334 \
+//     --user-data-dir=/tmp/check-profile --window-size=1400,900 about:blank &
+//   node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]
+//
+// Given a directory, it also leaves a screenshot of each page there, as it stood
+// after its checks.
+//
+// Headless Chrome has no hover, so what a mouse reaches by hovering is reached the
+// way a finger reaches it: the Layers card opens on a tap, the names on their caret.
+import { writeFileSync } from "node:fs";
+const [BASE, PORT, OUT] = process.argv.slice(2);
+if (!BASE || !PORT) { console.error("usage: node tools/check.mjs <proxy base> <devtools port> [screenshot dir]"); process.exit(2); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let failed = 0;
+const check = (name, ok, detail = "") => { if (!ok) failed++; console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? " -- " + detail : ""}`); };
+
+async function open(path) {
+  const tab = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
+  const ws = new WebSocket(tab.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
+  let id = 0; const pending = new Map(), errors = [], broken = [];
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result ?? m.error); pending.delete(m.id); }
+    if (m.method === "Runtime.exceptionThrown") errors.push((m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text).split("\n")[0].slice(0, 200));
+    if (m.method === "Network.responseReceived" && ["Document", "Script", "Stylesheet"].includes(m.params.type) && m.params.response.status >= 400)
+      broken.push(m.params.response.status + " " + new URL(m.params.response.url).pathname); };
+  const send = (method, params = {}) => new Promise(r => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
+  // a probe that throws (a page global not declared yet) reads as nothing, not as the page's exception
+  const ev = async expression => { const r = await send("Runtime.evaluate", { returnByValue: true, awaitPromise: true, expression }); return r.exceptionDetails ? undefined : r.result?.value; };
+  const until = async (expression, ms = 45000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(250)) if (await ev(expression)) return true; return false; };
+  // down and up in one spot: a tap, as index.html's endPtr tells one from a drag
+  const tap = async (x, y) => { for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 }); await sleep(300); };
+  const click = async sel => { const p = await ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el || !el.offsetParent) return null;
+    const r = el.getBoundingClientRect(); return {x: r.left + r.width/2, y: r.top + r.height/2}; })()`); if (p) await tap(p.x, p.y); return !!p; };
+  await send("Runtime.enable"); await send("Page.enable"); await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
+  // every run from the defaults: no layers, names or sidebar remembered from the last
+  await send("Storage.clearDataForOrigin", { origin: new URL(BASE).origin, storageTypes: "local_storage" });
+  await send("Page.navigate", { url: BASE + path });
+  const done = async name => {
+    check(`${name}: no exceptions`, !errors.length, errors.join(" | "));
+    check(`${name}: its page, scripts and styles all load`, !broken.length, broken.join(", "));
+    if (OUT) writeFileSync(`${OUT}/${name}.png`, Buffer.from((await send("Page.captureScreenshot", { format: "png" })).data, "base64"));
+    ws.close(); await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
+  };
+  return { ev, until, tap, click, done };
+}
+
+async function map() {
+  const p = await open("/");
+  const drawn = await p.until(`document.querySelectorAll("#markers .marker").length`);
+  check("map: draws its markers", drawn, `${await p.ev(`document.querySelectorAll("#markers .marker").length`)} markers`);
+
+  // a mid zoom: the walked world fitted, then two steps in, by the map's own buttons
+  const ready = await p.until(`FEATURES && FEATURES.length && LAYERS.ready("fog")`);
+  if (ready) for (const b of ["#zoomFit", "#zoomIn", "#zoomIn"]) await p.click(b);
+  const named = ready && await p.until(`NAMEVIEW && NAMEVIEW.scale === V.scale && NAMEBOXES.length`, 10000);
+  check("map: sets the names at a mid zoom", named, `${await p.ev("NAMEBOXES.length")} names at zoom ${await p.ev("V.scale.toFixed(2)")}`);
+
+  // a name clear of every marker and control, tapped where it was drawn
+  const at = named ? await p.ev(`(() => {
+    const r = stage.getBoundingClientRect(), dx = NAMEVIEW.tx - V.tx, dy = NAMEVIEW.ty - V.ty;
+    for (const b of NAMEBOXES) {
+      const x = r.left + (b.x0 + b.x1)/2 - dx, y = r.top + (b.y0 + b.y1)/2 - dy;
+      const el = document.elementFromPoint(x, y);
+      if (el && el.closest("#stage") && !el.closest(".marker, .mapctl, .layers, #mini, #namer")) return {x, y, name: b.f.name};
+    }
+    return null; })()`) : null;
+  if (at) await p.tap(at.x, at.y);
+  const card = !!at && await p.until(`!namer.hidden && (namer.querySelector(".nm") || {textContent: ""}).textContent.includes(${JSON.stringify(at ? at.name : "")})`, 15000);
+  check("map: a tap on a name opens its place card", card, at ? `"${at.name}"` : "no name clear of the controls to tap");
+
+  // the kinds of name, as a finger reaches them; one switched off leaves the map
+  const kind = await p.ev(`NAMEBOXES.length ? NAMEBOXES[0].f.kind : null`);
+  const group = await p.ev(`(NAME_GROUPS.flatMap(g => g[1]).find(r => r[2].includes(${JSON.stringify(kind)})) || [])[0]`);
+  const opened = await p.click("#lcard") && await p.click("#namesCaret") && await p.until(`getComputedStyle(namesMenu).display !== "none"`, 3000);
+  const off = opened && !!group && await p.click(`#namesMenu .frow[data-group="${group}"]`)
+    && await p.until(`NAMEVIEW.scale === V.scale && !NAMEBOXES.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
+  check("map: the names flyout opens on its caret and its switch takes a kind off", off, `${kind} in "${group}"${opened ? "" : ", flyout never opened"}`);
+  await p.done("map");
+}
+
+async function portals() {
+  const p = await open("/portals.html");
+  const built = await p.until(`HUBS.length && LIST.length && SPOKES.length`);
+  const h = await p.ev(`({hubs: HUBS.length, panels: document.querySelectorAll("#net .node.hub").length})`) || {};
+  check("portals: builds its hubs, a panel each", built && h.hubs > 0 && h.panels === h.hubs, `${h.hubs} hubs, ${h.panels} panels`);
+  // tagged, with no twin standing: it gets one dial line, to a hub not its own
+  const d = await p.ev(`(() => {
+    const ids = new Set(LIST.map(q => q.id));
+    const loose = LIST.filter(q => q.name && !(q.to && q.to !== q.id && ids.has(q.to)));
+    const own = q => HUBS.find(h => h.portals.includes(q));
+    const wrong = loose.filter(q => SPOKES.filter(s => s.kind === "dial" && s.target === q.id).length !== (HUBS.some(h => h !== own(q)) ? 1 : 0));
+    return {loose: loose.length, wrong: wrong.map(q => q.name)}; })()`);
+  check("portals: one dashed spoke for each tagged portal standing unlinked", built && d && !d.wrong.length,
+        d ? `${d.loose} standing unlinked` + (d.wrong.length ? `; wrong: ${d.wrong.join(", ")}` : "") : "");
+  await p.done("portals");
+}
+
+async function players() {
+  const want = (await (await fetch(BASE + "/stats/players")).json()).players.length;
+  const p = await open("/players.html");
+  const loaded = await p.until(`LOADED`);
+  const got = await p.ev(`document.querySelectorAll("#list .cards > .card").length`);
+  check("players: a card per player", loaded && got === want, `${got} cards for ${want} players`);
+  await p.done("players");
+}
+
+// the 3D page at the world's start, which any played world has walked; WebGL in a
+// headless Chrome wants --use-angle=swiftshader --enable-unsafe-swiftshader
+async function view3d() {
+  const c = await (await fetch(BASE + "/config")).json();
+  const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
+  const p = await open(`/view.html#at=${Math.round(x)},${Math.round(z)}`);
+  const status = `document.getElementById("status").textContent`;
+  const ground = await p.until(`/[1-9]\\d* chunks? of ground/.test(${status})`, 60000);
+  check("3d: stands on the walked ground at the start", ground, await p.ev(status));
+  const things = ground && await p.until(`/[1-9][\\d,]* objects/.test(${status})`, 30000);
+  check("3d: stands the world's objects on it", things, await p.ev(status));
+  await p.done("3d");
+}
+
+async function plan() {
+  const p = await open("/plan.html");
+  const ok = await p.until(`RASTER.ready("base") && RASTER.ready("fog") && PIECES_ALL && PIECES_ALL.length`);
+  check("plan: loads the world and its builds", ok, `${await p.ev("PIECES_ALL && PIECES_ALL.length")} pieces`);
+  await p.done("plan");
+}
+
+for (const page of [map, view3d, portals, players, plan]) {
+  try { await page(); } catch (e) { check(`${page.name}: runs`, false, e.message); }
+}
+process.exit(failed ? 1 : 0);

@@ -189,6 +189,9 @@ namespace WebMap
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
 
+        // for the tests (WebMap.Tests): the pin logic without a listening socket or a timer
+        internal MapDataServer(bool forTests) { }
+
         public MapDataServer()
         {
             __instance = this;
@@ -661,6 +664,25 @@ namespace WebMap
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
                     return true;
+                case "/settings":
+                    // The settings an admin changes from the site. The Worker checks the
+                    // Discord role and says so in X-Admin; the shared token guards both.
+                    {
+                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
+                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        if (req.HttpMethod != "POST") { Answer(res, 200, Settings.Json()); return true; }
+                        string body;
+                        using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) body = sr.ReadToEnd();
+                        string who = req.Headers["X-User"] ?? "";
+                        try { who = Uri.UnescapeDataString(who); } catch { }
+                        string log = null; bool restart = false;
+                        string err = Features.ParseBody(body, out string key, out string value, "key", "value")
+                            ? Settings.Set(key, value, who, out log, out restart) : "expected {\"key\":..,\"value\":..}";
+                        Answer(res, err == null ? 200 : 400, err == null
+                            ? "{\"ok\":true,\"restart\":" + (restart ? "true" : "false") + ",\"log\":\"" + JsonEscape(log ?? "") + "\",\"settings\":" + Settings.Json() + "}"
+                            : "{\"error\":\"" + JsonEscape(err) + "\"}");
+                        return true;
+                    }
                 case "/at":
                     // what is at a spot, for a click on the map; nothing for unwalked ground
                     {
@@ -691,10 +713,11 @@ namespace WebMap
                     // once it has seen a signed-in Discord member.
                     {
                         if (!SiteWrite(req, res, out string body, out string who)) return true;
+                        string log = null;
                         string err = Features.ParseBody(body, out string id, out string name)
-                            ? Features.SetName(id, name, who) : "expected {\"id\":..,\"name\":..}";
+                            ? Features.SetName(id, name, who, out log) : "expected {\"id\":..,\"name\":..}";
                         Answer(res, err == null ? 200 : 400, err == null
-                            ? "{\"ok\":true,\"rev\":" + Features.Rev + "}"
+                            ? "{\"ok\":true,\"rev\":" + Features.Rev + ",\"log\":\"" + JsonEscape(log ?? "") + "\"}"
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
                         return true;
                     }
@@ -739,9 +762,9 @@ namespace WebMap
                     if (req.HttpMethod == "POST")
                     {
                         if (!SiteWrite(req, res, out string body, out string who)) return true;
-                        string err = WritePin(body, who, out string pinId);
+                        string err = WritePin(body, who, out string pinId, out string log);
                         Answer(res, err == null ? 200 : 400, err == null
-                            ? "{\"ok\":true,\"id\":\"" + JsonEscape(pinId) + "\",\"pins\":" + PinsJson() + "}"
+                            ? "{\"ok\":true,\"id\":\"" + JsonEscape(pinId) + "\",\"pins\":" + PinsJson() + ",\"log\":\"" + JsonEscape(log ?? "") + "\"}"
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
                         return true;
                     }
@@ -850,8 +873,10 @@ namespace WebMap
         public const string SitePlacer = "web";
         private static readonly System.Text.RegularExpressions.Regex Unprintable =
             new System.Text.RegularExpressions.Regex(@"[\p{Cc}\p{Cf}]");
-        public string WritePin(string body, string who, out string id)
+        public string WritePin(string body, string who, out string id) => WritePin(body, who, out id, out _);
+        public string WritePin(string body, string who, out string id, out string log)
         {
+            log = null;
             string op = Body.Str(body, "op");
             id = Body.Str(body, "id");
             // the owner is a CSV field, so no commas; 32 is Discord's own cap on a name
@@ -916,18 +941,18 @@ namespace WebMap
             catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: pin not broadcast: " + e.Message); }
 
             if (op == "add")
-                ZLog.Log($"WebMap: {who} pinned a {now[2]} '{PinText(now)}' at {sx}, {sz} from the site");
+                log = $"{who} pinned a {now[2]} '{PinText(now)}' at {sx}, {sz}";
             else if (op == "delete")
-                ZLog.Log($"WebMap: {who} took up {was[3]}'s {was[2]} pin '{PinText(was)}' from the site");
+                log = $"{who} took up {was[3]}'s {was[2]} pin '{PinText(was)}'";
             else
             {
                 var what = new List<string>();
                 if (now[2] != was[2]) what.Add("a " + now[2]);
                 if (PinText(now) != PinText(was)) what.Add($"'{PinText(now)}'");
                 if (now[4] != was[4] || now[5] != was[5]) what.Add($"moved to {now[4]}, {now[5]}");
-                ZLog.Log($"WebMap: {who} changed {was[3]}'s pin '{PinText(was)}' from the site: "
-                         + (what.Count > 0 ? string.Join(", ", what) : "no change"));
+                log = $"{who} changed {was[3]}'s pin '{PinText(was)}': " + (what.Count > 0 ? string.Join(", ", what) : "no change");
             }
+            ZLog.Log("WebMap: " + log + " from the site");
             return null;
         }
         // under lock (pins); a line is placer,id,type,owner,x,z,text

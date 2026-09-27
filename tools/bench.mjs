@@ -1,7 +1,7 @@
 // Pan and zoom the map in a headless Chrome and print ms per frame, the check
 // that keeps the viewer at the screen's rate: 16.7 means it never missed one.
-// Same Chrome and proxy as shoot.mjs:
-//   node tools/bench.mjs http://127.0.0.1:8765 9333
+// Same Chrome and proxy as check.mjs:
+//   node tools/bench.mjs http://127.0.0.1:8766 9334
 const [BASE, PORT] = process.argv.slice(2);
 const tab = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
 const ws = new WebSocket(tab.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
@@ -16,8 +16,7 @@ await send("Page.navigate", { url: BASE + "/" }); await new Promise(r => setTime
 // the world fitted, then the thick of the builds at a base's zoom
 const views = {
   world: "fitExplored(true);",
-  base: "{ const c = PIECES.reduce((a, p) => [a[0] + p.px/PIECES.length, a[1] + p.py/PIECES.length], [0, 0]);"
-      + " scale = 8; tx = stage.clientWidth/2 - c[0]*scale; ty = stage.clientHeight/2 - c[1]*scale; apply(); }",
+  base: "{ const c = PIECES.reduce((a, p) => [a[0] + p.px/PIECES.length, a[1] + p.py/PIECES.length], [0, 0]); V.centre(c[0], c[1], 8); }",
 };
 const ms = (setup, step) => ev(`(async () => {
   ${setup}
@@ -28,8 +27,8 @@ const ms = (setup, step) => ev(`(async () => {
 })()`);
 console.log(await ev("({pieces: PIECES && PIECES.length, markers: document.querySelectorAll('#markers .marker').length})"));
 for (const [name, setup] of Object.entries(views)) {
-  const pan = await ms(setup, "tx += (n % 2 ? 7 : -7); ty += 3; apply()");
-  const zoom = await ms(setup, "zoomAt(stage.clientWidth/2, stage.clientHeight/2, n < 30 ? 1.03 : 1/1.03)");
+  const pan = await ms(setup, "V.tx += (n % 2 ? 7 : -7); V.ty += 3; V.request()");
+  const zoom = await ms(setup, "V.zoomBy(n < 30 ? 1.03 : 1/1.03)");
   console.log(name, { pan, zoom });
 }
 if (errors.length) console.log("errors", errors);
