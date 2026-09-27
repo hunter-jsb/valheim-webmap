@@ -1031,6 +1031,7 @@ namespace WebMap
                     float hp = -1f, maxHp = -1f;
                     try { maxHp = z.GetFloat(ZDOVars.s_maxHealth, -1f); hp = z.GetFloat(ZDOVars.s_health, -1f); } catch { }
                     Stats.Seen(player.m_playerName, pid, z.GetPosition(), hp, maxHp);
+                    Gear.Sample(player.m_playerName, z, PLAYER_UPDATE_INTERVAL);
                     Trails.Mark(pid != 0L ? pid : player.m_playerName.GetHashCode(), z.GetPosition());
                 }
                 Stats.MaybeSave();

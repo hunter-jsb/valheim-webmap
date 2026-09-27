@@ -99,7 +99,9 @@ namespace WebMap
                     hit.Deserialize(ref p);
                     if (hit.m_attacker.IsNone()) return;
                     ZDO a = ZDOMan.instance.GetZDO(hit.m_attacker);   // a creature's has no player name
-                    Deeds.Hit(rpcData.m_targetZDO, a != null ? a.GetString(ZDOVars.s_playerName, "") : "", now);
+                    string who = a != null ? a.GetString(ZDOVars.s_playerName, "") : "";
+                    Deeds.Hit(rpcData.m_targetZDO, who, now);
+                    if (h == DamageHash && who.Length > 0) Gear.Struck(who, rpcData.m_targetZDO, hit);
                 }
                 else
                 {
@@ -155,7 +157,7 @@ namespace WebMap
         }
 
         // -1 for what counts as nothing: players, logs, stumps, pieces, everything else
-        private static int KindOf(int prefab)
+        internal static int KindOf(int prefab)
         {
             if (kinds.TryGetValue(prefab, out int k)) return k;
             if (ZNetScene.instance == null) return -1;

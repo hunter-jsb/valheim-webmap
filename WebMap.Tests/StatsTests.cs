@@ -120,9 +120,12 @@ namespace WebMap.Tests
             Stats.BeginSweep(); Stats.ObserveGrave(A, 4000f, 80f); Stats.PublishSweep();
             Stats.ObserveKeys(new[] { "defeated_eikthyr" });
             Stats.Deed(A, Deeds.Kind.Kill); Stats.Deed(A, Deeds.Kind.Tree); Stats.Deed(A, Deeds.Kind.Rock); Stats.Deed(A, Deeds.Kind.Rock);
+            Stats.Wore(A, Gear.Hand.Axe, Gear.Hand.None, true, Gear.Armor.Heavy, new[] { "Battleaxe", null, "ArmorIronChest", null, "HelmetIron", null }, 1f);
+            Gear.Struck(A, false, Skills.SkillType.Knives, 6f, true);
             string deaths = Stats.DeathsJson();
             var before = Doc();
             Assert.Equal(338, before.GetProperty("players")[0].GetProperty("biomes").EnumerateArray().First(b => b.Str("biome") == "Meadows").Num("m"));
+            Assert.Equal(1, before.GetProperty("players")[0].GetProperty("gear").GetProperty("hand").Int("twohanded"));
 
             Stats.Save();
             Stats.Load(Dir);
@@ -138,12 +141,14 @@ namespace WebMap.Tests
             .Where(p => !Live.Contains(p.Name)).Select(p => p.Name + "=" + p.Value.GetRawText()));
 
         [Fact]
-        public void AFileFromBeforeDeedsLoadsWithNone()
+        public void AFileFromBeforeDeedsAndGearLoadsWithNone()
         {
             File.WriteAllText(Path.Combine(Dir, "stats.tsv"), "since\t100\np\t" + A + "\t3\t1\t2\t0\t120.5\t1700000000\t0\t1\t0\t0\t0\t0\t0\t0\t0\n");
             Stats.Load(Dir);
             Assert.Equal(3, Me().Int("joins"));
             Assert.Equal(new[] { 0, 0, 0 }, new[] { "kills", "trees", "rocks" }.Select(k => Me().Int(k)));
+            Assert.Equal("{\"hand\":{},\"armor\":{},\"worn\":{},\"hits\":{\"melee\":0,\"ranged\":0,\"magic\":0,\"backstab\":0}}",
+                         Me().GetProperty("gear").GetRawText());
         }
 
         [Fact]

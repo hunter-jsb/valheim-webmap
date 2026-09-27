@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+* What each player holds and wears, for the site to tell an archer from a builder: `gear`
+  in `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). Once a
+  second, alive and out of bed, the equipment the player's ZDO syncs adds a second to the
+  family in each hand (`bow`, `sword`, `hammer`, `pickaxe` ... `none`, plus `twohanded`
+  for a two-handed melee weapon) and to the chest's weight class (`light`, `medium`,
+  `heavy` by movement penalty, `mage` for eitr-weave), all sorted by the item's own data
+  so new gear sorts itself; `worn` is the latest set by prefab name. Hits on creatures
+  that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
+  top when the creature was not yet alerted -- partial, since a hit on a creature the
+  hitter's own game runs never reaches the server.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.

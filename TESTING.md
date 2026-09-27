@@ -54,6 +54,9 @@ guards against; there is one per failure, not one per branch.
    sea, the save and a file from before kills. **Deeds**' crediting (`Hit`, `AreaBroken`,
    `Gone`): **dotnet test** -- by kind, the window, the last hitter, the owner standing in.
    Reading hits off the wire and classifying what fell: **nothing**; only a running server.
+   **Gear**: an item's data to a hand family and a chest class, a second's tally, the worn
+   set, hits by kind and backstab, the save and an older file: **dotnet test**. Reading the
+   equipment off a player's ZDO and the prefab behind a hash: **nothing**.
    Two faults found:
    - Mistlands is biome class 10, one past `Stats.Biomes = 10`, so metres and deaths there
      are dropped. `AWalkInTheMistlandsCounts` is written and skipped; `Biomes = 11` passes it.
