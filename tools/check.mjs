@@ -116,8 +116,13 @@ async function players() {
   const want = (await (await fetch(BASE + "/stats/players")).json()).players.length;
   const p = await open("/players.html");
   const loaded = await p.until(`LOADED`);
-  const got = await p.ev(`document.querySelectorAll("#list .cards > .card").length`);
-  check("players: a card per player", loaded && got === want, `${got} cards for ${want} players`);
+  const got = await p.ev(`document.querySelectorAll("#list .row").length`);
+  check("players: a row per player", loaded && got === want, `${got} rows for ${want} players`);
+  // a row opens the player's page beside the roster
+  const name = await p.ev(`(() => { const b = document.querySelector("#list .row"); if(!b) return null; b.click(); return b.dataset.name; })()`);
+  const opened = name && await p.until(`app.classList.contains("picked") && document.querySelector("#dhead h2")`);   // the hash carries the pick, a tick later
+  const t = opened ? await p.ev(`({shown: !detail.hidden, head: document.querySelector("#dhead h2").textContent.trim(), figs: document.querySelectorAll("#dbody .fig").length})`) : null;
+  check("players: a row opens the player's page", loaded && (!name || (opened && t.shown && t.head === name && t.figs === 12)), name ? `${name}, ${t ? t.figs : 0} figures` : "no rows");
   await p.done("players");
 }
 

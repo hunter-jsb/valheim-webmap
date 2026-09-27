@@ -14,33 +14,72 @@
 <style>
   body{min-height:100%}
 
-  /* ---------- roster ---------- */
-  .wrap{max-width:900px;margin:0 auto;padding:1.4rem .9rem 3rem}
-  .sorts{display:flex;flex-wrap:wrap;gap:.4rem;margin:1.1rem 0 .9rem;align-items:center}
-  .sorts .lb{margin-right:.1rem}
-  .cards{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
-  .chead{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
-  .card.on .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
-  .chead .nm{font-size:.95rem;font-weight:700;color:var(--bright);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .chead .seen{margin-left:auto;font-size:.72rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
-  .card.on .chead .seen{color:var(--ok)}
-  /* ten figures have to stay readable on a 400px phone: four to a row there, more when there is room */
-  .figs{margin-top:.7rem;display:grid;gap:.5rem .4rem;grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
-  .figs .v{font-size:1.02rem;margin-top:0}
+  /* ---------- the roster, and the one picked ----------
+     The roster stands alone in the middle until a player is picked; then it
+     steps to the left as a column and the player's page opens beside it. */
+  .app{align-items:stretch}
+  .roster{flex:1 1 auto;min-width:0;overflow:auto;padding:1.3rem .9rem 2.4rem;transition:flex-basis .28s ease,max-width .28s ease}
+  .roster > *{max-width:660px;margin-left:auto;margin-right:auto}
+  .app.picked .roster{flex:0 0 372px;max-width:372px;background:var(--bg-2);border-right:1px solid var(--line);padding:1rem .8rem 2rem}
+  .app.picked .roster > *{max-width:none}
+  .detail{flex:1 1 auto;min-width:0;overflow:auto;padding:1.3rem 1.5rem 2.4rem}
+  .detail[hidden]{display:none}
+  .detail > *{max-width:820px}
+
+  /* the tools: two dropdowns, side by side */
+  .tools{display:flex;gap:.6rem;margin-top:.9rem}
+  .sel{flex:1 1 0;display:grid;gap:.25rem;min-width:0}
+  .sel .field{height:32px;padding:0 .5rem;font-size:.8rem}
+
+  /* the world's bosses in the order they fell; the ones still standing are dim */
+  .bosses{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.9rem}
+  .boss{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;width:60px;padding:.4rem .15rem .3rem;
+    border:1px solid transparent;border-radius:var(--r)}
+  .boss svg{width:28px;height:28px;overflow:visible;filter:var(--shadow-ink)}
+  .boss .bn{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
+  .boss.down{border-color:var(--line);background:var(--hair)}
+  .boss.down .bn{color:var(--gold)}
+  .boss.up{opacity:.38;filter:grayscale(.7)}
+  .boss .n{position:absolute;top:1px;right:5px;font-size:.58rem;font-weight:600;color:var(--gold)}
+
+  /* a row: who, when, and the four figures people compare */
+  .rows{display:grid;gap:.4rem;margin-top:.9rem}
+  .row{display:block;width:100%;text-align:left;color:inherit;font:inherit;padding:.55rem .7rem .6rem;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
+  .row:hover{border-color:var(--gold)}
+  .row.pick{border-color:var(--gold);background:var(--card-2)}
+  .row.ok{border-color:var(--ok-line)}
+  .row.ok.pick{border-color:var(--gold)}
+  .row .rh{display:flex;align-items:center;gap:.45rem;min-width:0}
+  .row .nm{font-weight:700;color:var(--bright);font-size:.95rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .seen{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  .row.ok .seen{color:var(--ok)}
+  .row .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin-top:.4rem}
+  .mini .m{display:grid;min-width:0}
+  .mini .v{font-size:.92rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.2}
+  .mini .k{font-size:.58rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .mini .nil .v{color:var(--nil);font-weight:600}
+  .mini .warn .v{color:var(--gold)}
+
+  /* the player's page */
+  .dhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+  .dhead .back{display:none;height:30px;padding:0 .5rem;font-size:.76rem}
+  .dhead h2{font-size:1.4rem;font-weight:700;color:var(--bright);display:flex;align-items:center;gap:.55rem;min-width:0}
+  .dhead .state{font-size:.78rem;color:var(--muted)}
+  .dhead.ok .state{color:var(--ok)}
+  .dhead .state i{font-style:normal;color:var(--muted)}
+  .dhead .links{margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap}
+  .dhead .links .btn{height:30px;padding:0 .6rem;font-size:.74rem}
+  .figs{margin-top:1.1rem;display:grid;gap:.6rem .5rem;grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}
+  .figs .v{font-size:1.15rem;margin-top:0}
   .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
   .fig.nil .v{color:var(--nil);font-weight:600}
   .fig.warn .v,.fig.warn .k{color:var(--gold)}
-  /* the world's bosses, in the order they fell; the ones still standing are dim */
-  .bosses{display:flex;flex-wrap:wrap;gap:.35rem;margin:.9rem 0 0}
-  .bosses .chip{cursor:default}
-  .bosses .chip.down{border-color:var(--gold);color:var(--gold)}
-  .bosses .chip.up{color:var(--faint)}
-  .bosses .chip .n{margin-right:.35rem;color:var(--faint);font-weight:400}
   /* the danger rows: a biome, how far you walked there, how often it killed you */
-  .sect{margin-top:.75rem;padding-top:.6rem;border-top:1px solid var(--line)}
+  .sect{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--line)}
   .sect .eyebrow{display:flex;justify-content:space-between;align-items:baseline}
   .sect .eyebrow a{font-weight:500;letter-spacing:0;text-transform:none;font-size:.68rem}
-  .biomes{display:grid;grid-template-columns:minmax(4.6rem,auto) 1fr auto auto;gap:.3rem .55rem;align-items:center;margin-top:.45rem;font-size:.74rem}
+  .biomes{display:grid;grid-template-columns:minmax(5rem,auto) 1fr auto auto;gap:.35rem .6rem;align-items:center;margin-top:.5rem;font-size:.76rem}
   .biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
   .biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
   .biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
@@ -48,68 +87,95 @@
   .biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
   .biomes .dx b{color:var(--off);font-weight:600}
   .biomes .dx.safe b{color:var(--ok)}
-  .line{font-size:.76rem;color:var(--muted);margin-top:.35rem;line-height:1.5}
+  .line{font-size:.78rem;color:var(--muted);margin-top:.4rem;line-height:1.5}
   .line b{color:var(--ink-2);font-weight:600}
   .line a{white-space:nowrap}
   .line .bad{color:var(--off)}
+  .how{margin-top:1.4rem}
+  .how summary{cursor:pointer;list-style:none}
+  .how summary::before{content:"\25B8";display:inline-block;width:1em;color:var(--faint)}
+  .how[open] summary::before{content:"\25BE"}
   .how ul{list-style:none;margin-top:.5rem;display:grid;gap:.22rem;font-size:.73rem;color:var(--muted)}
   .how b{color:var(--ink-2);font-weight:600}
   .foot{border-top:0;padding-top:0;margin-top:1.2rem}
+
+  /* a phone shows one or the other; the page scrolls as a whole */
+  @media (max-width:760px){
+    .app{display:block;height:auto}
+    .roster,.detail{overflow:visible;padding:1rem .9rem 2rem}
+    .app.picked .roster{display:none}
+    .dhead .back{display:inline-flex}
+    .row .mini{gap:.3rem}
+  }
 </style>
 </head>
 <body>
 
 <nav class="nav" data-page="players"></nav>
 <script>MapCore.nav();</script>
+<svg id="icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 
-<main class="wrap">
-  <h1 class="title">Players</h1>
-  <p class="sub" id="count">counting…</p>
-  <p class="note bad" id="note"></p>
-
-  <div class="bosses" id="bosses" hidden></div>
-  <div class="sorts" id="sorts">
-    <span class="lb eyebrow">Sort</span>
-    <button class="chip on" data-sort="seen">last seen</button>
-    <button class="chip" data-sort="deaths">deaths</button>
-    <button class="chip" data-sort="rate">safest</button>
-    <button class="chip" data-sort="dist">distance</button>
-    <button class="chip" data-sort="streak">best streak</button>
-    <button class="chip" data-sort="calls">close calls</button>
-    <button class="chip" data-sort="pieces">pieces</button>
-  </div>
-
-  <div id="list"></div>
-
-  <section class="how section">
-    <h2 class="eyebrow">How these are counted</h2>
-    <ul>
-      <li><b>Deaths</b> — every time you have died in this world.</li>
-      <li><b>Joins</b> — sessions started, one per connection to the server.</li>
-      <li><b>Chat</b> — lines you have said in chat.</li>
-      <li><b>km</b> — metres covered on foot and by boat, with teleports excluded.</li>
-      <li><b>Hops</b> — portal trips and respawns: jumps over 100 m between one-second samples.</li>
-      <li><b>Pins</b> — map pins you have placed.</li>
-      <li><b>Pieces</b>, <b>portals</b> and <b>ships</b> — what is standing in the world right now with your name on it.</li>
-      <li><b>Graves</b> — your tombstones still out there holding gear.</li>
-      <li><b>Deaths per km</b> — deaths divided by km walked, overall and by the biome you were in: the biome is read off the ground under you every second.</li>
-      <li><b>Close calls</b> — health under a tenth and back over three tenths without dying; the lowest shows the closest anyone came.</li>
-      <li><b>Streak</b> — the longest walk between two deaths, and how far you have come since the last one.</li>
-      <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
-      <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
-      <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
-      <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
-    </ul>
+<div class="app" id="app">
+  <section class="roster" id="roster">
+    <h1 class="title">Players</h1>
+    <p class="sub" id="count">counting…</p>
+    <p class="note bad" id="note"></p>
+    <div class="bosses" id="bosses" hidden></div>
+    <div class="tools">
+      <label class="sel"><span class="eyebrow">Sort</span>
+        <select class="field" id="sort">
+          <option value="seen">last seen</option>
+          <option value="deaths">deaths</option>
+          <option value="rate">safest</option>
+          <option value="dist">distance</option>
+          <option value="streak">best streak</option>
+          <option value="calls">close calls</option>
+          <option value="pieces">pieces</option>
+        </select></label>
+      <label class="sel"><span class="eyebrow">Show</span>
+        <select class="field" id="show">
+          <option value="all">everyone</option>
+          <option value="online">online now</option>
+          <option value="week">seen this week</option>
+          <option value="graves">gear still out</option>
+        </select></label>
+    </div>
+    <div class="rows" id="list"></div>
+    <details class="how">
+      <summary class="eyebrow">How these are counted</summary>
+      <ul>
+        <li><b>Deaths</b> — every time you have died in this world.</li>
+        <li><b>Joins</b> — sessions started, one per connection to the server.</li>
+        <li><b>Chat</b> — lines you have said in chat.</li>
+        <li><b>km</b> — metres covered on foot and by boat, with teleports excluded.</li>
+        <li><b>Hops</b> — portal trips and respawns: jumps over 100 m between one-second samples.</li>
+        <li><b>Pins</b> — map pins you have placed.</li>
+        <li><b>Pieces</b>, <b>portals</b> and <b>ships</b> — what is standing in the world right now with your name on it.</li>
+        <li><b>Graves</b> — your tombstones still out there holding gear.</li>
+        <li><b>Deaths per km</b> — deaths divided by km walked, overall and by the biome you were in: the biome is read off the ground under you every second.</li>
+        <li><b>Close calls</b> — health under a tenth and back over three tenths without dying; the lowest shows the closest anyone came.</li>
+        <li><b>Streak</b> — the longest walk between two deaths, and how far you have come since the last one.</li>
+        <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
+        <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
+        <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
+        <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
+      </ul>
+    </details>
+    <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
   </section>
 
-  <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
-</main>
+  <section class="detail" id="detail" hidden>
+    <div class="dhead" id="dhead"></div>
+    <div id="dbody"></div>
+  </section>
+</div>
 
 <script>
 const API = MapCore.cfg.api;
 // the brand is the world's name, which only the config carries
 MapCore.fetchConfig(API).catch(() => {});
-let SORT = "seen", LAST = "", LOADED = false, DATA = [], SINCE = 0;
+let SORT = "seen", SHOW = "all", PICK = null, LAST = "", LOADED = false, DATA = [], SINCE = 0;
+let DEATHS = [], ONLINE = [], BOSSES = null;
 
 const esc = MapCore.esc, plural = MapCore.plural;
 function num(v){ return Number.isFinite(+v) ? +v : 0; }
@@ -122,14 +188,10 @@ function ago(secs){
   if(d < 172800) return Math.round(d/3600) + " h ago";
   return Math.round(d/86400) + " d ago";
 }
-
 // last_seen 0 is a name the sweep found on a grave or a build without ever
 // seeing its owner online: no session behind it, so no elapsed time to show.
 function seen(t){ return t ? "last seen " + ago(t) : "not seen since the tally began"; }
 
-function fig(v, k, cls, title){
-  return `<div class="stat fig${cls ? " " + cls : ""}"${title ? ` title="${esc(title)}"` : ""}><div class="v">${v}</div><div class="k">${k}</div></div>`;
-}
 const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
 // deaths per km reads as "1 per N km": one death every so far, which is what people say
 const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
@@ -139,6 +201,109 @@ const INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#caa27b"
              "Mistlands": "#c4a4dc", "Ashlands": "#e6907e", "Deep North": "#dde8f2", "Ocean": "#9fd0e6"};
 const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
 
+// ---------- the bosses ----------
+// Silhouettes of our own in the marker icons' style: a stag, the tree, the heap,
+// the dragon, the crowned skull, the queen, the burning one, the frost wyrm.
+const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader", writhan: "Writhan"};
+const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader", "writhan"];
+const NOT_BOSS = new Set(["serpent"]);     // a sea serpent sets a key too, but it is prey
+const BOSS_ICON = {
+  "boss-eikthyr":[["M10.4 11.2 7.4 8.2 5.6 9.8 6.6 6.6 3.8 4.2 7.6 5 7 1.6 9.6 5.8 11.6 8.8z","#d9c7a6"],
+                  ["M13.6 11.2 16.6 8.2 18.4 9.8 17.4 6.6 20.2 4.2 16.4 5 17 1.6 14.4 5.8 12.4 8.8z","#d9c7a6"],
+                  ["M12 8.6 8.4 12.4 9.4 21.4h5.2l1-9z","#8a6a48"],
+                  ["M10.2 14a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M12 14a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#14130e",1]],
+  "boss-gdking":[["M12 1.8C6.4 1.8 3.2 6.4 4.2 11.4 2.2 13.6 4.2 17.8 8.2 17V22h7.6v-5c4 .8 6-3.4 4-5.6 1-5-2.2-9.6-7.8-9.6z","#6f8f57"],
+                 ["M10.2 14.4h3.6V22h-3.6z","#4a5a38",1],
+                 ["M8.6 10.2a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0M13.2 10.2a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0","#e8b45f",1]],
+  "boss-bonemass":[["M12 3.4C5.4 3.4 3 9.4 3.8 14.6 4.2 19 8 21.4 12 21.4s7.8-2.4 8.2-6.8C21 9.4 18.6 3.4 12 3.4z","#7ea24a"],
+                   ["M7.6 11a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0M13 11a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0","#14130e",1],
+                   ["M8.8 15.2h6.4v2.2H8.8z","#14130e",1]],
+  "boss-dragon":[["M3.4 15.2C5.4 9.4 9.6 7 15 7l6.4 3.2-6 1.8 2 4.2-5.4 2.2-4-1.4z","#c9d6e2"],
+                 ["M12.6 7.2 14.2 2 16.6 7z","#8fa3b5"],
+                 ["M14.2 10.4a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#e8b45f",1]],
+  "boss-goblinking":[["M5 7.2 7.6 3.4 10 7 12 2.4 14 7l2.4-3.6L19 7.2z","#e8b45f"],
+                     ["M12 6C7.4 6 5 9.4 5 13.2c0 2.6 1.4 4.6 3 5.6V22h8v-3.2c1.6-1 3-3 3-5.6C19 9.4 16.6 6 12 6z","#d9c7a6"],
+                     ["M7.6 12.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0M13 12.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0","#14130e",1],
+                     ["M12 15.2 13.2 17.4h-2.4z","#14130e",1]],
+  "boss-queen":[["M9.4 5.4 6.2 1.4h2l2.6 3.6zM14.6 5.4l3.2-4h-2l-2.6 3.6z","#c4a4dc"],
+                ["M12 4.2C7 4.2 5 8.2 5 12.2c0 4.8 3 8 7 8s7-3.2 7-8c0-4-2-8-7-8z","#6b5d8f"],
+                ["M6.2 16 2 21.4 8.4 19.2zM17.8 16l4.2 5.4-6.4-2.2z","#c4a4dc"],
+                ["M7.8 10.6a1.6 2.2 0 1 0 3.2 0a1.6 2.2 0 1 0-3.2 0M13 10.6a1.6 2.2 0 1 0 3.2 0a1.6 2.2 0 1 0-3.2 0","#f2c46d",1]],
+  "boss-fader":[["M12 1.6c2 4.2 6.2 6.2 6.2 11.6 0 4.8-2.8 8-6.2 8s-6.2-3.2-6.2-8c0-5.4 4.2-7.4 6.2-11.6z","#ef8b3f"],
+                ["M12 9.2c1.4 2.8 3.6 3.8 3.6 6.8 0 2.4-1.6 4-3.6 4s-3.6-1.6-3.6-4c0-3 2.2-4 3.6-6.8z","#f8cf72",1],
+                ["M9.9 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M12.3 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#14130e",1]],
+  "boss-writhan":[["M2.2 12.4 8.2 7.4 15 6.4c4 0 7 3 7 6.8l-6-1.2-2 5-6-1z","#bfd6e6"],
+                  ["M8.8 7.4 7.6 1.8 11.8 6.6zM14.2 6.4 15 1.2l2.4 5.2z","#8aa5b8"],
+                  ["M15.2 9.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#7ad6ff",1]],
+  "boss-other":[["M12 2.4a9.6 9.6 0 1 0 0 19.2a9.6 9.6 0 1 0 0-19.2z","#4a5548"],
+                ["M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z","#0f1310",1],
+                ["M12 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z","#e8b45f",1]],
+};
+document.getElementById("icons").innerHTML = MapCore.spriteSVG(BOSS_ICON);
+function renderBosses(list){
+  const el = document.getElementById("bosses");
+  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => !NOT_BOSS.has(k));
+  const keys = BOSS_ORDER.concat(down.filter(k => !BOSS_ORDER.includes(k)));
+  el.hidden = !list;
+  const html = keys.map(k => {
+    const i = down.indexOf(k), name = BOSS[k] || k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const ic = BOSS_ICON["boss-" + k] ? "boss-" + k : "boss-other";
+    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${i + 1}${["st", "nd", "rd"][i] || "th"}` : "still standing"}">`
+      + `${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${ic}"></use></svg><span class="bn">${esc(name)}</span></span>`;
+  }).join("");
+  if(el.innerHTML !== html) el.innerHTML = html;
+}
+
+// ---------- the roster ----------
+const KEYS = {
+  seen: p => num(p.last_seen),
+  deaths: p => num(p.deaths),
+  rate: p => num(p.dist_m) >= 1000 ? -rate(p) : -1e9,   // safest: fewest deaths per km, among those who have walked
+  dist: p => num(p.dist_m),
+  streak: p => num((p.streak_m || {}).best),
+  calls: p => num(p.close_calls),
+  pieces: p => num(p.pieces),
+};
+const SHOWS = {
+  all: () => true,
+  online: p => !!p.online,
+  week: p => !!p.online || num(p.last_seen) > Date.now()/1000 - 7*86400,
+  graves: p => num(p.graves) > 0 || num((p.runs || {}).open) > 0,
+};
+const mini = (v, k, cls) => `<span class="m${cls ? " " + cls : ""}"><span class="v">${v}</span><span class="k">${k}</span></span>`;
+function row(p){
+  const on = !!p.online, d = num(p.deaths), m = num(p.dist_m);
+  return `<button class="row${on ? " ok" : ""}${PICK === p.name ? " pick" : ""}" type="button" data-name="${esc(p.name || "")}">`
+    + `<span class="rh"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>`
+    + `<span class="seen">${on ? "online now" : seen(num(p.last_seen))}</span></span>`
+    + `<span class="mini">` + mini(d, "deaths", d ? "" : "nil") + mini(km(m), "km", m ? "" : "nil")
+    + mini(per(d, m).replace("1 per ", ""), "per death", d && m ? "" : "nil")
+    + mini(num(p.pieces), "pieces", num(p.pieces) ? "" : "nil") + `</span></button>`;
+}
+function render(){
+  const key = KEYS[SORT] || KEYS.seen, show = SHOWS[SHOW] || SHOWS.all;
+  const rows = DATA.filter(show).sort((a, b) =>
+    key(b) - key(a) || num(b.last_seen) - num(a.last_seen)
+    || String(a.name || "").localeCompare(String(b.name || "")));
+
+  const on = DATA.filter(p => p.online).length;
+  document.getElementById("count").innerHTML = `<b>${plural(DATA.length, "player")}</b>`
+    + (on ? ` · ${on} online now` : "")
+    + (SINCE ? ` · tallied since ${new Date(SINCE*1000).toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"})}` : "");
+  renderBosses(BOSSES);
+
+  const html = rows.length ? rows.map(row).join("")
+    : DATA.length ? `<p class="empty">Nobody fits that. Show everyone instead.</p>`
+    : `<p class="empty">No tallies yet — nobody has been seen since the count started.</p>`;
+  const el = document.getElementById("list");
+  if(html !== LAST){ el.innerHTML = html; LAST = html; }   // untouched DOM, so no flicker on the minute
+  if(PICK) renderDetail();
+}
+
+// ---------- the one picked ----------
+function fig(v, k, cls, title){
+  return `<div class="stat fig${cls ? " " + cls : ""}"${title ? ` title="${esc(title)}"` : ""}><div class="v">${v}</div><div class="k">${k}</div></div>`;
+}
 function biomeRows(p){
   const rows = (p.biomes || []).filter(b => num(b.m) >= 500 || num(b.deaths) > 0);
   if(!rows.length) return "";
@@ -151,13 +316,27 @@ function biomeRows(p){
       + `<span class="dx${num(b.deaths) ? "" : " safe"}"><b>${num(b.deaths) ? "× " + num(b.deaths) : "✓"}</b> ${num(b.deaths) ? per(b.deaths, b.m) : ""}</span>`).join("")
     + `</div></div>`;
 }
-
-function card(p){
+let DLAST = "", WHERE = null;    // WHERE: {name, text} once the ground under an online player has answered
+function renderDetail(){
+  const p = DATA.find(x => x.name === PICK);
+  const head = document.getElementById("dhead"), body = document.getElementById("dbody");
+  if(!p){ head.innerHTML = `<button class="btn quiet back" id="back">&larr; Players</button><h2>${esc(PICK)}</h2>`; body.innerHTML = `<p class="empty">No tally under that name.</p>`; DLAST = ""; return; }
   const on = !!p.online, graves = num(p.graves), runs = p.runs || {}, streak = p.streak_m || {}, runm = p.run_m || {};
   const nil = n => n ? "" : "nil";
   const calls = num(p.close_calls), lowest = num(p.lowest_hp);
   const last = (DEATHS.filter(d => d.n === p.name).slice(-1))[0];
   const lastLink = last ? mapLink(p.name, `&at=${Math.round(last.x)},${Math.round(last.z)},14`) : null;
+  const here = ONLINE.find(q => q.name === p.name);
+  const where = on && WHERE && WHERE.name === p.name ? ` <i>· ${esc(WHERE.text)}</i>` : "";
+  head.className = "dhead" + (on ? " ok" : "");
+  head.innerHTML = `<button class="btn quiet back" id="back">&larr; Players</button>`
+    + `<h2><span class="dot${on ? " ok" : ""}"></span>${esc(p.name)}</h2>`
+    + `<span class="state">${on ? "online now" : seen(num(p.last_seen))}${where}</span>`
+    + `<span class="links">`
+    + (here ? `<a class="btn quiet" href="index.html#at=${Math.round(here.x)},${Math.round(here.z)},20" title="Where they stand now">On the map</a>` : "")
+    + (num(p.deaths) ? `<a class="btn quiet" href="${mapLink(p.name)}">Deaths</a>` : "")
+    + (lastLink ? `<a class="btn quiet" href="${lastLink}" title="Where they last died">Last death</a>` : "")
+    + `</span>`;
   const streakLine = streak.best != null
     ? `<div class="line"><b>Streak</b> best ${km(streak.best)} km without dying &#183; ${km(streak.now)} km since the last`
       + (lastLink ? ` (<a href="${lastLink}">where</a>)` : "") + `</div>` : "";
@@ -166,10 +345,7 @@ function card(p){
       + `${num(runs.rescued) ? ` &#183; ${num(runs.rescued)} rescued by others` : ""}`
       + `${num(runs.open) ? ` &#183; <a href="index.html#layers=grave" class="bad">${num(runs.open)} out there</a>` : ""}`
       + `${num(runm.best) ? ` &#183; longest run ${km(runm.best)} km` : ""}</div>` : "";
-  return `<div class="card${on ? " on" : ""}">`
-    + `<div class="chead"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>`
-    + `<span class="seen">${on ? "online now" : seen(num(p.last_seen))}</span></div>`
-    + `<div class="figs">`
+  const html = `<div class="figs">`
     + fig(num(p.deaths), "deaths", nil(num(p.deaths)))
     + fig(km(p.dist_m), "km", num(p.dist_m) ? "" : "nil")
     + fig(per(p.deaths, p.dist_m).replace("1 per ", ""), "km per death", num(p.deaths) && num(p.dist_m) ? "" : "nil", "one death every so many km walked")
@@ -182,54 +358,42 @@ function card(p){
     + fig(num(p.chat), "chat", nil(num(p.chat)))
     + fig(num(p.joins), "joins", nil(num(p.joins)))
     + fig(graves, graves ? "gear still out" : "graves", graves ? "warn" : "nil")
-    + `</div>`
-    + biomeRows(p) + streakLine + runLine
-    + `</div>`;
+    + `</div>` + biomeRows(p) + streakLine + runLine;
+  if(html !== DLAST){ body.innerHTML = html; DLAST = html; }
+  if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
+}
+// the ground under an online player, in the world's own names: "in Homeplains, Meadows"
+async function whereIs(name, at){
+  try{
+    const j = await MapCore.fetchJSON(API, `/at?x=${Math.round(at.x)}&z=${Math.round(at.z)}`);
+    const place = (j.here || [])[0];
+    WHERE = {name, text: place ? `in ${place.name}${j.biome && place.kind !== j.biome.toLowerCase() ? `, ${j.biome}` : ""}` : j.biome ? `in the ${j.biome}` : "at sea"};
+  }catch(e){ WHERE = {name, text: `at ${Math.round(at.x)}, ${Math.round(at.z)}`}; }
+  if(PICK === name) renderDetail();
 }
 
-const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
-const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader"];
-const NOT_BOSS = new Set(["serpent"]);     // a sea serpent sets a key too, but it is prey
-function renderBosses(list){
-  const el = document.getElementById("bosses");
-  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => !NOT_BOSS.has(k));
-  const keys = BOSS_ORDER.concat(down.filter(k => !BOSS_ORDER.includes(k)));
-  el.hidden = !list;
-  el.innerHTML = `<span class="lb eyebrow">Bosses</span>` + keys.map(k => {
-    const i = down.indexOf(k), name = BOSS[k] || k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    return `<span class="chip ${i >= 0 ? "down" : "up"}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}${esc(name)}${i >= 0 ? " ✓" : ""}</span>`;
-  }).join("");
+function pick(name){
+  PICK = name || null; DLAST = "";
+  document.getElementById("app").classList.toggle("picked", !!PICK);
+  document.getElementById("detail").hidden = !PICK;
+  for(const b of document.querySelectorAll("#list .row")) b.classList.toggle("pick", b.dataset.name === PICK);
+  if(PICK){ renderDetail(); document.getElementById("detail").scrollTop = 0; }
 }
-
-const KEYS = {
-  seen: p => num(p.last_seen),
-  deaths: p => num(p.deaths),
-  rate: p => num(p.dist_m) >= 1000 ? -rate(p) : -1e9,   // safest: fewest deaths per km, among those who have walked
-  dist: p => num(p.dist_m),
-  streak: p => num((p.streak_m || {}).best),
-  calls: p => num(p.close_calls),
-  pieces: p => num(p.pieces),
-};
-
-let DEATHS = [], BOSSES = null;
-function render(){
-  const key = KEYS[SORT] || KEYS.seen;
-  const rows = DATA.slice().sort((a, b) =>
-    key(b) - key(a) || num(b.last_seen) - num(a.last_seen)
-    || String(a.name || "").localeCompare(String(b.name || "")));
-
-  const on = rows.filter(p => p.online).length;
-  document.getElementById("count").innerHTML = `<b>${plural(rows.length, "player")}</b>`
-    + (on ? ` · ${on} online now` : "")
-    + (SINCE ? ` · tallied since ${new Date(SINCE*1000).toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"})}` : "");
-  renderBosses(BOSSES);
-
-  const html = rows.length
-    ? `<div class="cards">${rows.map(card).join("")}</div>`
-    : `<p class="empty">No tallies yet — nobody has been seen since the count started.</p>`;
-  const el = document.getElementById("list");
-  if(html !== LAST){ el.innerHTML = html; LAST = html; }   // untouched DOM, so no flicker on the minute
+function applyHash(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  const name = h.get("p");
+  if(name !== PICK) pick(name);
 }
+document.getElementById("list").addEventListener("click", e => {
+  const b = e.target.closest(".row[data-name]"); if(!b) return;
+  location.hash = "#p=" + encodeURIComponent(b.dataset.name);
+});
+document.getElementById("detail").addEventListener("click", e => {
+  if(e.target.closest("#back")) history.length > 1 ? history.back() : (location.hash = "");
+});
+addEventListener("hashchange", applyHash);
+document.getElementById("sort").addEventListener("change", e => { SORT = e.target.value; if(LOADED) render(); });
+document.getElementById("show").addEventListener("change", e => { SHOW = e.target.value; if(LOADED) render(); });
 
 async function load(){
   try{
@@ -239,9 +403,14 @@ async function load(){
     DATA = Array.isArray(j.players) ? j.players : [];
     SINCE = num(j.since);
     BOSSES = Array.isArray(j.bosses) ? j.bosses : null;
-    // where each player last died, for the link to the spot
-    try{ const st = await MapCore.fetchState(API); DEATHS = ((st.deaths || {}).deaths) || []; }catch(e){}
-    LOADED = true;
+    // where each player last died, for the link to the spot; who stands where now
+    try{
+      const st = await MapCore.fetchState(API);
+      DEATHS = ((st.deaths || {}).deaths) || [];
+      ONLINE = ((st.players || {}).players) || [];
+      if(WHERE && !ONLINE.some(q => q.name === WHERE.name)) WHERE = null;
+    }catch(e){}
+    if(!LOADED){ LOADED = true; applyHash(); }
     render();
     document.getElementById("note").textContent = "";
     document.getElementById("stamp").textContent = "updated " + new Date().toLocaleTimeString();
@@ -255,14 +424,6 @@ async function load(){
     }
   }
 }
-
-document.getElementById("sorts").addEventListener("click", e => {
-  const b = e.target.closest("button[data-sort]");
-  if(!b || b.dataset.sort === SORT) return;
-  SORT = b.dataset.sort;
-  for(const x of document.querySelectorAll("#sorts button")) x.classList.toggle("on", x === b);
-  if(LOADED) render();
-});
 
 load();
 setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
