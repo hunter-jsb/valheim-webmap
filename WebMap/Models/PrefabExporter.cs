@@ -1,5 +1,6 @@
 // Ported from f00d4tehg0dz/valheim-webmap (MIT).
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -18,11 +19,30 @@ namespace WebMap.Models
     // when the engine lets us read them, and referenced by URI so a hundred
     // wood pieces share one wood texture. Meshes the engine marks unreadable
     // yield no geometry -- the caller falls back to a box of the right size.
+    //
+    // A world location (a prefab with a Location) is the part every game spawns for
+    // itself: what it networks on its own, who lives there, lights, particles, force
+    // fields and a dungeon's rooms far overhead are left out, each chance is drawn as
+    // its likelier outcome, its leaves stay geometry, and its parts are merged by
+    // material, since a camp is hundreds of them.
     internal static class PrefabExporter
     {
+        // yielded by an export waiting on another thread: the frame is given up
+        public static readonly object Wait = new object();
+
         public sealed class Result
         {
-            public byte[] glb; public float[] bounds; public int triangles; public bool textured; public bool readable;
+            public byte[] glb; public float[] bounds = new float[6]; public int triangles; public bool textured; public bool readable;
+            public bool location; public float[] shape;   // a location's bounds from what it draws, read or not
+            internal GlbWriter writer; internal string name; internal List<List<GlbWriter.Primitive>> looks;
+            // the glTF from what Export gathered: no engine calls, so any thread; null with no geometry
+            public byte[] Write()
+            {
+                if (writer == null) return null;
+                if (looks != null) foreach (var l in looks) writer.Add(Join(l));
+                looks = null;
+                return glb = writer.Write(name, out bounds);
+            }
             public int renderers, unreadable, foliageSkipped;
             public List<string> wants = new List<string>();   // texture names the materials reference (present or not)
             public List<string> meshWants = new List<string>();     // keys of locked meshes (MeshCache.Key) this prefab uses
@@ -55,6 +75,49 @@ namespace WebMap.Models
             return root.GetComponentsInChildren(colliderType);
         }
 
+        // Left out of a location with everything under it: whatever is networked (drawn from its own
+        // record), who lives there, lights and particles. By type name, bases included, since the mod
+        // does not build against every engine module.
+        private static readonly HashSet<string> notLocation = new HashSet<string> { "ZNetView", "Character", "Trader", "CreatureSpawner", "SpawnArea", "LocationProxy", "Light", "ParticleSystem" };
+        internal static bool LeftOutOfLocation(IEnumerable<Type> components)
+        {
+            foreach (var c in components)
+                for (var t = c; t != null; t = t.BaseType)
+                    if (notLocation.Contains(t.Name)) return true;
+            return false;
+        }
+
+        private static List<Type> TypesOf(Transform t, List<Type> into)
+        {
+            into.Clear();
+            foreach (var c in t.GetComponents<Component>()) if ((object)c != null) into.Add(c.GetType());
+            return into;
+        }
+
+        // What a location's chances leave out when drawn as their likelier outcome: of a RandomObject's
+        // choices all but the weightiest, and a RandomSpawn under even odds.
+        private static void LocationOff(GameObject prefab, HashSet<Transform> off)
+        {
+            foreach (var ro in prefab.GetComponentsInChildren<RandomObject>(true))
+            {
+                GameObject keep = null; float w = float.MinValue;
+                foreach (var e in ro.m_objects) if (e != null && e.m_object != null && e.m_weight > w) { keep = e.m_object; w = e.m_weight; }
+                foreach (var e in ro.m_objects) if (e != null && e.m_object != null && e.m_object != keep) off.Add(e.m_object.transform);
+            }
+            foreach (var rs in prefab.GetComponentsInChildren<RandomSpawn>(true))
+                if (rs.m_chanceToSpawn < 50f) off.Add(rs.transform);
+                else if (rs.m_OffObject != null) off.Add(rs.m_OffObject.transform);
+        }
+
+        // a dungeon's rooms, which the game keeps 5000 m above the way in
+        private static bool Inside(Matrix4x4 toRoot, Transform t) => toRoot.MultiplyPoint3x4(t.position).y > 1000f;
+
+        // a shader that only bends what is behind it (a trader's force field) draws no surface
+        private static bool Refracts(Material mat)
+        {
+            try { return mat != null && mat.shader != null && mat.shader.name.ToLowerInvariant().Contains("distortion"); } catch { return false; }
+        }
+
         // Does the prefab render anything at all (and is it a thing, not a creature or an item)?
         public static bool IsVisibleThing(GameObject go)
         {
@@ -65,11 +128,19 @@ namespace WebMap.Models
             return go.GetComponentInChildren<MeshRenderer>(true) != null;
         }
 
-        public static Result Export(GameObject prefab, string modelsDir, Color32 fallback, string category = "other")
+        // Steps once a renderer (and every 64 nodes), so a location's hundreds of parts spread over
+        // frames; the glTF itself is built by Write, off the game thread if need be.
+        public static IEnumerator Export(GameObject prefab, string modelsDir, Color32 fallback, Result res)
         {
-            var res = new Result { bounds = new float[6], category = category ?? "other" };
-            if (prefab == null) return res;
+            if (prefab == null) yield break;
             var writer = new GlbWriter();
+            res.name = prefab.name;
+            var loc = prefab.GetComponent<Location>();
+            res.location = loc != null;
+            var off = new HashSet<Transform>();
+            var merged = loc != null ? new Dictionary<string, List<GlbWriter.Primitive>>() : null;
+            var types = new List<Type>();
+            if (loc != null) LocationOff(prefab, off);
 
             // renderers hidden by a LODGroup (any LOD but the first)
             var hidden = new HashSet<Renderer>();
@@ -114,13 +185,14 @@ namespace WebMap.Models
             }
 
             Matrix4x4 toRoot = prefab.transform.worldToLocalMatrix;
-            int tris = 0;
+            int tris = 0, stepped = 0, visited = 0;
             var stack = new Stack<Transform>();
             stack.Push(prefab.transform);
             while (stack.Count > 0)
             {
+                if (res.renderers != stepped || (++visited & 63) == 0) { stepped = res.renderers; yield return null; }
                 Transform t = stack.Pop();
-                if (t != prefab.transform && !t.gameObject.activeSelf) continue;
+                if (t != prefab.transform && (!t.gameObject.activeSelf || (loc != null && (off.Contains(t) || Inside(toRoot, t) || LeftOutOfLocation(TypesOf(t, types)))))) continue;
                 foreach (Transform c in t) stack.Push(c);
 
                 var mr = t.GetComponent<MeshRenderer>();
@@ -131,6 +203,8 @@ namespace WebMap.Models
                 if (mf == null || mf.sharedMesh == null) continue;
                 Mesh mesh = mf.sharedMesh;
                 res.renderers++;
+                Matrix4x4 m = toRoot * t.localToWorldMatrix;
+                if (loc != null) try { Grow(res, mesh.bounds, m); } catch { }
 
                 // geometry: from the engine when the mesh is readable, else from the mesh cache
                 // (MeshExtractor fills it from the game files); a locked mesh not cached yet is skipped
@@ -171,7 +245,6 @@ namespace WebMap.Models
                 }
                 res.readable = true;
 
-                Matrix4x4 m = toRoot * t.localToWorldMatrix;
                 Matrix4x4 nm = m.inverse.transpose;
                 bool mirrored = m.determinant < 0;   // negative scale flips winding once more
                 for (int i = 0; i < vcount; i++)
@@ -210,6 +283,7 @@ namespace WebMap.Models
                     }
                     var prim = new GlbWriter.Primitive { positions = pos, normals = nrm, uvs = uv, indices = indices };
                     Material mat = mats != null && s < mats.Length ? mats[s] : (mats != null && mats.Length > 0 ? mats[0] : null);
+                    if (loc != null && Refracts(mat)) continue;
                     ApplyMaterial(prim, mat, modelsDir, fallback, res);
                     if (prim.textureUri != null) res.textured = true;
                     // foliage never ships as geometry: thousands of alpha-cut cards per tree are heavy and
@@ -236,17 +310,59 @@ namespace WebMap.Models
                         if (prim.textureUri == null) { res.canopyColor[0] = prim.r; res.canopyColor[1] = prim.g; res.canopyColor[2] = prim.b; }
                         continue;
                     }
+                    tris += raw.Length / 3;
+                    if (merged != null) { Look(merged, prim).Add(prim); continue; }
                     int before = writer.Count;
                     writer.Add(prim);
                     if (writer.Count > before) res.partAreas.Add(area);   // one per glTF primitive, in order
-                    tris += raw.Length / 3;
                 }
             }
-
-            if (writer.Count == 0) return res;
-            res.glb = writer.Write(prefab.name, out res.bounds);
+            if (merged != null) res.looks = new List<List<GlbWriter.Primitive>>(merged.Values);
+            if (writer.Count == 0 && (res.looks == null || res.looks.Count == 0)) yield break;
+            res.writer = writer;
             res.triangles = tris;
-            return res;
+        }
+
+        // A location's parts, one primitive per look (Join, in Write): a camp of three hundred parts is a dozen draws.
+        private static List<GlbWriter.Primitive> Look(Dictionary<string, List<GlbWriter.Primitive>> looks, GlbWriter.Primitive p)
+        {
+            string key = (p.textureUri ?? "") + "|" + p.r + "|" + p.g + "|" + p.b + "|" + p.a + "|" + p.alphaMask + "|" + (p.normals != null) + "|" + (p.uvs != null);
+            if (!looks.TryGetValue(key, out var list)) looks[key] = list = new List<GlbWriter.Primitive>();
+            return list;
+        }
+
+        private static GlbWriter.Primitive Join(List<GlbWriter.Primitive> parts)
+        {
+            var into = parts[0];
+            if (parts.Count == 1) return into;
+            int nv = 0, ni = 0;
+            foreach (var p in parts) { nv += p.positions.Length / 3; ni += p.indices.Length; }
+            var pos = new float[nv * 3]; var nrm = into.normals != null ? new float[nv * 3] : null; var uv = into.uvs != null ? new float[nv * 2] : null;
+            var idx = new uint[ni];
+            int v = 0, k = 0;
+            foreach (var p in parts)
+            {
+                int n = p.positions.Length / 3;
+                Array.Copy(p.positions, 0, pos, v * 3, n * 3);
+                if (nrm != null) Array.Copy(p.normals, 0, nrm, v * 3, n * 3);
+                if (uv != null) Array.Copy(p.uvs, 0, uv, v * 2, n * 2);
+                foreach (uint i in p.indices) idx[k++] = i + (uint)v;
+                v += n;
+            }
+            into.positions = pos; into.normals = nrm; into.uvs = uv; into.indices = idx;
+            return into;
+        }
+
+        // a renderer's mesh bounds in the prefab's frame, the viewer's way round (z negated)
+        private static void Grow(Result res, Bounds b, Matrix4x4 m)
+        {
+            if (res.shape == null) res.shape = new[] { float.MaxValue, float.MaxValue, float.MaxValue, float.MinValue, float.MinValue, float.MinValue };
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 v = m.MultiplyPoint3x4(new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z));
+                res.shape[0] = Math.Min(res.shape[0], v.x); res.shape[1] = Math.Min(res.shape[1], v.y); res.shape[2] = Math.Min(res.shape[2], -v.z);
+                res.shape[3] = Math.Max(res.shape[3], v.x); res.shape[4] = Math.Max(res.shape[4], v.y); res.shape[5] = Math.Max(res.shape[5], -v.z);
+            }
         }
 
         private static bool IsLeafName(string n) => n.Contains("leaf") || n.Contains("leaves") || n.Contains("branch") || n.Contains("needle") || n.Contains("foliage") || n.Contains("canopy") || n.Contains("grass") || n.Contains("_bush") || n.StartsWith("bush") || n.Contains("shrub") || n.Contains("bloom") || n.Contains("flower");
@@ -270,7 +386,7 @@ namespace WebMap.Models
             // shader. An unnamed vegetation-shader material with alpha cutout (leaf card atlases) counts too.
             bool leafy = IsLeafName(mn) || IsLeafName(tn);
             bool woody = IsWoodName(mn) || IsWoodName(tn);
-            prim.foliage = !woody && (leafy || (shader.Contains("vegetation") && cutoff && (res.category == "tree" || res.category == "bush")));
+            prim.foliage = !res.location && !woody && (leafy || (shader.Contains("vegetation") && cutoff && (res.category == "tree" || res.category == "bush")));
             if (shader.Contains("water") || shader.Contains("particle") || shader.Contains("glow")) prim.a = 0.5f;
 
             string texFile = ExportTexture(mat, modelsDir, res);

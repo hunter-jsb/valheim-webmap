@@ -8,6 +8,7 @@ External requirements:
    assembly_utils.dll
    assembly_valheim.dll
    Mono.Security.dll
+   SoftReferenceableAssets.dll
    UnityEngine.CoreModule.dll
    UnityEngine.dll
    UnityEngine.ImageConversionModule.dll

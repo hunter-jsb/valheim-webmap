@@ -13,6 +13,8 @@ namespace WebMap
     // anything with a mesh, whoever placed it. Creatures, items and effects are
     // left out. Each record is prefab + position + rotation + scale, which with
     // the prefab's exported model reproduces the object as the game draws it.
+    // A world location (a trader's camp, a crypt, an altar) is networked only as
+    // its LocationProxy, so its record names the location's prefab instead.
     //
     // Fed by the structures sweep on the game thread; only chunks somebody has
     // walked are recorded at all, so nothing about unwalked ground is ever held,
@@ -49,6 +51,7 @@ namespace WebMap
         private static bool building;
         private static readonly int hashScale = "scale".GetStableHashCode();
         private static readonly int hashScaleScalar = "scaleScalar".GetStableHashCode();
+        private static readonly int proxyHash = "LocationProxy".GetStableHashCode();
 
         public static volatile int Rev;            // bumped when any chunk changed; 0 until the first sweep
         public static int Total { get; private set; }
@@ -86,6 +89,14 @@ namespace WebMap
             if (!building) return;
             int cx = ChunkOf(pos.x), cz = ChunkOf(pos.z);
             if (cx < -64 || cz < -64 || cx > 63 || cz > 63 || !MapFog.ChunkExplored(cx, cz)) return;
+            if (prefabHash == proxyHash)
+            {
+                // every game spawns the location itself from the hash on its proxy, where the proxy stands
+                int location = 0; Quaternion rot = Quaternion.identity;
+                try { location = zdo.GetInt(ZDOVars.s_location); rot = zdo.GetRotation(); } catch { }
+                ObserveProxy(location, pos, rot, ClassifyLocation);
+                return;
+            }
             Cat cat = Classify(prefabHash);
             if (cat == Cat.Skip) return;
             var o = new Obj { prefab = prefabHash, x = pos.x, y = pos.y, z = pos.z, qw = 1f, sx = 1f, sy = 1f, sz = 1f, creator = creator != 0L };
@@ -100,6 +111,19 @@ namespace WebMap
             catch { }
             if (rocks.TryGetValue(prefabHash, out var rock))
                 try { o.gone = rock.kind == 5 ? GoneFromHealth(Packed(zdo)) : GoneFromFloats(zdo, rock.areas); } catch { }
+            Add(cx, cz, o);
+        }
+
+        // A proxy as the location it stands for: its place and turn, the location's own scale,
+        // nobody's build. classify says whether the hash is a location to draw; the tests pass their own.
+        internal static void ObserveProxy(int location, Vector3 pos, Quaternion rot, Func<int, Cat> classify)
+        {
+            if (!building || location == 0 || classify(location) == Cat.Skip) return;
+            Add(ChunkOf(pos.x), ChunkOf(pos.z), new Obj { prefab = location, x = pos.x, y = pos.y, z = pos.z, qx = rot.x, qy = rot.y, qz = rot.z, qw = rot.w, sx = 1f, sy = 1f, sz = 1f });
+        }
+
+        private static void Add(int cx, int cz, Obj o)
+        {
             int key = Key(cx, cz);
             if (!lists.TryGetValue(key, out var list)) lists[key] = list = new List<Obj>(256);
             list.Add(o);
@@ -161,11 +185,23 @@ namespace WebMap
                 else if (n.Contains("_log") || n.EndsWith("logs") || n.Contains("_trunk") || n.Contains("_stub") || n.Contains("stubbe")
                          || go.GetComponent("TreeBase") != null || go.GetComponent("TreeLog") != null) c = Cat.Tree;
                 else c = ClassifyName(n);
-                if (c == Cat.Other && (n.Contains("_ragdoll") || n.Contains("smoke") || n.Contains("cloud") || n.Contains("_proxy") || n == "locationproxy")) c = Cat.Skip;
+                if (c == Cat.Other && (n.Contains("_ragdoll") || n.Contains("smoke") || n.Contains("cloud") || n.Contains("_proxy"))) c = Cat.Skip;
                 if (c != Cat.Skip && !Enabled(c)) c = Cat.Skip;
                 if (c != Cat.Skip && WebMapConfig.EXPORT_MODELS) ModelStore.Request(prefabHash, CatName(c));
             }
             catCache[prefabHash] = c;
+            return c;
+        }
+
+        // Game thread, once per location: one ZoneSystem knows is drawn as "other", and its prefab
+        // joins the model library like any other.
+        private static Cat ClassifyLocation(int hash)
+        {
+            if (catCache.TryGetValue(hash, out var c)) return c;
+            c = Cat.Skip;
+            try { if (ZoneSystem.instance != null && ZoneSystem.instance.GetLocation(hash) != null && Enabled(Cat.Other)) c = Cat.Other; } catch { }
+            if (c != Cat.Skip && WebMapConfig.EXPORT_MODELS) ModelStore.Request(hash, CatName(c));
+            catCache[hash] = c;
             return c;
         }
 

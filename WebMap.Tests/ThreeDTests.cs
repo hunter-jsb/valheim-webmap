@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using UnityEngine;
+using WebMap.Models;
 using Xunit;
 
 namespace WebMap.Tests
@@ -46,6 +48,48 @@ namespace WebMap.Tests
             Assert.Equal(1, BitConverter.ToInt32(bytes, table + 4));    // it is object 1
             Assert.Equal(8, BitConverter.ToUInt16(bytes, table + 8));   // eight areas' bits
             Assert.Equal(0b0110, bytes[table + 10]);
+        }
+
+        // A location is networked only as its proxy: sent as the proxy, a trader's camp is nothing at all.
+        [Fact]
+        public void AProxyGoesOutAsTheLocationItStandsFor()
+        {
+            int size = WebMapConfig.TEXTURE_SIZE, half = size / 2;
+            var fog = new byte[size * size * 4];
+            int p = (int)Math.Round(100f / WebMapConfig.PIXEL_SIZE + half);
+            fog[(p * size + p) * 4] = 255;
+            MapFog.RebuildChunks(fog);
+            int camp = "Vendor_BlackForest".GetStableHashCode();
+            Func<int, WorldObjects.Cat> known = h => h == camp ? WorldObjects.Cat.Other : WorldObjects.Cat.Skip;
+            WorldObjects.Begin();
+            WorldObjects.ObserveProxy(camp, new Vector3(100f, 31f, 100f), new Quaternion(0f, 0.6f, 0f, 0.8f), known);
+            WorldObjects.ObserveProxy(0, new Vector3(101f, 31f, 100f), Quaternion.identity, known);        // a proxy naming nothing
+            WorldObjects.ObserveProxy(camp + 1, new Vector3(102f, 31f, 100f), Quaternion.identity, known); // a location the world lacks
+            WorldObjects.Finish();
+
+            byte[] b = WorldObjects.ChunkBytes(0, 0, out _);
+            int rec = 16;
+            Assert.Equal(1, BitConverter.ToInt32(b, 4));
+            Assert.Equal(camp, BitConverter.ToInt32(b, 12));
+            Assert.Equal(0, b[rec + 2]);                                // nobody's build
+            Assert.Equal(0.6f, BitConverter.ToSingle(b, rec + 20));     // turned as the proxy is
+            Assert.Equal(1f, BitConverter.ToSingle(b, rec + 36));       // at the location's own scale
+            WorldObjects.Begin(); WorldObjects.Finish();
+            MapFog.RebuildChunks(null);
+        }
+
+        // A location's model is what every game spawns for itself: with its trader, its chests or its
+        // torches' light in it, they would stand twice or as solid shapes.
+        private sealed class ParticleSystem { }   // the engine module the mod does not build against
+        [Fact]
+        public void ALocationLeavesOutWhoLivesThereWhatIsNetworkedAndItsEffects()
+        {
+            Assert.True(PrefabExporter.LeftOutOfLocation(new[] { typeof(Transform), typeof(Humanoid) }));
+            Assert.True(PrefabExporter.LeftOutOfLocation(new[] { typeof(Trader) }));
+            Assert.True(PrefabExporter.LeftOutOfLocation(new[] { typeof(MeshRenderer), typeof(Container), typeof(ZNetView) }));
+            Assert.True(PrefabExporter.LeftOutOfLocation(new[] { typeof(Light) }));
+            Assert.True(PrefabExporter.LeftOutOfLocation(new[] { typeof(ParticleSystem) }));
+            Assert.False(PrefabExporter.LeftOutOfLocation(new[] { typeof(Transform), typeof(MeshRenderer), typeof(RuneStone) }));
         }
 
         // A misread terraform blob puts the ground wrong under every build on it.

@@ -83,8 +83,13 @@ way the game blends them, plus every terraform players have made, coloured by bi
 the chart, with water at 30 m. On it stands every object in the three 256 m chunks around
 you -- buildings, trees, rocks, bushes, ruins, boats -- each drawn with the game's model
 of it and placed, turned and scaled as in the world; a rock mined for its ore or for a
-base shows only the pieces still standing. Only chunks somebody has walked are sent at
-all; the rest stay dark, as on the map.
+base shows only the pieces still standing. The world's locations stand there too: the
+traders' camps, the Bog Witch's hut, crypt, cave and dwarven entrances, the boss altars,
+stone circles and runestones, as every game spawns them for itself. Who lives there is
+not drawn -- Haldor, Hildir and the Bog Witch are missing from their own camps -- and a
+part the game leaves to chance is drawn as its likelier outcome, so a location can differ
+in a detail from the one in game. Only chunks somebody has walked are sent at all; the rest
+stay dark, as on the map.
 
 Pull the overview out and the view reaches further in rings measured from the camera:
 the nine chunks under it with everything, while the camera is within 700 m; out to about
@@ -121,6 +126,10 @@ WebMap: model export done: 45 prefabs in 0s; 539 with a model, 7 waiting on lock
 That was our world on a desktop: two and a half minutes from the first sweep to the last
 model. It starts when someone first opens a page that reads the sweep, and a restart
 exports only what is new.
+
+A location is no network prefab: the game keeps its prefab apart and each game spawns it
+from a marker, so the mod loads it for the export and lets it go after, and a big one is
+exported over as many frames as it takes, its file written off the game thread.
 
 It all lives in `map_data/models/`, beside the worlds' own folders, since prefabs are the
 same in every world: `index.json` (what was exported), `textures.json` (what the models

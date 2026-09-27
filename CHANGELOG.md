@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+* The world's locations in 3D: the traders' camps, the Bog Witch's hut, crypt, cave and
+  dwarven entrances, the boss altars, stone circles and runestones. The game networks a
+  location only as a marker (a LocationProxy) and every game spawns the rest itself, so the
+  marker goes out in `/objects` as the location's own prefab, at its place and turn, and
+  the model library exports the location from the game's list of them: what every game
+  spawns for itself, without who lives there (the traders are not drawn), what is
+  networked on its own (chests, beehives, spawners, the ruins' and houses' own pieces --
+  already drawn from their own records), lights, particles, the traders' force fields and
+  a dungeon's rooms (kept 5000 m up), each part left to chance as its likelier outcome,
+  merged by material into a dozen draws. On our world the sweep meets 128 kinds of
+  location; 36 have a part of their own to draw, the rest are wholly networked. A big
+  location exports over as many frames as `export_ms_per_frame` needs, its file written off
+  the game thread. The index format is unchanged, so nothing already in the library is
+  exported again; the locations join it as the sweep meets them. The mod now builds
+  against the game's `SoftReferenceableAssets.dll` too.
 * What each player holds and wears, for the site to tell an archer from a builder: `gear`
   in `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). Once a
   second, alive and out of bed, the equipment the player's ZDO syncs adds a second to the
@@ -12,6 +27,12 @@
   that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
   top when the creature was not yet alerted -- partial, since a hit on a creature the
   hitter's own game runs never reaches the server.
+* Players have a class. From what the mod sees in their hands and on their back, shown only
+  as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
+  with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
+  harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
+  the roster row and the player's page with its reason, a Gear group shows what they were
+  last seen wearing, and the spotlight turns through it.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
