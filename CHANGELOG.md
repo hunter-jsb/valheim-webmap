@@ -26,6 +26,22 @@
   the locations at `/locations`, in walked ground only and built once a sweep, and `/pieces`
   rows carry a sixth field, `by`, the builder's index into a new `players` list (`-1` for one
   never seen online), the fifth now `-1` on a piece that does not burn.
+* Kitchen deeds: cooking, brewing, honey and smelting, per player. The server never sees a
+  bag, but it sees the stations: the sweep hands every cooking station, oven, fermenter,
+  hive and smelter (kiln, windmill, spinning wheel and refinery too) to a poll that reads
+  their ZDOs every five seconds. A dish done on a slot is the placer's -- known exactly, from
+  the owner's broadcast of the slot and a cross-owner request passing through the server --
+  and burnt instead when left to burn; a fermenter's tap is its filler's meads; a hive's
+  honey and a smelter's loading go to the player standing within 8 m; each smelted item is
+  its loader's. `/stats/players` gains a `kitchen` per player (`cooked`, `burnt`, `brewed`,
+  `honey`, `smelted` and `dishes` by product) and one for the world with its busiest
+  stations, kept in `stats.tsv` (`c`, `f`, `k` and `s` lines; an older file reads as none).
+  The players page has a Kitchen group and its spotlights, a kitchen trade -- Cook, Baker,
+  Brewer, Smith, from fifty things made -- after Homesteader and over Builder when it is the
+  larger share, and cooking and smelting on the Harvester side of the pentagon; the map's
+  spotlight counts the meals, and the World page has a Meals tile, a Kitchen line and the
+  busiest kitchen among its records. Pages read the same as before from a mod without it.
+
 * The tour shows who a stop is about. At someone online, the latest death or a grave,
   their card stands at the side of the stage, over the map and the 3D view alike: the
   name, the class with its reason under the pointer, "online now" and where or when they

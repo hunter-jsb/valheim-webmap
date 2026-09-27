@@ -32,7 +32,9 @@ const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!de
 // anyone on the roster has at all.
 const sea = p => num(((p.biomes || []).find(b => b.biome === "Ocean") || {}).m);
 const kpd = p => num(p.dist_m) >= 1000 ? num(p.dist_m)/1000/Math.max(1, num(p.deaths)) : 0;
-const PARTS = {km: p => num(p.dist_m), hops: p => num(p.hops), sea, pieces: p => num(p.pieces), kpd, kills: p => num(p.kills), trees: p => num(p.trees), rocks: p => num(p.rocks)};
+const kit = p => p.kitchen || {};   // none from a mod that counts no kitchen
+const PARTS = {km: p => num(p.dist_m), hops: p => num(p.hops), sea, pieces: p => num(p.pieces), kpd, kills: p => num(p.kills), trees: p => num(p.trees), rocks: p => num(p.rocks),
+  cooked: p => num(kit(p).cooked), smelted: p => num(kit(p).smelted)};
 const BEST = {};
 // the rim is the roster's best on each side
 function rim(roster){ for(const k in PARTS) BEST[k] = Math.max(0, ...roster.map(PARTS[k])); }
@@ -42,7 +44,7 @@ const AXES = [
   ["Builder", ["pieces"], p => `${num(p.pieces)} pieces`],
   ["Survivor", ["kpd"], p => `${kpd(p) >= 10 ? Math.round(kpd(p)) : kpd(p).toFixed(1)} km per death`],
   ["Slayer", ["kills"], p => `${num(p.kills)} kills`],
-  ["Harvester", ["trees", "rocks"], p => `${num(p.trees)} trees · ${num(p.rocks)} rocks`],
+  ["Harvester", ["trees", "rocks", "cooked", "smelted"], p => `${num(p.trees)} trees · ${num(p.rocks)} rocks${BEST.cooked > 0 || BEST.smelted > 0 ? ` · ${num(kit(p).cooked) + num(kit(p).smelted)} made` : ""}`],
 ];
 function radar(p, size, big){
   const c = size/2, R = big ? c - 30 : c - 3, pts = [];
@@ -109,6 +111,8 @@ const TITLE = {
   none:    {none: null, spell: "Sorcerer", battle: "Berserker", blade: "Brawler", shield: "Sentinel", bow: "Archer", knife: "Cutpurse"},
 };
 const DIET_WORD = {hearty: "hearty food", quick: "light, quick food", eitr: "eitr food", balanced: "a balanced table"};
+// what the stone oven bakes: bread, the pies, and the platters that go in raw
+const OVEN = /^(Bread|FishAndBread|LoxPie|HoneyGlazedChicken|MeatPlatter|MisthareSupreme|MagicallyStuffedShroom|PiquantPie|RoastedCrustPie)$/;
 // roster: everyone tallied, for the roster's best and the pace of its deaths
 function classify(p, roster){
   const g = p.gear || {};
@@ -120,7 +124,7 @@ function classify(p, roster){
   const root = A === "mage" || (D === "eitr" && A !== "heavy") ? "mage" : A === "heavy" ? "knight" : A === "medium" ? (D === "quick" ? "rogue" : "warrior")
     : A === "light" ? (D === "hearty" ? "warrior" : "rogue") : D === "hearty" ? "brute" : "none";
   const food = g.food || null, fedWords = food ? [num(food.hp) && `${Math.round(num(food.hp))} health`, num(food.st) && `${Math.round(num(food.st))} stamina`, num(food.eitr) && `${Math.round(num(food.eitr))} eitr`].filter(Boolean) : [];
-  const bodyWhy = [armTotal && (ARMOUR_WORD[A] || A), D && DIET_WORD[D], fedWords.length ? "fed for " + fedWords.join(", ") : food && "unfed"].filter(Boolean);
+  const bodyWhy = [armTotal && (ARMOUR_WORD[A] || A), D && DIET_WORD[D], fedWords.length ? "fed for " + fedWords.join(", ") : food && !D && "unfed"].filter(Boolean);
   // 2. the weapons: a minute of fighting gear in hand decides; before that, what is carried
   const hand = g.hand || {}, held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), heldTotal = held.reduce((t, [, v]) => t + num(v), 0);
   const fought = held.filter(([k]) => FIGHT[k]), fightTotal = fought.reduce((t, [, v]) => t + num(v), 0);
@@ -168,9 +172,16 @@ function classify(p, roster){
   const tool = k => heldTotal ? num(hand[k])/heldTotal : 0, farm = tool("hoe") + tool("cultivator"), fish = tool("fishing"), sea = seaShare(p);
   const building = pieces >= 1000 || (pieces >= 300 && pieces/bestPieces >= .2), harvesting = taken >= 100 || (taken >= 10 && tool("pickaxe") + tool("axe") >= .25);
   const roaming = (roam >= .5 || num(p.ships) >= 3) && !(building && pieces/bestPieces >= .25);   // a builder who mostly roams is an explorer
+  // the kitchen's trade, by what leads among what came out of the stations; over a builder only
+  // when it is the larger share of the roster's best
+  const K = kit(p), cooked = num(K.cooked), burnt = num(K.burnt), brewed = num(K.brewed), smelted = num(K.smelted);
+  const baked = Object.entries(K.dishes || {}).reduce((t, [k, v]) => t + (OVEN.test(k) ? num(v) : 0), 0);
+  const made = q => num(kit(q).cooked) + num(kit(q).brewed) + num(kit(q).smelted), bestMade = Math.max(1, ...roster.map(made));
+  const craft = made(p) >= 50 ? [["Cook", cooked - baked], ["Baker", baked], ["Brewer", brewed], ["Smith", smelted]].sort((a, b) => b[1] - a[1])[0][0] : null;
   const trade = building && pieces >= bestPieces ? "Architect"
     : building && harvesting ? (trees > rocks ? "Carpenter" : "Engineer")
     : building && farm >= .2 ? "Homesteader"
+    : craft && (!building || made(p)/bestMade > pieces/bestPieces) ? craft
     : kills >= 50 && kills >= .8*best("kills") ? "Slayer"
     : building && !roaming ? "Builder"
     : harvesting ? (rocks >= trees ? "Miner" : "Lumberjack")
@@ -178,7 +189,9 @@ function classify(p, roster){
     : roaming ? (sea >= .3 ? "Seafarer" : "Explorer")
     : fish >= .1 ? "Angler"
     : hops >= 200 && hops >= .8*best("hops") ? "Wayfarer" : null;
-  const deedsWhy = [building && `${pieces.toLocaleString()} pieces built`, trees >= 10 && `${trees} trees felled`, rocks >= 10 && `${rocks} rocks broken`,
+  const dishWhy = {Cook: `${cooked} dishes`, Baker: `${baked} from the oven`, Brewer: `${brewed} meads brewed`, Smith: `${smelted} bars smelted`}[trade];
+  const deedsWhy = [dishWhy, dishWhy && burnt && (trade === "Cook" || trade === "Baker") && `${burnt} burnt`,
+    building && `${pieces.toLocaleString()} pieces built`, trees >= 10 && `${trees} trees felled`, rocks >= 10 && `${rocks} rocks broken`,
     trade === "Slayer" && `${kills} kills`, (trade === "Homesteader" || trade === "Farmer") && `the hoe and cultivator ${Math.round(farm*100)}% of the time in hand`,
     (trade === "Seafarer" || trade === "Explorer") && `${Math.round(num(p.dist_m)/1000)} km travelled`, trade === "Seafarer" && `${Math.round(sea*100)}% of it at sea`,
     trade === "Angler" && `a fishing rod ${Math.round(fish*100)}% of the time in hand`, trade === "Wayfarer" && `${hops.toLocaleString()} portal hops`].filter(Boolean);

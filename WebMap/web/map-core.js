@@ -738,6 +738,25 @@ const BOSS_ICON = {
                 ["M12 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z","#e8b45f",1]],
 };
 
+// ---------- the kitchens ----------
+// /stats/players' busiest stations as kitchens: the busiest station still unclaimed and
+// every other within 24 m of it make one, the most meals first. None from a mod without them.
+function kitchens(stations){
+  const n = v => Number.isFinite(+v) ? +v : 0, out = [];
+  const left = (Array.isArray(stations) ? stations : []).filter(s => Number.isFinite(+s.x) && Number.isFinite(+s.z))
+    .sort((a, b) => n(b.cooked) - n(a.cooked) || n(b.brewed) - n(a.brewed));
+  while(left.length){
+    const s = left.shift(), k = {x: +s.x, z: +s.z, cooked: 0, brewed: 0, smelted: 0, honey: 0, stations: 0};
+    for(const t of [s].concat(left.filter(t => Math.hypot(t.x - s.x, t.z - s.z) <= 24))){
+      if(t !== s) left.splice(left.indexOf(t), 1);
+      for(const f of ["cooked", "brewed", "smelted", "honey"]) k[f] += n(t[f]);
+      k.stations++;
+    }
+    out.push(k);
+  }
+  return out.sort((a, b) => b.cooked - a.cooked || b.brewed - a.brewed);
+}
+
 // ---------- little pictures ----------
 // The small drawings a spotlight sets beside a figure: a roster as dots on a line
 // with one lit, a share as a ring, a few labelled bars. Inline SVG, 200 wide.
@@ -909,5 +928,5 @@ return {cfg, brand, setTitle, credits, toggleSide,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
         drawRasters, kindOf, ORDER, shade, parsePieces, explored, filterExplored, drawPieces, drawFires, drawDeaths, drawNames, hitName, viewCache, post,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
-        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut, pic, ord, BIOME_INK, BOSSES, BOSS_ICON};
+        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut, pic, ord, BIOME_INK, BOSSES, BOSS_ICON, kitchens};
 })();

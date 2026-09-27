@@ -843,6 +843,10 @@ function worldSpots(){
     out.push({k: "Standing", v: `${PIECES_ALL.length.toLocaleString()} <small>pieces</small>`, c: b && num(b.pieces) ? `${esc(b.name)} built the most of it` : "built by everyone", svg: b && all ? pic.ring(num(b.pieces)/all, `of it is ${b.name}'s`) : ""}); }
   if(FOREST.stumps != null){ const b = top(q => num(q.trees));
     out.push({k: "Felled", v: `${num(FOREST.stumps).toLocaleString()} <small>trees</small>`, c: b && num(b.trees) ? `${esc(b.name)} felled the most` : "stumps standing where trees were", svg: b && num(b.trees) ? pic.strip(P, b, q => num(q.trees)) : ""}); }
+  const K = STATS && STATS.kitchen;   // none from a mod without a kitchen
+  if(K && num(K.cooked) + num(K.brewed) + num(K.smelted)){ const cook = top(q => num((q.kitchen || {}).cooked)), mine = cook ? num((cook.kitchen || {}).cooked) : 0;
+    out.push({k: "Kitchen", v: `${num(K.cooked).toLocaleString()} <small>meals cooked</small>`, c: `${num(K.brewed).toLocaleString()} meads brewed · ${num(K.smelted).toLocaleString()} bars smelted`,
+              svg: mine && num(K.cooked) ? pic.ring(mine/num(K.cooked), `of it cooked by ${cook.name}`) : ""}); }
   const boats = (VEHICLES || []).filter(v => v.kind === "boat");
   if(boats.length){ const kinds = {}; boats.forEach(v => { const k = MapCore.vehicleStyle(v).label; kinds[k] = (kinds[k] || 0) + 1; });
     const rows = Object.entries(kinds).sort((a, b) => b[1] - a[1]);
@@ -1542,12 +1546,11 @@ function tourPool(){
     add("cart", {kind: "A cart", title: nameAt(w.x, w.z) || "A cart", line: "left standing where the last load came off", x: w.x, z: w.z, zoom: [40, 52], dist: 45, layer: "vehicles", moves: ["orbit", "sweep"],
       stats: [[carts.length, carts.length === 1 ? "cart" : "carts"]]}); });
   // the busiest kitchen, from a mod that counts meals
-  const K = STATS && STATS.kitchen, stations = K && Array.isArray(K.stations) ? K.stations.filter(s => num(s.cooked) > 0 && isFinite(+s.x) && isFinite(+s.z)) : [];
-  if(stations.length){
-    const c = cellsOf(stations.map(s => Object.assign({}, s, toPx(+s.x, +s.z))), 48).map(c => Object.assign(c, {meals: c.items.reduce((t, s) => t + num(s.cooked), 0), meads: c.items.reduce((t, s) => t + num(s.brewed), 0)})).sort((a, b) => b.meals - a.meals)[0];
-    add("kitchen", {kind: "The busiest kitchen", title: nameAt(c.x, c.z) || "A kitchen", line: `${c.meals.toLocaleString()} meals cooked here`, x: c.x, z: c.z, zoom: [34, 46], dist: 45, detail: "fires",
-      cell: c, moves: ["yard", "orbit"], stats: [[c.meals.toLocaleString(), "meals cooked"]].concat(c.meads ? [[c.meads.toLocaleString(), "meads brewed"]] : []),
-      pic: num(K.cooked) ? pic.ring(c.meals/num(K.cooked), "of every meal cooked") : ""});
+  const K = STATS && STATS.kitchen, kitchen = K ? MapCore.kitchens(K.stations)[0] : null;
+  if(kitchen && kitchen.cooked > 0){ const c = kitchen;
+    add("kitchen", {kind: "The busiest kitchen", title: nameAt(c.x, c.z) || "A kitchen", line: `${c.cooked.toLocaleString()} meals cooked here`, x: c.x, z: c.z, zoom: [34, 46], dist: 45, detail: "fires",
+      moves: ["yard", "orbit"], stats: [[c.cooked.toLocaleString(), "meals cooked"], [c.stations, c.stations === 1 ? "station" : "stations"]].concat(c.brewed ? [[c.brewed.toLocaleString(), "meads brewed"]] : []),
+      pic: num(K.cooked) ? pic.ring(c.cooked/num(K.cooked), "of every meal cooked") : ""});
   }
   if(walked){
     // the lands from far up, circled about the middle of what is walked of each
@@ -1980,7 +1983,7 @@ async function cut3D(s, alive, next){
   return true;
 }
 // One of the world's figures as a card over a slow far drift of the map.
-const FIGURES = ["Explored", "Standing", "Felled", "Afloat", "Gates", "Bosses", "Deaths"];
+const FIGURES = ["Explored", "Standing", "Felled", "Kitchen", "Afloat", "Gates", "Bosses", "Deaths"];
 async function tourFigure(run, next){
   const alive = () => TOUR.on && TOUR.run === run;
   const list = worldSpots().filter(f => FIGURES.includes(f.k)); if(!list.length) return;

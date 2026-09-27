@@ -48,7 +48,8 @@ The viewer at `http://your_ip:port` is five pages — the live map (with the wor
 as a mode of it), the world's own page (its records, its lands, its bosses), a portal atlas drawn on a biome chart (a hub opens close up: the base's
 floor plan with each gate where it stands, and going through a gate lands you at its far
 side with the gate you arrive at lit), a planning board for drawing and sharing routes,
-and per-player tallies (a player's own page draws them as the 3D view does, turning slowly:
+and per-player tallies, from deaths and deeds to what each has cooked, brewed and smelted
+(a player's own page draws them as the 3D view does, turning slowly:
 live while they are online, as last seen once they have gone) —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
@@ -278,7 +279,7 @@ defaults are what runs):
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
-| `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken, and `gear`: seconds with each kind of thing in hand and in each weight of chest armour, the set last worn, hits on creatures by kind; and `look` and `yaw`, how the player was last seen, as `/state` carries them (JSON) |
+| `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken, and `gear`: seconds with each kind of thing in hand and in each weight of chest armour, the set last worn, hits on creatures by kind; `kitchen`: dishes cooked and burnt, meads brewed, honey taken, items smelted and each product's count; and `look` and `yaw`, how the player was last seen, as `/state` carries them; at the top, the world's `kitchen` and its busiest stations (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset). A player the map shows carries `yaw` (degrees clockwise from north) and `look`: `model` (the body), `skin` and `hair` (the colours, 0..1), `slots` (the prefab in each slot) and `parts`, the library parts to draw, body first |
 | `/height` | `?cx=&cz=[&step=]`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): (256/step + 1)² little-endian int16, decimetres of world height, `step` metres apart (1, 2, 4, 8 or 16: 257 a side down to 17; default 1, each step cached on its own under the same revision); row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
@@ -357,6 +358,29 @@ on a creature counts only when it passes through the server on its way to anothe
 player's game, never one on a creature the hitter's own game runs, which alone in an
 area is all of them. Each is `melee`, `ranged` or `magic` (a staff's), and `backstab`
 counts on top when the weapon has a backstab bonus and the creature was not yet alerted.
+
+**Kitchen.** Nobody's inventory reaches the server, but the stations do: every prefab with
+a CookingStation, Fermenter, Beehive or Smelter component (the fires, the iron cooking
+station, the stone oven; the fermenter; the hive; the smelter, blast furnace, kiln,
+windmill, spinning wheel and eitr refinery) is found by the sweep, or by the first slot
+filled on it, and its ZDO is read every five seconds. A player's `kitchen` counts:
+
+* **`cooked`** -- a slot gone done, for whoever put the item on: the station's owner
+  broadcasts every slot it fills, and a player who is not the owner asks the owner first,
+  through the server, so the placer is known exactly. **`burnt`** instead when it is left
+  on the fire to burn (a dish counted as cooked moves over).
+* **`brewed`** -- the meads a fermenter drops when tapped, for whoever filled it.
+* **`honey`** -- honey taken from a hive.
+* **`smelted`** -- each item a smelter makes from its queue: bars, coal, flour, thread,
+  eitr, for whoever loaded that ore.
+* **`dishes`** -- the cooked dishes, meads and smelted items by prefab name.
+
+A fermenter's filler, a hive's taker and a smelter's loader is the nearest player within
+8 m. A slot filled before the mod was watching counts for nobody. The document's own
+`kitchen` holds the world's `cooked`, `burnt`, `brewed`, `honey` and `smelted`, credited or
+not, and `stations`, the forty busiest by prefab (`kind`) and place (`x`, `z`), each with its
+`cooked`, `brewed`, `smelted` and `honey`. The cauldron and the preparation table leave no
+trace, so of bread and pies only the oven's step counts.
 
 ### The style system
 

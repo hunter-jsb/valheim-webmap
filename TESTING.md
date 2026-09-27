@@ -64,6 +64,9 @@ guards against; there is one per failure, not one per branch.
    set, hits by kind and backstab, the save and an older file: **dotnet test**. Reading the
    equipment off a player's ZDO and the prefab behind a hash: **nothing**. The look last
    seen: its save, an older file, and the same look kept without a rebuild, **dotnet test**.
+   **Kitchen**: a dish placed across owners, one left to burn, a slot filled before the
+   watch, a fermenter's tap, a smelter's loader, and the save: **dotnet test**. Reading the
+   stations' ZDOs and RPCs, and the component behind a prefab: **nothing**.
    Two faults found:
    - Mistlands is biome class 10, one past `Stats.Biomes = 10`, so metres and deaths there
      are dropped. `AWalkInTheMistlandsCounts` is written and skipped; `Biomes = 11` passes it.

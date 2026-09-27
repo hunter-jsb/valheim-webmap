@@ -1051,6 +1051,7 @@ namespace WebMap
             // a failing snapshot must not also stop the tallies being saved
             try
             {
+                Kitchen.Tick(Time.realtimeSinceStartup);    // catches its own, station by station
                 Stats.MaybeSave();
                 Trails.MaybeSave();
                 timeJson = BuildTimeJson();
