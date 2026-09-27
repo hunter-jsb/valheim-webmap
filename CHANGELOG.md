@@ -9,6 +9,7 @@
   `settings.tsv` beside the map data and lays it over the BepInEx config, which the host
   rewrites on restart. `GET`/`POST /settings` behind the shared token and an `X-Admin` the
   Worker sets after checking the member's roles again.
+* The plan page draws the place names too, as a reference layer of its own.
 * Every write from the site -- a name, a pin, a setting -- answers with the line it logged,
   and the Worker posts it to the guild's channel through the bot.
 * The world in 3D, as a mode of the map entered the way Street View is: drag the figure

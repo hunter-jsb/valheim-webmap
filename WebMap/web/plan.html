@@ -198,7 +198,7 @@ const s2w = (sx,sy) => { const q = V.at(sx, sy); return toWorld(q.px, q.py); };
 // share link, and one day to a server, so nothing here may depend on the browser.
 const PALETTE = ["#ffd166", "#4dd2ff", "#ff6b6b", "#7ee081", "#ffffff"];
 const WIDTHS = [2, 5];
-const DEFAULT_LAYERS = {forest:true, builds:true, portals:true, graves:false, vehicles:false, pins:true, players:true};
+const DEFAULT_LAYERS = {forest:true, builds:true, names:true, portals:true, graves:false, vehicles:false, pins:true, players:true};
 const newDoc = () => ({v:1, title:"", notes:"", view:{x:0, z:0, zoom:1},
                        layers:Object.assign({}, DEFAULT_LAYERS), items:[]});
 let doc = newDoc();
@@ -227,10 +227,18 @@ const RASTER = MapCore.layers(API, k => { if(k === "fog"){ refilterPieces(); fog
 // over; the plan's own marks are drawn over it every frame.
 const SCENE = MapCore.viewCache((g, v) => ground(g, v), () => draw());
 function redraw(){ SCENE.invalidate(); draw(); }   // the ground, the builds or the layers changed
+let FEATURES = null, FEATURES_REV = null;   // the world's geography with its names, by revision
 function ground(g, view){
   MapCore.drawRasters(g, view, RASTER.imgs, {forest:doc.layers.forest});
   if(doc.layers.builds && PIECES)
     MapCore.drawPieces(g, view, PIECES, {plan:view.scale >= MapCore.PLAN_ZOOM});
+  if(doc.layers.names && FEATURES)
+    MapCore.drawNames(g, view, FEATURES, MapCore.explored(RASTER.imgs.fog));
+}
+async function fetchFeatures(rev){
+  FEATURES_REV = rev;
+  try{ const j = await MapCore.fetchJSON(API, "/features?v=" + rev); if(j && j.features){ FEATURES = j.features; redraw(); } }
+  catch(e){ FEATURES_REV = null; }
 }
 
 // ---------- render ----------
@@ -676,6 +684,7 @@ function renderCount(){
 const LAYERS = [
   {k:"forest",   label:"forest → cleared", grad:true},
   {k:"builds",   label:"builds", sw:"#966c42"},
+  {k:"names",    label:"place names", sw:"var(--portal-ink)"},
   {k:"portals",  label:"portals", icon:"portal"},
   {k:"graves",   label:"graves", icon:"grave"},
   {k:"vehicles", label:"boats & carts", icon:"karve"},
@@ -850,6 +859,7 @@ async function tick(){
   const n = (s.players || {}).count != null ? s.players.count : DATA.players.length;
   document.getElementById("worldNote").innerHTML =
     `<b>${MapCore.esc(GEOM.world)}</b> · ${n} online · ${DATA.portals.length} portals, ${DATA.pins.length} pins.<br>Layers are live reference, not part of your plan.`;
+  if(s.rev && s.rev.features && s.rev.features !== FEATURES_REV) fetchFeatures(s.rev.features);
   await RASTER.sync(s.rev, {pieces: list => { PIECES_ALL = list; refilterPieces(); }});
   draw();
 }
