@@ -12,6 +12,9 @@ using System.Runtime.InteropServices;
 using System.Collections;
 using System.Dynamic;
 
+// the tests reach the internal static classes directly: WebMap.Tests
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WebMap.Tests")]
+
 namespace WebMap
 {
     //This attribute is required, and lists metadata for your plugin.

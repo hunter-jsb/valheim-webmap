@@ -664,5 +664,16 @@ namespace WebMap
             id = Body.Str(body, "id"); name = Body.Str(body, "name");
             return id != null && name != null;
         }
+
+        // ---------- for the tests (WebMap.Tests) ----------
+        // The world comes from the generator on the game thread; a test hands the
+        // analysis a grid of its own instead, and starts each case from nothing.
+        internal const int Cells = N;
+        internal static void ResetForTests(string worldDataPath)
+        {
+            lock (gate) { names.Clear(); generated.Clear(); found = new Feature[0]; grids = null; dir = worldDataPath; }
+        }
+        internal static void AnalyseForTests(byte[] cls, float[] hgt, List<List<Vector2>> rivers, string seed) =>
+            Analyse(cls, hgt, rivers, TEXTURE_SIZE * PIXEL_SIZE / (float)N, seed);
     }
 }

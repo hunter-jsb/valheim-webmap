@@ -184,6 +184,9 @@ namespace WebMap
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
 
+        // for the tests (WebMap.Tests): the pin logic without a listening socket or a timer
+        internal MapDataServer(bool forTests) { }
+
         public MapDataServer()
         {
             __instance = this;

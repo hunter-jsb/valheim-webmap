@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The mod is net48 and runs under Unity's Mono; its pure logic is plain IL, so
+       a modern runtime loads the built WebMap.dll and the game's assemblies as files. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <!-- builds the mod first, in the configuration the hint paths below name -->
+  <ItemGroup>
+    <ProjectReference Include="..\WebMap\WebMap.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" SetConfiguration="Configuration=Release" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="WebMap"><HintPath>..\WebMap\bin\Release\WebMap.dll</HintPath></Reference>
+    <Reference Include="assembly_valheim"><HintPath>..\libs\valheim\assembly_valheim.dll</HintPath></Reference>
+    <Reference Include="assembly_utils"><HintPath>..\libs\valheim\assembly_utils.dll</HintPath></Reference>
+    <Reference Include="UnityEngine"><HintPath>..\libs\valheim\UnityEngine.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>..\libs\valheim\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="BepInEx"><HintPath>..\libs\BepInEx\core\BepInEx.dll</HintPath></Reference>
+    <Reference Include="0Harmony"><HintPath>..\libs\BepInEx\core\0Harmony.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
