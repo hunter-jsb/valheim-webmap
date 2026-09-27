@@ -50,7 +50,7 @@ namespace WebMap
                     age = (ZNet.instance.GetTime().Ticks - died) / System.TimeSpan.TicksPerSecond;
             }
             catch { }
-            Stats.ObserveGrave(name);
+            Stats.ObserveGrave(name, pos.x, pos.z);
             found.Add(new Entry { name = name, x = pos.x, z = pos.z, age = age,
                                   explored = MapFog.Explored(pos.x, pos.z) });   // fog is a texture: game thread only
         }

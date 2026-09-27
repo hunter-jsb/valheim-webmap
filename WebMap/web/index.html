@@ -319,7 +319,7 @@ function renderScene(g, v){
   if(PIECES && !HIDDEN.has("builds"))
     MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= PLAN_ZOOM && !HIDDEN.has("plan")});
   if(PIECES && DETAILS.has("fires")) MapCore.drawFires(g, v, PIECES);
-  if(DETAILS.has("deaths")) MapCore.drawDeaths(g, v, DEATHS);
+  if(DETAILS.has("deaths")) MapCore.drawDeaths(g, v, DEATH_WHO ? DEATHS.filter(d => d.name === DEATH_WHO) : DEATHS);
   NAMEBOXES = showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog), {hide: hiddenKinds()}) : [];
   NAMEVIEW = v;
 }
@@ -723,12 +723,13 @@ let PORTALS = [];         // portals and the links between connected pairs
 let GRAVES = [];          // tombstones still standing, i.e. gear still out there
 let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
 let DEATHS = [], DEATHS_JSON = null;   // where people died, newest last; as it came, to spot a change
+let DEATH_WHO = null;     // one player's deaths only, from a link off the players page
 let FEATURES = null;      // the world's geography with its names, by revision
 let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the scene window's coordinates, for a tap
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-22d";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-26a";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -896,6 +897,7 @@ function renderCard(){
   if(f.elev) facts.push(f.kind === "range" ? `up to ${Math.round(f.elev.max)} m` : `${Math.round(Math.max(0, f.elev.min))}\u2013${Math.round(f.elev.max)} m`);
   if(f.builds) facts.push(f.builds.toLocaleString() + (f.builds === 1 ? " piece built" : " pieces built"));
   if(f.portals) facts.push(f.portals + (f.portals === 1 ? " portal" : " portals"));
+  if(f.deaths) facts.push(f.deaths + (f.deaths === 1 ? " death" : " deaths"));
   const on = c.here.find((g, j) => j !== c.i && (g.kind === "continent" || g.kind === "island" || g.kind === "holm"));
   if(on && f.kind !== "continent" && f.kind !== "island" && f.kind !== "holm") facts.push("on " + on.name);
   const others = c.here.map((g, j) => j === c.i ? "" : `<button class="chip" data-i="${j}">${esc(g.name)} \u00b7 ${esc((KIND[g.kind] || g.kind).toLowerCase())}</button>`).join("");
@@ -1094,6 +1096,11 @@ function centerOn(px, py, z){
 function applyHash(){
   const p = hashParams();
   (p.layers||"").split(",").map(s=>s.trim()).filter(Boolean).forEach(showLayer);
+  // details a link asks for come on and stay on, like a legend row clicked
+  const asked = (p.details||"").split(",").map(s=>s.trim()).filter(Boolean);
+  if(asked.length){ asked.forEach(k => { if(DEFAULT_ON.has(k)) OFF.delete(k); else DETAILS.add(k); }); markDetails(); }
+  DEATH_WHO = p.who || null;
+  if(asked.length || p.who) drawRaster();
   const by = new Map((PORTALS||[]).map(q=>[q.id,q]));
   const a = p.portal ? by.get(p.portal) : null;
   let moved = false;

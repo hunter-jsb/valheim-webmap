@@ -30,6 +30,28 @@
   .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
   .fig.nil .v{color:#565b53;font-weight:600}
   .fig.warn .v,.fig.warn .k{color:var(--gold)}
+  /* the world's bosses, in the order they fell; the ones still standing are dim */
+  .bosses{display:flex;flex-wrap:wrap;gap:.35rem;margin:.9rem 0 0}
+  .bosses .chip{cursor:default}
+  .bosses .chip.down{border-color:var(--gold);color:var(--gold)}
+  .bosses .chip.up{color:var(--faint)}
+  .bosses .chip .n{margin-right:.35rem;color:var(--faint);font-weight:400}
+  /* the danger rows: a biome, how far you walked there, how often it killed you */
+  .sect{margin-top:.75rem;padding-top:.6rem;border-top:1px solid var(--line)}
+  .sect .eyebrow{display:flex;justify-content:space-between;align-items:baseline}
+  .sect .eyebrow a{font-weight:500;letter-spacing:0;text-transform:none;font-size:.68rem}
+  .biomes{display:grid;grid-template-columns:minmax(4.6rem,auto) 1fr auto auto;gap:.3rem .55rem;align-items:center;margin-top:.45rem;font-size:.74rem}
+  .biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+  .biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
+  .biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
+  .biomes .km{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .biomes .dx b{color:var(--off);font-weight:600}
+  .biomes .dx.safe b{color:var(--ok)}
+  .line{font-size:.76rem;color:var(--muted);margin-top:.35rem;line-height:1.5}
+  .line b{color:var(--ink-2);font-weight:600}
+  .line a{white-space:nowrap}
+  .line .bad{color:var(--off)}
   .how ul{list-style:none;margin-top:.5rem;display:grid;gap:.22rem;font-size:.73rem;color:var(--muted)}
   .how b{color:var(--ink-2);font-weight:600}
   .foot{border-top:0;padding-top:0;margin-top:1.2rem}
@@ -45,11 +67,15 @@
   <p class="sub" id="count">counting…</p>
   <p class="note bad" id="note"></p>
 
+  <div class="bosses" id="bosses" hidden></div>
   <div class="sorts" id="sorts">
     <span class="lb eyebrow">Sort</span>
     <button class="chip on" data-sort="seen">last seen</button>
     <button class="chip" data-sort="deaths">deaths</button>
+    <button class="chip" data-sort="rate">safest</button>
     <button class="chip" data-sort="dist">distance</button>
+    <button class="chip" data-sort="streak">best streak</button>
+    <button class="chip" data-sort="calls">close calls</button>
     <button class="chip" data-sort="pieces">pieces</button>
   </div>
 
@@ -66,8 +92,13 @@
       <li><b>Pins</b> — map pins you have placed.</li>
       <li><b>Pieces</b>, <b>portals</b> and <b>ships</b> — what is standing in the world right now with your name on it.</li>
       <li><b>Graves</b> — your tombstones still out there holding gear.</li>
+      <li><b>Deaths per km</b> — deaths divided by km walked, overall and by the biome you were in: the biome is read off the ground under you every second.</li>
+      <li><b>Close calls</b> — health under a tenth and back over three tenths without dying; the lowest shows the closest anyone came.</li>
+      <li><b>Streak</b> — the longest walk between two deaths, and how far you have come since the last one.</li>
+      <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
+      <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
       <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
-      <li>Time played is not tracked, and no figure here is a stand-in for it.</li>
+      <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
     </ul>
   </section>
 
@@ -97,37 +128,90 @@ function ago(secs){
 // seeing its owner online: no session behind it, so no elapsed time to show.
 function seen(t){ return t ? "last seen " + ago(t) : "not seen since the tally began"; }
 
-function fig(v, k, cls){
-  return `<div class="stat fig${cls ? " " + cls : ""}"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+function fig(v, k, cls, title){
+  return `<div class="stat fig${cls ? " " + cls : ""}"${title ? ` title="${esc(title)}"` : ""}><div class="v">${v}</div><div class="k">${k}</div></div>`;
+}
+const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+// deaths per km reads as "1 per N km": one death every so far, which is what people say
+const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
+const rate = p => { const d = num(p.deaths), k = num(p.dist_m)/1000; return d && k ? d/k : 0; };
+// the map's own colours for the biomes, beside the name (the name carries the identity)
+const INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#caa27b", "Mountain": "#ffffff", "Plains": "#e2c98f",
+             "Mistlands": "#c4a4dc", "Ashlands": "#e6907e", "Deep North": "#dde8f2", "Ocean": "#9fd0e6"};
+const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
+
+function biomeRows(p){
+  const rows = (p.biomes || []).filter(b => num(b.m) >= 500 || num(b.deaths) > 0);
+  if(!rows.length) return "";
+  const most = Math.max(...rows.map(b => num(b.m)), 1);
+  rows.sort((a, b) => (num(b.deaths)/(num(b.m) || 1)) - (num(a.deaths)/(num(a.m) || 1)) || num(b.m) - num(a.m));
+  return `<div class="sect"><div class="eyebrow"><span>Danger by biome</span><a href="${mapLink(p.name)}">deaths on the map</a></div><div class="biomes">`
+    + rows.map(b => `<span class="b"><i style="background:${INK[b.biome] || "#9aa093"}"></i>${esc(b.biome)}</span>`
+      + `<span class="bar" style="width:${Math.max(1, 100*num(b.m)/most).toFixed(1)}%" title="${esc(b.biome)}: ${km(b.m)} km walked, ${plural(num(b.deaths), "death")}"></span>`
+      + `<span class="km">${km(b.m)} km</span>`
+      + `<span class="dx${num(b.deaths) ? "" : " safe"}"><b>${num(b.deaths) ? "× " + num(b.deaths) : "✓"}</b> ${num(b.deaths) ? per(b.deaths, b.m) : ""}</span>`).join("")
+    + `</div></div>`;
 }
 
 function card(p){
-  const on = !!p.online, graves = num(p.graves);
+  const on = !!p.online, graves = num(p.graves), runs = p.runs || {}, streak = p.streak_m || {}, runm = p.run_m || {};
   const nil = n => n ? "" : "nil";
+  const calls = num(p.close_calls), lowest = num(p.lowest_hp);
+  const last = (DEATHS.filter(d => d.n === p.name).slice(-1))[0];
+  const lastLink = last ? mapLink(p.name, `&at=${Math.round(last.x)},${Math.round(last.z)},14`) : null;
+  const streakLine = streak.best != null
+    ? `<div class="line"><b>Streak</b> best ${km(streak.best)} km without dying &#183; ${km(streak.now)} km since the last`
+      + (lastLink ? ` (<a href="${lastLink}">where</a>)` : "") + `</div>` : "";
+  const runLine = runs.ok != null
+    ? `<div class="line"><b>Corpse runs</b> ${num(runs.ok)} recovered${num(runs.failed) ? ` &#183; <span class="bad">${num(runs.failed)} failed</span>` : ""}`
+      + `${num(runs.rescued) ? ` &#183; ${num(runs.rescued)} rescued by others` : ""}`
+      + `${num(runs.open) ? ` &#183; <a href="index.html#layers=grave" class="bad">${num(runs.open)} out there</a>` : ""}`
+      + `${num(runm.best) ? ` &#183; longest run ${km(runm.best)} km` : ""}</div>` : "";
   return `<div class="card${on ? " on" : ""}">`
     + `<div class="chead"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>`
     + `<span class="seen">${on ? "online now" : seen(num(p.last_seen))}</span></div>`
     + `<div class="figs">`
     + fig(num(p.deaths), "deaths", nil(num(p.deaths)))
-    + fig(num(p.joins), "joins", nil(num(p.joins)))
-    + fig(num(p.chat), "chat", nil(num(p.chat)))
-    + fig((num(p.dist_m)/1000).toFixed(1), "km", num(p.dist_m) ? "" : "nil")
+    + fig(km(p.dist_m), "km", num(p.dist_m) ? "" : "nil")
+    + fig(per(p.deaths, p.dist_m).replace("1 per ", ""), "km per death", num(p.deaths) && num(p.dist_m) ? "" : "nil", "one death every so many km walked")
+    + fig(calls, "close calls", calls ? "warn" : "nil", calls ? "lowest survived: " + Math.round(lowest*100) + "% health" : "")
     + fig(num(p.hops), "hops", nil(num(p.hops)))
-    + fig(num(p.pins), "pins", nil(num(p.pins)))
     + fig(num(p.pieces), "pieces", nil(num(p.pieces)))
     + fig(num(p.portals), "portals", nil(num(p.portals)))
     + fig(num(p.ships), "ships", nil(num(p.ships)))
+    + fig(num(p.pins), "pins", nil(num(p.pins)))
+    + fig(num(p.chat), "chat", nil(num(p.chat)))
+    + fig(num(p.joins), "joins", nil(num(p.joins)))
     + fig(graves, graves ? "gear still out" : "graves", graves ? "warn" : "nil")
-    + `</div></div>`;
+    + `</div>`
+    + biomeRows(p) + streakLine + runLine
+    + `</div>`;
+}
+
+const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
+const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader"];
+function renderBosses(list){
+  const el = document.getElementById("bosses");
+  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, ""));
+  const keys = BOSS_ORDER.concat(down.filter(k => !BOSS_ORDER.includes(k)));
+  el.hidden = !list;
+  el.innerHTML = `<span class="lb eyebrow">Bosses</span>` + keys.map(k => {
+    const i = down.indexOf(k), name = BOSS[k] || k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    return `<span class="chip ${i >= 0 ? "down" : "up"}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}${esc(name)}${i >= 0 ? " ✓" : ""}</span>`;
+  }).join("");
 }
 
 const KEYS = {
   seen: p => num(p.last_seen),
   deaths: p => num(p.deaths),
+  rate: p => num(p.dist_m) >= 1000 ? -rate(p) : -1e9,   // safest: fewest deaths per km, among those who have walked
   dist: p => num(p.dist_m),
+  streak: p => num((p.streak_m || {}).best),
+  calls: p => num(p.close_calls),
   pieces: p => num(p.pieces),
 };
 
+let DEATHS = [], BOSSES = null;
 function render(){
   const key = KEYS[SORT] || KEYS.seen;
   const rows = DATA.slice().sort((a, b) =>
@@ -138,6 +222,7 @@ function render(){
   document.getElementById("count").innerHTML = `<b>${plural(rows.length, "player")}</b>`
     + (on ? ` · ${on} online now` : "")
     + (SINCE ? ` · tallied since ${new Date(SINCE*1000).toLocaleDateString(undefined, {month:"short", day:"numeric", year:"numeric"})}` : "");
+  renderBosses(BOSSES);
 
   const html = rows.length
     ? `<div class="cards">${rows.map(card).join("")}</div>`
@@ -153,6 +238,9 @@ async function load(){
     const j = await r.json();
     DATA = Array.isArray(j.players) ? j.players : [];
     SINCE = num(j.since);
+    BOSSES = Array.isArray(j.bosses) ? j.bosses : null;
+    // where each player last died, for the link to the spot
+    try{ const st = await MapCore.fetchState(API); DEATHS = ((st.deaths || {}).deaths) || []; }catch(e){}
     LOADED = true;
     render();
     document.getElementById("note").textContent = "";

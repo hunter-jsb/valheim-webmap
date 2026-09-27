@@ -32,6 +32,17 @@
   tagged portal standing unlinked now draws one dashed line, to the only hub with a
   gate to spare, else the hub it last led to, else the nearest -- the mod remembers each
   portal's last twin (`portals.tsv`, `last` on the portal) across restarts.
+* Stats that use distance as the yardstick, never time. Per player: metres walked and
+  deaths by the biome underfoot, so the players page shows danger by biome as "1 death
+  per N km"; close calls (health under a tenth and back over three tenths) with the
+  lowest survived; the longest walk between deaths and the walk since the last one;
+  corpse runs as recovered (back at the spot), failed (died within 200 m of it first),
+  rescued (the grave emptied by someone else) and still out there, with the longest run.
+  The world's boss keys become a board of who has fallen, in order. `/stats/players`
+  carries `biomes`, `close_calls`, `lowest_hp`, `streak_m`, `runs`, `run_m` and `bosses`;
+  `stats.tsv` keeps them. Each card links to that player's deaths on the map
+  (`#details=deaths&who=<name>`), to the spot of the last one, and to the graves layer;
+  the place card says how many died at a place.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 * Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin

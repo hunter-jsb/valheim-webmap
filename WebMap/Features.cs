@@ -506,7 +506,8 @@ namespace WebMap
                     if (n++ > 0) sb.Append(',');
                     Open(sb, f);
                     Measure(g, layer, (ushort)k, f, out float walked, out int builds, out int portals);
-                    sb.Append(Inv($",\"explored\":{walked:0.###},\"builds\":{builds},\"portals\":{portals}}}"));
+                    int died = Count(g, layer, (ushort)k, Stats.DeathPositions);
+                    sb.Append(Inv($",\"explored\":{walked:0.###},\"builds\":{builds},\"portals\":{portals},\"deaths\":{died}}}"));
                 }
             }
             sb.Append("]}");
@@ -546,7 +547,15 @@ namespace WebMap
             }
             return n;
         }
-        private static string BiomeName(byte c)
+        // the biome class at a spot, for the tallies; -1 before the world has been read
+        public static int ClassAt(float x, float z)
+        {
+            var g = grids; if (g == null) return -1;
+            int cx = (int)Math.Floor(x / g.cell + N / 2f), cz = (int)Math.Floor(z / g.cell + N / 2f);
+            if (cx < 0 || cz < 0 || cx >= N || cz >= N) return -1;
+            return g.cls[cz * N + cx];
+        }
+        public static string BiomeName(byte c)
         {
             if (c == 0) return "Ocean";
             switch ((Heightmap.Biome)(1 << (c - 1)))

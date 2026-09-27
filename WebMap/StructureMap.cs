@@ -151,6 +151,7 @@ namespace WebMap
             Pieces.Begin();
             Graves.Begin();
             Stats.BeginSweep();
+            try { Stats.ObserveKeys(ZoneSystem.instance != null ? ZoneSystem.instance.GetGlobalKeys() : null); } catch { }
             Traders.ScanIfNeeded();                           // once, on the game thread
 
             var byPrefab = new Dictionary<int, int>();
