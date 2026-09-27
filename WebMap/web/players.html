@@ -180,7 +180,8 @@
         <li><b>Streak</b> — the longest walk between two deaths, and how far you have come since the last one.</li>
         <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
         <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
-        <li><b>The pentagon</b> — five sides as a share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, Builder pieces standing, Survivor km per death, Traveller hops, Voice chat lines.</li>
+        <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them; a creature that despawns is nobody's kill.</li>
+        <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees and rocks together.</li>
         <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
         <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
       </ul>
@@ -295,19 +296,25 @@ const SHOWS = {
 // ---------- the pentagon ----------
 // Five sides, each the player's share of the roster's best, square-rooted: a
 // giant still reaches the rim, and everyone else keeps a shape worth reading.
+// A side made of several figures is the mean of their shares, over the figures
+// anyone on the roster has at all.
+const sea = p => num(((p.biomes || []).find(b => b.biome === "Ocean") || {}).m);
+const kpd = p => num(p.dist_m) >= 1000 ? num(p.dist_m)/1000/Math.max(1, num(p.deaths)) : 0;
+const PARTS = {km: p => num(p.dist_m), hops: p => num(p.hops), sea, pieces: p => num(p.pieces), kpd, kills: p => num(p.kills), trees: p => num(p.trees), rocks: p => num(p.rocks)};
+let BEST = {};
+const share = (p, keys) => { const has = keys.filter(k => BEST[k] > 0); return has.length ? has.reduce((t, k) => t + Math.min(1, PARTS[k](p)/BEST[k]), 0)/has.length : 0; };
 const AXES = [
-  ["Explorer", p => num(p.dist_m)/1000, v => km(v*1000) + " km"],
-  ["Builder", p => num(p.pieces), v => Math.round(v) + " pieces"],
-  ["Survivor", p => num(p.dist_m) >= 1000 ? num(p.dist_m)/1000/Math.max(1, num(p.deaths)) : 0, v => (v >= 10 ? Math.round(v) : v.toFixed(1)) + " km per death"],
-  ["Traveller", p => num(p.hops), v => Math.round(v) + " hops"],
-  ["Voice", p => num(p.chat), v => Math.round(v) + " lines"],
+  ["Explorer", ["km", "hops", "sea"], p => `${km(p.dist_m)} km · ${num(p.hops)} hops${BEST.sea > 0 ? ` · ${km(sea(p))} at sea` : ""}`],
+  ["Builder", ["pieces"], p => `${num(p.pieces)} pieces`],
+  ["Survivor", ["kpd"], p => `${kpd(p) >= 10 ? Math.round(kpd(p)) : kpd(p).toFixed(1)} km per death`],
+  ["Slayer", ["kills"], p => `${num(p.kills)} kills`],
+  ["Harvester", ["trees", "rocks"], p => `${num(p.trees)} trees · ${num(p.rocks)} rocks`],
 ];
-let BEST = AXES.map(() => 1);
 function radar(p, size, big){
-  const c = size/2, R = big ? c - 30 : c - 3, pts = [], vals = [];
-  AXES.forEach(([, get], i) => {
-    const v = get(p), a = -Math.PI/2 + i*2*Math.PI/5, r = R*Math.sqrt(Math.min(1, v/(BEST[i] || 1)));
-    vals.push(v); pts.push([c + r*Math.cos(a), c + r*Math.sin(a), a]);
+  const c = size/2, R = big ? c - 30 : c - 3, pts = [];
+  AXES.forEach(([, keys], i) => {
+    const a = -Math.PI/2 + i*2*Math.PI/5, r = R*Math.sqrt(share(p, keys));
+    pts.push([c + r*Math.cos(a), c + r*Math.sin(a), a]);
   });
   const ring = k => AXES.map((_, i) => { const a = -Math.PI/2 + i*2*Math.PI/5; return `${(c + R*k*Math.cos(a)).toFixed(1)},${(c + R*k*Math.sin(a)).toFixed(1)}`; }).join(" ");
   let out = `<svg class="radar${big ? " big" : ""}" viewBox="0 0 ${size} ${size}" aria-hidden="true">`
@@ -316,11 +323,11 @@ function radar(p, size, big){
     + `<polygon class="fill" points="${pts.map(([x, y]) => x.toFixed(1) + "," + y.toFixed(1)).join(" ")}"/>`;
   if(big){
     out += pts.map(([x, y]) => `<circle class="pt" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6"/>`).join("");
-    AXES.forEach(([name, , fmt], i) => {
+    AXES.forEach(([name, , text], i) => {
       const a = -Math.PI/2 + i*2*Math.PI/5, lx = c + (R + 14)*Math.cos(a), ly = c + (R + 14)*Math.sin(a);
       const anchor = Math.abs(Math.cos(a)) < .2 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
       out += `<text class="lb" x="${lx.toFixed(1)}" y="${(ly + (Math.sin(a) > .5 ? 6 : Math.sin(a) < -.5 ? -4 : 0)).toFixed(1)}" text-anchor="${anchor}">${name}</text>`
-        + `<text class="lv" x="${lx.toFixed(1)}" y="${(ly + (Math.sin(a) > .5 ? 17 : Math.sin(a) < -.5 ? 7 : 11)).toFixed(1)}" text-anchor="${anchor}">${esc(fmt(vals[i]))}</text>`;
+        + `<text class="lv" x="${lx.toFixed(1)}" y="${(ly + (Math.sin(a) > .5 ? 17 : Math.sin(a) < -.5 ? 7 : 11)).toFixed(1)}" text-anchor="${anchor}">${esc(text(p))}</text>`;
     });
   }
   return out + `</svg>`;
@@ -337,7 +344,7 @@ function row(p){
 }
 function render(){
   const key = KEYS[SORT] || KEYS.seen, show = SHOWS[SHOW] || SHOWS.all;
-  BEST = AXES.map(([, get]) => Math.max(1e-9, ...DATA.map(get)));   // the rim is the roster's best on each side
+  for(const k in PARTS) BEST[k] = Math.max(0, ...DATA.map(PARTS[k]));   // the rim is the roster's best on each side
   const rows = DATA.filter(show).sort((a, b) =>
     key(b) - key(a) || num(b.last_seen) - num(a.last_seen)
     || String(a.name || "").localeCompare(String(b.name || "")));
@@ -406,6 +413,9 @@ function renderDetail(){
     + fig(km(p.dist_m), "km", num(p.dist_m) ? "" : "nil")
     + fig(per(p.deaths, p.dist_m).replace("1 per ", ""), "km per death", num(p.deaths) && num(p.dist_m) ? "" : "nil", "one death every so many km walked")
     + fig(calls, "close calls", calls ? "warn" : "nil", calls ? "lowest survived: " + Math.round(lowest*100) + "% health" : "")
+    + fig(num(p.kills), "kills", nil(num(p.kills)))
+    + fig(num(p.trees), "trees felled", nil(num(p.trees)))
+    + fig(num(p.rocks), "rocks broken", nil(num(p.rocks)))
     + fig(num(p.hops), "hops", nil(num(p.hops)))
     + fig(num(p.pieces), "pieces", nil(num(p.pieces)))
     + fig(num(p.portals), "portals", nil(num(p.portals)))

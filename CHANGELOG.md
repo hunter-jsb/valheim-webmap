@@ -8,9 +8,9 @@
   dropdowns -- everyone, online now, seen this week, gear still out. The bosses wear
   icons of their own, in the order they fell, the standing ones dim. An online player's
   page says where they are in the world's own names, with a link to the spot. Each player
-  has a pentagon -- Explorer (km), Builder (pieces), Survivor (km per death), Traveller
-  (hops), Voice (chat), each side a share of the roster's best, square-rooted -- small on
-  the row and labelled on the page. Picking a player slides the page open.
+  has a pentagon -- Explorer (km, portal hops and km at sea together), Builder (pieces),
+  Survivor (km per death), Slayer (kills), Harvester (trees and rocks together), each side
+  a share of the roster's best, square-rooted -- small on the row and labelled on the page. Picking a player slides the page open.
 
 ## 2.14.0
 
