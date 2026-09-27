@@ -19,7 +19,7 @@ namespace WebMap
         public enum Armor { None, Light, Medium, Heavy, Mage }
         public enum Hit { Melee, Ranged, Magic, Backstab }
         public static readonly string[] HandNames = Lower(typeof(Hand)), ArmorNames = Lower(typeof(Armor)), HitNames = Lower(typeof(Hit));
-        public static readonly string[] Slots = { "right", "left", "chest", "legs", "helmet", "shoulder" };
+        public static readonly string[] Slots = { "right", "left", "chest", "legs", "helmet", "shoulder", "rightBack", "leftBack" };
         private static string[] Lower(Type e) => Array.ConvertAll(Enum.GetNames(e), n => n.ToLowerInvariant());
 
         // Chest movement penalties: leather, troll, lox, fenring, Askvin none; root 2%;
@@ -116,6 +116,8 @@ namespace WebMap
                     r != 0 ? ri.name : Name(z.GetInt(ZDOVars.s_rightBackItem)),   // a sheathed weapon is still carried
                     l != 0 ? li.name : Name(z.GetInt(ZDOVars.s_leftBackItem)),
                     ci.name, Name(z.GetInt(ZDOVars.s_legItem)), Name(z.GetInt(ZDOVars.s_helmetItem)), Name(z.GetInt(ZDOVars.s_shoulderItem)),
+                    // the back slots on their own too: a class reads the weapons carried while a hammer is in hand
+                    Name(z.GetInt(ZDOVars.s_rightBackItem)), Name(z.GetInt(ZDOVars.s_leftBackItem)),
                 };
                 Stats.Wore(player, ri.hand, li.hand, ri.twoHanded || li.twoHanded, ci.armor, worn, seconds);
             }

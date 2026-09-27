@@ -296,7 +296,7 @@ so once a second, while alive and out of bed, the server adds a second to:
   (eitr-weave), `none` bare.
 
 `worn` is the latest set: `right`, `left` (a sheathed weapon still counts), `chest`,
-`legs`, `helmet`, `shoulder`, by prefab name. **`hits`** are colour, not a record: a hit
+`legs`, `helmet`, `shoulder`, and the two back slots `rightBack` and `leftBack`, by prefab name. **`hits`** are colour, not a record: a hit
 on a creature counts only when it passes through the server on its way to another
 player's game, never one on a creature the hitter's own game runs, which alone in an
 area is all of them. Each is `melee`, `ranged` or `magic` (a staff's), and `backstab`
