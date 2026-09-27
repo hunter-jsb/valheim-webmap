@@ -54,15 +54,19 @@
   that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
   top when the creature was not yet alerted -- partial, since a hit on a creature the
   hitter's own game runs never reaches the server.
-* Players have a class. From what the mod sees in their hands and on their back, shown only
-  as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
-  with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
-  harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
-  the roster row and the player's page with its reason, a Gear group shows what they were
-  last seen wearing, and the spotlight turns through it. The class is read three ways and
-  summed -- what is worn, what is carried, held and landed, and what has been done as shares
-  of the roster's best -- so it shows from the first sample, faint until the hands or the
-  hits have said their piece; the worn set carries the two back slots for it.
+* Players have a class: a title of two words, how they fight and their trade. The gear
+  decides the first -- eitr-weave and a staff make a mage, a two-hander or a shield beside
+  them a battlemage, a bow an archer, ranger or marksman by the armour's weight, a shield a
+  sentinel, warden or knight, a two-hander a berserker or a champion, a knife a rogue (an
+  assassin when the backstabs are half the hits), one-handed steel a brawler, fighter or
+  warrior. The deeds give the second: the roster's top builder is the architect, a builder
+  who also fells and mines an engineer, a builder who mostly roams an explorer, the rest
+  builders, miners, lumberjacks and explorers. Either half may be missing; the title sits
+  on the roster row and the player's page with its reason, a Gear group shows what they were
+  last seen wearing, and the spotlight turns through it. Time in hand is the working
+  evidence: the server sees blows landed only on creatures another player owns, and skills
+  never leave the character file. Faint until ten minutes have had something in hand; the
+  worn set carries the two back slots so a mage building all night stays a mage.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.

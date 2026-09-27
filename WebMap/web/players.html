@@ -314,15 +314,11 @@ function radar(p, size, big){
   }
   return out + `</svg>`;
 }
-// ---------- the classes ----------
-// A class is read three ways. Wearing: the armour on the back, known from the first
-// sample. Weapons: what is carried (the worn set shows the sheathed weapon when a hand
-// is empty, and the back slots on their own), what has been held, and the hits the
-// server saw. Doing: the tallies, as shares of the roster's best. The gear decides:
-// robes and staffs make a mage however long the hammer was in hand tonight; Builder
-// and Harvester are for players with no fighting identity at all. Anyone with a sample
-// gets a class; it is faint until ten minutes have had something in hand or the hits
-// have come in.
+// A class is a title of two words: how one fights, from what is worn and what is in
+// hand, and one's trade, from the deeds. The gear decides the first: robes and staffs
+// make a mage however long the hammer was out tonight, and a two-hander beside them a
+// battlemage. Either half may be missing. The server sees blows landed only on creatures
+// another player owns, so time in hand is the working evidence and hits are a bonus.
 const FAMILY_WORD = {bow: "a bow", crossbow: "a crossbow", staff: "a staff", shield: "a shield", knife: "a knife", sword: "a sword", axe: "an axe", mace: "a mace", spear: "a spear", polearm: "an atgeir", hammer: "the hammer", hoe: "the hoe", cultivator: "the cultivator", pickaxe: "a pickaxe", torch: "a torch", fishing: "a fishing rod", tool: "a tool"};
 const ARMOUR_WORD = {mage: "eitr-weave", heavy: "heavy armour", medium: "medium armour", light: "light armour", none: "no armour"};
 // an item's family from its prefab name, for what is carried but not being held
@@ -346,56 +342,62 @@ function familyOf(name){
   if(/fishingrod/.test(n)) return "fishing";
   return "tool";
 }
-const COMBAT = new Set(["Archer", "Mage", "Tank", "Rogue", "Fighter"]);
+const FIGHT = {staff: "magic", bow: "ranged", crossbow: "ranged", shield: "shield", knife: "knife", sword: "melee", axe: "melee", mace: "melee", spear: "melee", polearm: "melee"};
+const twoHander = n => /^(thsword|battleaxe|sledge|atgeir)/i.test(String(n || ""));
 function classify(p){
-  const g = p.gear; if(!g || (!g.worn && !g.hand && !g.armor)) return null;
-  const S = {Archer: 0, Mage: 0, Tank: 0, Rogue: 0, Fighter: 0, Builder: 0, Harvester: 0}, why = [];
+  const g = p.gear || {}, why = [];
   // 1. wearing
   const arm = g.armor || {}, armTotal = Object.values(arm).reduce((t, v) => t + num(v), 0);
-  const armClass = armTotal ? Object.entries(arm).sort((a, b) => num(b[1]) - num(a[1]))[0][0] : null;
-  if(armClass){
-    ({mage: () => { S.Mage += 1.5; }, heavy: () => { S.Tank += .8; S.Fighter += .5; }, medium: () => { S.Fighter += .6; S.Rogue += .3; },
-      light: () => { S.Rogue += .4; S.Archer += .4; }, none: () => {}})[armClass]?.();
-    why.push(ARMOUR_WORD[armClass] || armClass);
-  }
-  // 2. weapons: carried, held, used
-  const worn = g.worn || {}, carried = [...new Set([familyOf(worn.right), familyOf(worn.left), familyOf(worn.rightBack), familyOf(worn.leftBack)].filter(Boolean))];
-  const CARRY = {bow: ["Archer", .8], crossbow: ["Archer", .8], staff: ["Mage", .8], shield: ["Tank", .6], knife: ["Rogue", .8], sword: ["Fighter", .6], axe: ["Fighter", .4, "Harvester", .3], mace: ["Fighter", .6], spear: ["Fighter", .6], polearm: ["Fighter", .7], hammer: ["Builder", .5], hoe: ["Builder", .3], cultivator: ["Builder", .3], pickaxe: ["Harvester", .5]};
-  for(const f of carried){ const c = CARRY[f]; if(c){ S[c[0]] += c[1]; if(c[2]) S[c[2]] += c[3]; } }
+  const A = armTotal ? Object.entries(arm).sort((a, b) => num(b[1]) - num(a[1]))[0][0] : "none";
+  if(armTotal) why.push(ARMOUR_WORD[A] || A);
+  // 2. weapons: a minute of fighting gear in hand decides; before that, what is carried
   const hand = g.hand || {}, held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), heldTotal = held.reduce((t, [, v]) => t + num(v), 0);
-  const sh = (...fams) => heldTotal ? fams.reduce((t, f) => t + num(hand[f]), 0)/heldTotal : 0;
-  if(heldTotal >= 60){
-    S.Archer += sh("bow", "crossbow"); S.Mage += sh("staff"); S.Tank += sh("shield"); S.Rogue += sh("knife");
-    S.Fighter += sh("sword", "mace", "spear", "polearm") + sh("axe")*.5 + num(hand.twohanded)/heldTotal*.2;
-    S.Builder += sh("hammer", "hoe", "cultivator"); S.Harvester += sh("pickaxe") + sh("axe")*.5;
+  const fought = held.filter(([k]) => FIGHT[k]), fightTotal = fought.reduce((t, [, v]) => t + num(v), 0);
+  const worn = g.worn || {}, carriedNames = [worn.right, worn.left, worn.rightBack, worn.leftBack].filter(n => FIGHT[familyOf(n)]), carried = [...new Set(carriedNames.map(familyOf))];
+  const F = {magic: 0, ranged: 0, shield: 0, knife: 0, melee: 0};
+  let twoh = 0;
+  if(fightTotal >= 60){
+    for(const [k, v] of fought) F[FIGHT[k]] += num(v)/fightTotal*(k === "axe" ? .5 : 1);   // an axe is half a tool
+    twoh = num(hand.twohanded)/fightTotal;
+    why.push(fought.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 2).map(([k, v]) => `${FAMILY_WORD[k] || k} ${Math.round(100*num(v)/heldTotal)}%`).join(" and ") + " of the time in hand");
+  } else if(carried.length){
+    for(const k of carried) F[FIGHT[k]] += 1;
+    twoh = carriedNames.some(twoHander) ? 1 : 0;
+    why.push(`carries ${carried.map(k => FAMILY_WORD[k]).join(" and ")}`);
   }
   const hits = g.hits || {}, hitTotal = num(hits.melee) + num(hits.ranged) + num(hits.magic);
-  if(hitTotal >= 10){ S.Archer += num(hits.ranged)/hitTotal*.5; S.Mage += num(hits.magic)/hitTotal*.5; S.Rogue += num(hits.backstab)/hitTotal*.6; S.Fighter += num(hits.melee)/hitTotal*.3; S.Tank += num(hits.melee)/hitTotal*.2; }
-  const carriedWords = carried.filter(f => !["torch", "tool", "fishing"].includes(f)).map(f => FAMILY_WORD[f]);
-  const topHeld = held.slice().sort((a, b) => num(b[1]) - num(a[1]))[0];
-  if(heldTotal >= 60 && topHeld) why.push(`${FAMILY_WORD[topHeld[0]] || topHeld[0]} in hand ${Math.round(100*num(topHeld[1])/heldTotal)}% of the time`);
-  else if(carriedWords.length) why.push(`carries ${carriedWords.join(" and ")}`);
-  if(hitTotal >= 10){ const kind = [["ranged", "shots"], ["magic", "spells"], ["backstab", "backstabs"], ["melee", "blows"]].sort((a, b) => num(hits[b[0]]) - num(hits[a[0]]))[0]; why.push(`${num(hits[kind[0]])} ${kind[1]} landed`); }
-  // 3. doing, as shares of the roster's best
-  const best = k => Math.max(1e-9, ...DATA.map(q => num(q[k])));
-  const share = k => num(p[k])/best(k);
-  // a handful of trees or kills says nothing yet: ten before a deed counts
-  const taken = num(p.trees) + num(p.rocks), built = share("pieces"), harvest = taken >= 10 ? taken/Math.max(1e-9, ...DATA.map(q => num(q.trees) + num(q.rocks))) : 0, fought = num(p.kills) >= 10 ? share("kills") : 0;
-  S.Builder += built*.8; S.Harvester += harvest*.8;
-  if(fought > 0){ const lead = Object.entries(S).filter(([k]) => COMBAT.has(k)).sort((a, b) => b[1] - a[1])[0]; S[lead[0]] += fought*.5; }
-  if(num(p.dist_m) >= 1000 && num(p.deaths) === 0) S.Tank += .2;
-  const took = [num(p.trees) >= 10 && `${num(p.trees)} trees felled`, num(p.rocks) >= 10 && `${num(p.rocks)} rocks broken`].filter(Boolean).join(" and ");
-  const deeds = [[built, `${num(p.pieces).toLocaleString()} pieces built`], [harvest, took], [fought, `${num(p.kills)} kills`]].filter(d => d[0] > 0 && d[1]).sort((a, b) => b[0] - a[0])[0];
-  if(deeds) why.push(deeds[1]);
-  // the fighting identity first; the working classes only when there is none
-  const fighting = Object.entries(S).filter(([k]) => COMBAT.has(k)).sort((a, b) => b[1] - a[1])[0];
-  const working = Object.entries(S).filter(([k]) => !COMBAT.has(k)).sort((a, b) => b[1] - a[1])[0];
-  const [name, score] = fighting[1] >= 0.5 ? fighting : working[1] >= 0.3 ? working : fighting;
-  const noGear = !armTotal && !carried.length && heldTotal < 60 && hitTotal < 10;   // only the deeds speak: a builder can still be named, a nobody is not
-  if(noGear && score < 0.3) return null;
-  const early = noGear || (heldTotal < 600 && hitTotal < 10);
-  if(score < 0.3) return {name: "Wanderer", early, why: why.join(" \u00b7 ") || "nothing to go on yet"};
-  return {name, early, why: why.join(" \u00b7 "), top: held.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3).map(([k, v]) => ({fam: k, share: num(v)/heldTotal}))};
+  if(hitTotal >= 10){
+    F.magic += num(hits.magic)/hitTotal*.5; F.ranged += num(hits.ranged)/hitTotal*.5; F.melee += num(hits.melee)/hitTotal*.3; F.knife += num(hits.backstab)/hitTotal*.5;
+    const kind = [["ranged", "shots"], ["magic", "spells"], ["backstab", "backstabs"], ["melee", "blows"]].sort((a, b) => num(hits[b[0]]) - num(hits[a[0]]))[0];
+    why.push(`${num(hits[kind[0]])} ${kind[1]} landed`);
+  }
+  // a quarter of the fighting counts as a way of fighting; the armour colours the name
+  const facets = Object.entries(F).filter(([, v]) => v >= .25).sort((a, b) => b[1] - a[1]), has = k => facets.some(f => f[0] === k);
+  const lead = facets.length ? facets[0][0] : null, shielded = has("shield") || carried.includes("shield");
+  let fighter = null;
+  if(A === "mage" || lead === "magic") fighter = has("melee") || shielded || has("knife") ? "Battlemage" : has("ranged") ? "Arcane Archer" : "Mage";
+  else if(lead === "ranged") fighter = {heavy: "Marksman", medium: "Ranger"}[A] || "Archer";
+  else if(lead === "knife") fighter = num(hits.backstab) >= 10 && num(hits.backstab)*2 >= hitTotal ? "Assassin" : "Rogue";
+  else if(lead === "melee" && twoh >= .5) fighter = A === "heavy" ? "Champion" : "Berserker";
+  else if(lead === "melee" || lead === "shield") fighter = shielded ? ({heavy: "Knight", medium: "Warden"}[A] || "Sentinel") : ({heavy: "Warrior", medium: "Fighter"}[A] || "Brawler");
+  else fighter = {heavy: "Warrior", medium: "Fighter", light: "Scout"}[A] || null;
+  // 3. the trade, from the deeds: building against the roster's best, the rest in plain numbers
+  const best = k => Math.max(1, ...DATA.map(q => num(q[k])));
+  const pieces = num(p.pieces), bestPieces = best("pieces"), taken = num(p.trees) + num(p.rocks), roam = num(p.dist_m)/best("dist_m");
+  const toolShare = heldTotal ? (num(hand.pickaxe) + num(hand.hoe) + num(hand.cultivator))/heldTotal : 0;
+  const building = pieces >= 1000 || (pieces >= 300 && pieces/bestPieces >= .2), harvesting = taken >= 100 || (taken >= 10 && toolShare >= .25);
+  const trade = building && pieces >= bestPieces ? "Architect"
+    : building && harvesting ? "Engineer"
+    : building && !(roam >= .5 && pieces/bestPieces < .25) ? "Builder"   // a builder who mostly roams is an explorer
+    : harvesting ? (num(p.rocks) >= num(p.trees) ? "Miner" : "Lumberjack")
+    : roam >= .5 || num(p.ships) >= 3 ? "Explorer" : null;
+  why.push(...[building && `${pieces.toLocaleString()} pieces built`, num(p.trees) >= 10 && `${num(p.trees)} trees felled`, num(p.rocks) >= 10 && `${num(p.rocks)} rocks broken`, trade === "Explorer" && `${Math.round(num(p.dist_m)/1000)} km travelled`].filter(Boolean));
+  const hasGear = armTotal > 0 || heldTotal > 0 || carried.length > 0 || hitTotal > 0;
+  const name = [fighter, trade].filter(Boolean).join(" ") || (hasGear ? "Wanderer" : "");
+  if(!name) return null;
+  // faint until ten minutes have had something in hand or the hits have come in
+  const early = !hasGear || (heldTotal < 600 && hitTotal < 10);
+  return {name, early, why: why.join(" \u00b7 ") || "nothing to go on yet", top: heldTotal ? held.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3).map(([k, v]) => ({fam: k, share: num(v)/heldTotal})) : []};
 }
 const itemWord = n => String(n || "").replace(/^(Armor|Helmet|Cape)/, "").replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
 function gearGroup(p){
