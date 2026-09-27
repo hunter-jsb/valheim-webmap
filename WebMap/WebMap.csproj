@@ -36,6 +36,7 @@
     <Reference Include="UnityEngine"><HintPath>..\libs\valheim\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>..\libs\valheim\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>..\libs\valheim\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SoftReferenceableAssets"><HintPath>..\libs\valheim\SoftReferenceableAssets.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Splatform"><HintPath>..\libs\valheim\Splatform.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="steamworks"><HintPath>..\libs\valheim\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="WebsocketSharp"><HintPath>..\libs\websocket-sharp.dll</HintPath></Reference>

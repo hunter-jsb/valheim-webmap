@@ -46,7 +46,8 @@ guards against; there is one per failure, not one per branch.
    the 3D view's chunks (`/objects`, `/height`, gated on `MapFog.ChunkExplored`):
    **dotnet test**. Graves, vehicles and traders (and Hildir's camps by name):
    **nothing**, they need ZDOs or `ZNetScene`.
-   The 3D ground's terraforming (`TerrainPatches.Decode`): **dotnet test**; its generator
+   The 3D ground's terraforming (`TerrainPatches.Decode`), a location's marker sent as the
+   location and what its model leaves out: **dotnet test**; its generator
    heights and the model export need the engine: **a running server** (`./testserver.sh`
    on a copied world, then the map's 3D mode in a headless Chrome, `tools/check.mjs`).
 8. **Stats** (`Seen`, `Death`, `PublishSweep`, `ObserveKeys`, `stats.tsv`): **dotnet test**

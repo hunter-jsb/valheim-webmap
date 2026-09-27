@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 using WebMap.Util;
 
@@ -17,7 +18,8 @@ namespace WebMap.Models
     // restart exports nothing again and the browser knows which prefabs
     // have a model and which need a box. Served at /models/<file> and
     // /prefabs; the extracted meshes under models/meshes are game data and
-    // never leave the server.
+    // never leave the server. A world location is no network prefab: its
+    // prefab is ZoneSystem's, loaded for the export and let go after.
     internal static class ModelStore
     {
         public const int FORMAT = 6;   // 5: locked meshes come from the mesh cache; 6: a mineable rock names the hit area of each part
@@ -235,9 +237,10 @@ namespace WebMap.Models
         public static IEnumerator Pump()
         {
             var sw = new System.Diagnostics.Stopwatch();
+            IEnumerator job = null; int jobHash = 0;
             while (true)
             {
-                if (QueueLength == 0)
+                if (job == null && QueueLength == 0)
                 {
                     if (indexDirty) { SaveIndex(); WriteTexturesJson(); Rebuild(); indexDirty = false; }
                     // a sweep queues prefabs as it meets them, so a run ends after a quiet spell, not at the first empty queue
@@ -278,54 +281,95 @@ namespace WebMap.Models
                     ZLog.Log($"WebMap: exporting models into {root} as the sweep finds them, {Math.Max(2, WebMapConfig.EXPORT_MS_PER_FRAME)} ms a frame");
                 }
                 sw.Restart();
-                int budgetMs = Math.Max(2, WebMapConfig.EXPORT_MS_PER_FRAME);
+                int budgetMs = Math.Max(2, WebMapConfig.EXPORT_MS_PER_FRAME), before = Exported;
+                // one export at a time, stepped until the budget is spent; a big one carries on next frame
                 while (sw.ElapsedMilliseconds < budgetMs)
                 {
-                    int hash; string cat;
-                    lock (queue)
+                    if (job == null)
                     {
-                        if (queue.Count == 0) break;
-                        hash = queue.Dequeue();
-                        catOf.TryGetValue(hash, out cat); catOf.Remove(hash);
+                        string cat;
+                        lock (queue)
+                        {
+                            if (queue.Count == 0) break;
+                            jobHash = queue.Dequeue();
+                            catOf.TryGetValue(jobHash, out cat); catOf.Remove(jobHash);
+                        }
+                        job = ExportOne(jobHash, cat ?? "other");
                     }
-                    ExportOne(hash, cat ?? "other");
+                    bool more;
+                    try { more = job.MoveNext(); }
+                    catch (Exception e) { ZLog.LogWarning($"WebMap: model export of #{jobHash} failed: {e.Message}"); more = false; }
+                    if (more) { if (job.Current == PrefabExporter.Wait) break; continue; }
+                    job = null;
                     runBusy = run.Elapsed.TotalSeconds;
-                    lock (queue) queued.Remove(hash);
+                    lock (queue) queued.Remove(jobHash);
                 }
-                if (Exported % 50 == 0 && indexDirty) { SaveIndex(); Rebuild(); }
+                if (Exported != before && Exported % 50 == 0 && indexDirty) { SaveIndex(); Rebuild(); }
                 yield return null;
             }
         }
 
-        private static void ExportOne(int hash, string cat)
+        // Steps like PrefabExporter.Export, yielding Wait while a location's prefab loads and while a
+        // location's glTF is written on the pool: a camp is too big for the game thread's budget.
+        private static IEnumerator ExportOne(int hash, string cat)
         {
             var info = new Info { hash = hash, cat = cat };
             GameObject go = null;
             try { go = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(hash) : null; } catch { }
-            info.name = go != null ? go.name : ("#" + hash);
+            ZoneSystem.ZoneLocation loc = null;
+            bool held = false;
+            if (go == null && WebMapConfig.EXPORT_MODELS)
+            {
+                try { loc = ZoneSystem.instance != null ? ZoneSystem.instance.GetLocation(hash) : null; if (loc != null && loc.m_prefab.IsValid) { loc.m_prefab.LoadAsync(); held = true; } }
+                catch (Exception e) { ZLog.LogWarning($"WebMap: location #{hash} not loaded: {e.Message}"); }
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                while (held && !Loaded(loc) && waited.ElapsedMilliseconds < 60000) yield return PrefabExporter.Wait;
+                try { if (held && Loaded(loc)) go = loc.m_prefab.Asset; } catch { }
+            }
+            info.name = go != null ? go.name : loc != null && !string.IsNullOrEmpty(loc.m_prefabName) ? loc.m_prefabName : ("#" + hash);
             try
             {
                 if (go != null && WebMapConfig.EXPORT_MODELS)
                 {
-                    var fallback = FallbackColor(hash, go.name, cat);
-                    var r = PrefabExporter.Export(go, root, fallback, cat);
-                    info.renderers = r.renderers; info.unreadable = r.unreadable; info.wants = r.wants; info.meshWants = r.meshWants; info.meshMissing = r.meshMissing;
-                    if (r.rockKind > 0) { info.rockKind = r.rockKind; info.partAreas = r.partAreas.ToArray(); }
-                    if (r.hasCanopy) { info.canopy = r.canopy; info.canopyTex = r.canopyTexture; info.canopyColor = r.canopyColor; }
-                    if (r.glb != null)
+                    var r = new PrefabExporter.Result { category = cat };
+                    bool failed = false;
+                    var steps = PrefabExporter.Export(go, root, FallbackColor(hash, go.name, cat), r);
+                    while (true)
                     {
-                        File.WriteAllBytes(Path.Combine(root, FileName(hash)), r.glb);
-                        info.ok = true; info.tris = r.triangles; info.bounds = r.bounds; info.tex = r.textured; info.ver = Fnv.Of(r.glb);
-                        Readable++;
+                        bool more;
+                        try { more = steps.MoveNext(); }
+                        catch (Exception e) { ZLog.LogWarning($"WebMap: model export of {info.name} failed: {e.Message}"); failed = true; break; }
+                        if (!more) break;
+                        yield return steps.Current;
                     }
-                    else if (r.renderers > 0) Unreadable++;
-                    if (!info.ok) info.bounds = RendererBounds(go);
+                    byte[] glb = null; int ver = 0;
+                    string file = Path.Combine(root, FileName(hash));
+                    Action write = () => { glb = r.Write(); if (glb != null) { File.WriteAllBytes(file, glb); ver = Fnv.Of(glb); } };
+                    Exception wrote = null;
+                    if (!failed && r.location)
+                    {
+                        var task = Task.Run(write);
+                        while (!task.IsCompleted) yield return PrefabExporter.Wait;
+                        wrote = task.Exception?.GetBaseException();
+                    }
+                    else if (!failed) try { write(); } catch (Exception e) { wrote = e; }
+                    if (wrote != null) { ZLog.LogWarning($"WebMap: model export of {info.name} failed: {wrote.Message}"); failed = true; }
+                    if (!failed)
+                    {
+                        info.renderers = r.renderers; info.unreadable = r.unreadable; info.wants = r.wants; info.meshWants = r.meshWants; info.meshMissing = r.meshMissing;
+                        if (r.rockKind > 0) { info.rockKind = r.rockKind; info.partAreas = r.partAreas.ToArray(); }
+                        if (r.hasCanopy) { info.canopy = r.canopy; info.canopyTex = r.canopyTexture; info.canopyColor = r.canopyColor; }
+                        if (glb != null)
+                        {
+                            info.ok = true; info.tris = r.triangles; info.bounds = r.bounds; info.tex = r.textured; info.ver = ver;
+                            Readable++;
+                        }
+                        else if (r.renderers > 0) Unreadable++;
+                        if (!info.ok) info.bounds = r.shape ?? RendererBounds(go);
+                    }
                 }
             }
-            catch (Exception e)
-            {
-                ZLog.LogWarning($"WebMap: model export of {info.name} failed: {e.Message}");
-            }
+            finally { if (held) try { loc.m_prefab.Release(); } catch { } }
             // a re-export was counted once already
             if (index.TryGetValue(hash, out var old)) { if (old.ok) Readable--; else if (old.renderers > 0) Unreadable--; }
             index[hash] = info;
@@ -334,6 +378,8 @@ namespace WebMap.Models
             if (Exported == 1 || Exported % 100 == 0)
                 ZLog.Log($"WebMap: models exported {Exported} (readable meshes {Readable}, unreadable {Unreadable}, queued {QueueLength})");
         }
+
+        private static bool Loaded(ZoneSystem.ZoneLocation loc) => loc.m_prefab.IsLoaded;
 
         // Prefab-space bounds from the renderers (works even when meshes are unreadable), in the viewer's frame (z negated).
         private static float[] RendererBounds(GameObject go)

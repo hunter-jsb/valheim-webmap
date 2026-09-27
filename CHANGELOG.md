@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+* The world's locations in 3D: the traders' camps, the Bog Witch's hut, crypt, cave and
+  dwarven entrances, the boss altars, stone circles and runestones. The game networks a
+  location only as a marker (a LocationProxy) and every game spawns the rest itself, so the
+  marker goes out in `/objects` as the location's own prefab, at its place and turn, and
+  the model library exports the location from the game's list of them: what every game
+  spawns for itself, without who lives there (the traders are not drawn), what is
+  networked on its own (chests, beehives, spawners, the ruins' and houses' own pieces --
+  already drawn from their own records), lights, particles, the traders' force fields and
+  a dungeon's rooms (kept 5000 m up), each part left to chance as its likelier outcome,
+  merged by material into a dozen draws. On our world the sweep meets 128 kinds of
+  location; 36 have a part of their own to draw, the rest are wholly networked. A big
+  location exports over as many frames as `export_ms_per_frame` needs, its file written off
+  the game thread. The index format is unchanged, so nothing already in the library is
+  exported again; the locations join it as the sweep meets them. The mod now builds
+  against the game's `SoftReferenceableAssets.dll` too.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
