@@ -230,10 +230,12 @@ layer covers, and what nothing covers yet. CI runs both on every push and pull r
 
 `tools/sameorigin.py WebMap/web http://your_ip:port 8766` serves the viewer the way the
 mod does -- the pages from disk, every other path forwarded to the server -- and, with a
-headless Chrome started with `--remote-debugging-port=9334`,
+headless Chrome started with `--remote-debugging-port=9334` (and, for the 3D page's
+WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names
-flyout, hubs and dial lines, a card per player, the plan loading. One line per check, a
+flyout, ground and objects in 3D at the world's start, hubs and dial lines, a card per
+player, the plan loading. One line per check, a
 non-zero exit on any failure, and a screenshot of each page when given a directory. A
 viewer change is done when that is clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome
