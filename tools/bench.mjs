@@ -1,7 +1,7 @@
 // Pan and zoom the map in a headless Chrome and print ms per frame, the check
 // that keeps the viewer at the screen's rate: 16.7 means it never missed one.
-// Same Chrome and proxy as shoot.mjs:
-//   node tools/bench.mjs http://127.0.0.1:8765 9333
+// Same Chrome and proxy as check.mjs:
+//   node tools/bench.mjs http://127.0.0.1:8766 9334
 const [BASE, PORT] = process.argv.slice(2);
 const tab = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
 const ws = new WebSocket(tab.webSocketDebuggerUrl); await new Promise(r => ws.onopen = r);
