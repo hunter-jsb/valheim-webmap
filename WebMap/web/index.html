@@ -410,6 +410,7 @@ const SCENE = MapCore.viewCache(renderScene, () => V.request());
 // the scene changed: the next frame renders it afresh
 function drawRaster(){ SCENE.invalidate(); V.request(); }
 function paint(){
+  if(IN3D) return;                  // under the 3D view nobody sees it; leaving asks again
   const W = stage.clientWidth, H = stage.clientHeight;
   if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
   SCENE.draw(rctx, {scale: V.scale, tx: V.tx, ty: V.ty, w: W, h: H}, "#000");
