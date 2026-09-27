@@ -17,6 +17,12 @@
   the game thread. The index format is unchanged, so nothing already in the library is
   exported again; the locations join it as the sweep meets them. The mod now builds
   against the game's `SoftReferenceableAssets.dll` too.
+* Players have a class. From what the mod sees in their hands and on their back, shown only
+  as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
+  with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
+  harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
+  the roster row and the player's page with its reason, a Gear group shows what they were
+  last seen wearing, and the spotlight turns through it.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
@@ -31,6 +37,9 @@
   The tour visits the records too: the tallest peak circled, the biggest lake from above,
   and the longest river flown along its own course. The nav reads Map, World, Portals,
   Players, Plan.
+* The tour has more to visit: the pins players placed, the places they named, a mountain,
+  a bay, a walked corner with no build near it, and the sacrificial stones at the centre;
+  a dozen stops a cycle with no more than two of a kind.
 * A cinematic, for a screen left open: the ▶ among the map's buttons (or a link ending in
   `#tour`) starts a tour of the world's places one after another -- who is on, the portal
   hubs, the biggest build, where people die, the graves, the traders, a boat, the largest

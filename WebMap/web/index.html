@@ -35,13 +35,13 @@
   body{overflow:hidden}
 
   /* ---------- sidebar ---------- */
-  /* the status row: the status page's word, then the two figures that change by the minute */
-  .statusrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.5rem;align-items:stretch;margin-bottom:.6rem}
-  .statusrow .stat{padding:.45rem .6rem;display:flex;flex-direction:column;justify-content:center;min-width:4.4rem}
-  .statusrow .stat .k{font-size:.56rem}
-  .statusrow .stat .v{font-size:1.05rem;margin-top:.05rem}
-  .statusrow .stat .v small{font-size:.66rem}
-  .status{display:block;min-width:0;padding:.5rem .6rem;border-radius:var(--r)}
+  /* the status row: the status page's word, then the two figures that change by the minute, as plain figures beside it */
+  .statusrow{display:flex;align-items:center;gap:.9rem;margin-bottom:.6rem}
+  .status{flex:1 1 auto;min-width:0;padding:.5rem .6rem;border-radius:var(--r)}
+  .statusrow .fig{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+  .statusrow .fig b{font-size:1.05rem;font-weight:700;color:var(--bright);font-variant-numeric:tabular-nums}
+  .statusrow .fig b small{font-size:.66rem;font-weight:500;color:var(--muted)}
+  .statusrow .fig .k{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
   .status .shead{display:flex;align-items:center;gap:.4rem;font-size:.78rem}
   .status .srows{display:grid;gap:.2rem;margin-top:.4rem;font-size:.72rem;color:var(--muted)}
   .status .srows span{display:flex;align-items:center;gap:.4rem}
@@ -239,8 +239,8 @@
         <span class="shead"><span class="dot" id="sdot"></span><b id="stext">checking…</b></span>
         <span class="srows" id="srows"></span>
       </a>
-      <div class="card stat" title="Of the world, walked by someone"><div class="k">Explored</div><div class="v" id="explored">\u2014</div></div>
-      <div class="card stat" title="Players on right now"><div class="k">Online</div><div class="v" id="pcount">\u2014</div></div>
+      <span class="fig" title="Of the world, walked by someone"><b id="explored">\u2014</b><span class="k">explored</span></span>
+      <span class="fig" title="Players on right now"><b id="pcount">\u2014</b><span class="k">online</span></span>
     </div>
     <div class="card spot" id="spot" hidden title="Next"></div>
     <div class="online" id="online"></div>
@@ -1366,9 +1366,29 @@ function tourStops(){
       if(path.length > 1) rest.push({kind: "The longest river known", title: river.name, line: `${(riverLen(river)/1000).toFixed(1)} km from source to sea`, x: path[0][0], z: path[0][1], path, zoom: 14, detail: "names"});
     }
   }
+  // what players themselves marked, and named
+  const pins = PINS.filter(p => p.text && p.x != null).sort(() => Math.random() - .5).slice(0, 3);
+  pins.forEach(p => rest.push({kind: "A pin", title: p.text, line: `${p.type === "dot" ? "a" : p.type} pin${p.owner ? ` by ${p.owner}` : ""}, in ${nameAt(p.x, p.z) || "the wild"}`, x: p.x, z: p.z, zoom: 34, dist: 90, layer: "pin"}));
+  if(walked){
+    const named = F.filter(f => f.by && f.w && f.kind !== "river" && f.kind !== "continent" && f.kind !== "island").sort(() => Math.random() - .5).slice(0, 2);
+    named.forEach(f => { const m = middle(f); if(m.share < 0.08) return;
+      rest.push({kind: "A named place", title: f.name, line: `named by ${f.by} \u00b7 ${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2`, x: m.x, z: m.z, fit: {w: f.w, h: f.h, cx: f.x, cz: f.z}, dist: Math.min(2000, Math.max(400, Math.max(f.w, f.h)*0.7)), far: true, detail: "names"}); });
+    const range = F.filter(f => f.kind === "range" && f.w).map(f => ({f, m: middle(f)})).filter(r => r.m.share >= 0.08).sort(() => Math.random() - .5)[0];
+    if(range) rest.push({kind: "A mountain", title: range.f.name, line: `${Math.round((range.f.peak ? range.f.peak.y : range.f.elev.max) - 30)} m at its top`, x: range.m.x, z: range.m.z, fit: {w: range.f.w, h: range.f.h, cx: range.f.x, cz: range.f.z}, dist: Math.max(400, Math.max(range.f.w, range.f.h)*0.9), far: true, detail: "names"});
+    const bay = F.filter(f => f.kind === "bay" && f.w).map(f => ({f, m: middle(f)})).filter(r => r.m.share >= 0.08).sort(() => Math.random() - .5)[0];
+    if(bay) rest.push({kind: "A bay", title: bay.f.name, line: `${bay.f.area.toFixed(2)} km\u00b2 of sheltered water`, x: bay.m.x, z: bay.m.z, fit: {w: bay.f.w, h: bay.f.h, cx: bay.f.x, cz: bay.f.z}, dist: Math.max(400, Math.max(bay.f.w, bay.f.h)*0.8), far: true, detail: "names"});
+    // somewhere walked and left alone: no build within 300 m
+    const built = (PIECES_ALL || []).map(p => W(p.px, p.py));
+    for(let k = 0; k < 120; k++){ const x = (Math.random()*2 - 1)*9000, z = (Math.random()*2 - 1)*9000;
+      if(!walked(x, z) || built.some(b => Math.abs(b.x - x) < 300 && Math.abs(b.z - z) < 300)) continue;
+      rest.push({kind: "The quiet wild", title: nameAt(x, z) || "Nowhere in particular", line: "walked once, and left alone", x, z, zoom: 24, dist: 150}); break; }
+  }
+  rest.push({kind: "Where it all began", title: "The sacrificial stones", line: "the centre of the world", x: 0, z: 0, zoom: 30, dist: 130});
   for(let i = rest.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
-  const seen = new Set();   // one visit per place a cycle
-  return S.concat(rest.filter(s => { const k = s.kind + "|" + s.title; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 9));
+  // a dozen a cycle, no more than two of a kind, one visit per place
+  const seen = new Set(), kinds = {}, draw = [];
+  for(const s of rest){ const k = s.kind + "|" + s.title; if(seen.has(k) || (kinds[s.kind] || 0) >= 2) continue; seen.add(k); kinds[s.kind] = (kinds[s.kind] || 0) + 1; draw.push(s); if(draw.length >= 12) break; }
+  return S.concat(draw);
 }
 function setDetail(k, on){
   if(DEFAULT_ON.has(k)) on ? OFF.delete(k) : OFF.add(k); else on ? DETAILS.add(k) : DETAILS.delete(k);
