@@ -155,6 +155,7 @@ namespace WebMap
             Stats.BeginSweep();
             try { Stats.ObserveKeys(ZoneSystem.instance != null ? ZoneSystem.instance.GetGlobalKeys() : null); } catch { }
             Traders.ScanIfNeeded();                           // once, on the game thread
+            Locations.Scan();                                 // where they stand and whether it is walked, as the fog is now
 
             var byPrefab = new Dictionary<int, int>();
 
@@ -199,7 +200,7 @@ namespace WebMap
                                 // a portal is part of a build, so it is reported AND painted
                                 bool portal = Portals.IsPortal(pref);
                                 if (portal) Portals.Observe(zdo, p);
-                                Pieces.Observe(pref, zdo, p);      // the same piece, as a footprint
+                                Pieces.Observe(pref, zdo, p, creator);   // the same piece, as a footprint, and whose
                                 Stats.ObservePiece(creator, portal, false);
                                 var mat = MaterialOf(pref);
                                 cells.TryGetValue(idx, out Cell cell);
@@ -248,6 +249,7 @@ namespace WebMap
                 Portals.Finish();
                 Pieces.Finish();
                 Graves.Finish();
+                Locations.Finish();
                 int objectChunks = WorldObjects.Finish();
                 TerrainPatches.Finish();
                 Stats.PublishSweep();

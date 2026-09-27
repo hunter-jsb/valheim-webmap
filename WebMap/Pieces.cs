@@ -17,7 +17,7 @@ namespace WebMap
     internal static class Pieces
     {
         private class Kind { public string name; public float w, d; public string colour; public int idx; public bool fire; }
-        private struct Entry { public int kind; public float x, z, yaw; public sbyte lit; }   // lit: -1 not a fire or unknown
+        private struct Entry { public int kind; public float x, z, yaw; public sbyte lit; public long creator; }   // lit: -1 not a fire or unknown
 
         private static readonly Dictionary<int, Kind> kinds = new Dictionary<int, Kind>();
         private static readonly List<Kind> order = new List<Kind>();            // idx -> kind
@@ -62,7 +62,7 @@ namespace WebMap
 
         public static void Begin() => found.Clear();
 
-        public static void Observe(int prefabHash, ZDO zdo, Vector3 pos)
+        public static void Observe(int prefabHash, ZDO zdo, Vector3 pos, long creator = 0L)
         {
             var k = KindOf(prefabHash);
             float yaw = 0f;
@@ -73,7 +73,7 @@ namespace WebMap
                 // Fireplace keeps its fuel in the ZDO; a torch with none has gone out
                 try { float f = zdo.GetFloat("fuel", -1f); if (f >= 0f) lit = f > 0f ? (sbyte)1 : (sbyte)0; } catch { }
             }
-            found.Add(new Entry { kind = k.idx, x = pos.x, z = pos.z, yaw = yaw, lit = lit });
+            found.Add(new Entry { kind = k.idx, x = pos.x, z = pos.z, yaw = yaw, lit = lit, creator = creator });
         }
 
         // Not fog-gated here: the page draws these under the fog mask, like the
@@ -88,14 +88,33 @@ namespace WebMap
                 if (i > 0) sb.Append(',');
                 sb.Append(Inv($"{{\"n\":\"{k.name}\",\"w\":{k.w:0.##},\"d\":{k.d:0.##},\"c\":\"{k.colour}\"}}"));
             }
+            // who built each, as the stats name them: an index into players, -1 for a builder never seen online
+            var players = new List<string>();
+            var byName = new Dictionary<string, int>();
+            var byCreator = new Dictionary<long, int>();
+            var by = new int[found.Count];
+            for (int i = 0; i < found.Count; i++)
+            {
+                long c = found[i].creator;
+                if (!byCreator.TryGetValue(c, out int b))
+                {
+                    string n = c != 0L ? Stats.NameOf(c) : null;
+                    if (n == null) b = -1;
+                    else if (!byName.TryGetValue(n, out b)) { b = players.Count; byName[n] = b; players.Add(n); }
+                    byCreator[c] = b;
+                }
+                by[i] = b;
+            }
+            sb.Append("],\"players\":[");
+            for (int i = 0; i < players.Count; i++)
+                sb.Append(i > 0 ? ",\"" : "\"").Append(players[i].Replace("\\", "").Replace("\"", "")).Append('"');
             sb.Append("],\"pieces\":[");
             for (int i = 0; i < found.Count; i++)
             {
                 var e = found[i];
                 if (i > 0) sb.Append(',');
-                sb.Append(Inv($"[{e.kind},{e.x:0.#},{e.z:0.#},{Mathf.RoundToInt(e.yaw)}"));
-                if (e.lit >= 0) sb.Append(',').Append(e.lit);          // a fifth field, on the pieces that burn
-                sb.Append(']');
+                // the fifth field is the fuel of a piece that burns, -1 on the rest; the sixth the builder
+                sb.Append(Inv($"[{e.kind},{e.x:0.#},{e.z:0.#},{Mathf.RoundToInt(e.yaw)},{e.lit},{by[i]}]"));
             }
             sb.Append("],\"count\":").Append(found.Count).Append('}');
             string s = sb.ToString();

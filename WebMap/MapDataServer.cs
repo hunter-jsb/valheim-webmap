@@ -182,7 +182,7 @@ namespace WebMap
         // (/config, /players, /map, /pins, /messages) must not keep it running.
         private static readonly HashSet<string> sweepReads = new HashSet<string> {
             "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces", "/trails",
-            "/forest/stats", "/structures/stats", "/state", "/objects", "/height", "/prefabs"
+            "/forest/stats", "/structures/stats", "/state", "/objects", "/height", "/prefabs", "/locations"
         };
         // The game's clock for the 3D view's sky, built on the game thread with the players:
         // the day and the fraction of it EnvMan lights the world by (0.25 sunrise, 0.5 noon).
@@ -634,6 +634,10 @@ namespace WebMap
                     textBytes = Encoding.UTF8.GetBytes(Graves.GetJson());
                     res.ContentLength64 = textBytes.Length;
                     res.Close(textBytes, true);
+                    return true;
+                case "/locations":
+                    // the world's locations in walked ground, for the tour
+                    Answer(res, 200, Locations.GetJson());
                     return true;
                 case "/pieces":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");

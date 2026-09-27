@@ -256,6 +256,9 @@ namespace WebMap
             }
         }
 
+        // A builder's name from the player id their pieces carry; null for one never seen online.
+        public static string NameOf(long playerId) { lock (gate) return nameOfId.TryGetValue(playerId, out var n) ? n : null; }
+
         // Game thread, once per player per snapshot: learn the id, add up the walk.
         public static void Seen(string name, long playerId, Vector3 pos, float health = -1f, float maxHealth = -1f)
         {
