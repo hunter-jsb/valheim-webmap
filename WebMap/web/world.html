@@ -142,10 +142,26 @@ function walkedExtremes(){
 
 // ---------- places: the most particular named ground a point lies in
 const LAND = new Set(["continent", "island", "holm"]), GROUND = new Set(["continent", "island", "holm", "meadows", "forest", "swamp", "mountain", "plains", "mistlands", "ashlands", "north", "range"]);
+// The features by the 512 m cells their boxes cover, built once per features: each
+// minute asks this of every piece standing, and a scan of them all per piece took 200 ms.
+const CELL = 512, cellKey = (x, z) => (Math.floor(x/CELL) + 1000)*4096 + Math.floor(z/CELL) + 1000;
+let CELLS = new Map(), CELLS_OF = null;
+function cellsOf(){
+  if(CELLS_OF === FEATURES) return CELLS;
+  CELLS_OF = FEATURES; CELLS = new Map();
+  for(const f of FEATURES || []){
+    if(f.w == null) continue;
+    for(let x = Math.floor((f.x - f.w/2)/CELL); x <= Math.floor((f.x + f.w/2)/CELL); x++)
+      for(let z = Math.floor((f.z - f.h/2)/CELL); z <= Math.floor((f.z + f.h/2)/CELL); z++){
+        const k = cellKey(x*CELL, z*CELL); if(!CELLS.has(k)) CELLS.set(k, []); CELLS.get(k).push(f);
+      }
+  }
+  return CELLS;
+}
 function placeAt(x, z, kinds){
   let best = null;
-  for(const f of FEATURES || []){
-    if(!kinds.has(f.kind) || f.w == null) continue;
+  for(const f of cellsOf().get(cellKey(x, z)) || []){
+    if(!kinds.has(f.kind)) continue;
     if(x < f.x - f.w/2 || x > f.x + f.w/2 || z < f.z - f.h/2 || z > f.z + f.h/2) continue;
     if(!best || f.w*f.h < best.w*best.h) best = f;
   }
@@ -291,8 +307,10 @@ function spotlight(){
   }
 }
 
+let KNOWN_FOG = null, KNOWN_OF = null;
 function render(){
-  KNOWN.clear();
+  // what is known moves only with the fog or the features, not with the minute
+  if(KNOWN_FOG !== FOG || KNOWN_OF !== FEATURES){ KNOWN.clear(); KNOWN_FOG = FOG; KNOWN_OF = FEATURES; }
   glance(); bosses(); renderRecords(); biomes(); lands(); spotlight();
   document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
 }
