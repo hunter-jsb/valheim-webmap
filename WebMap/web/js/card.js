@@ -124,7 +124,7 @@ function classify(p, roster){
   const root = A === "mage" || (D === "eitr" && A !== "heavy") ? "mage" : A === "heavy" ? "knight" : A === "medium" ? (D === "quick" ? "rogue" : "warrior")
     : A === "light" ? (D === "hearty" ? "warrior" : "rogue") : D === "hearty" ? "brute" : "none";
   const food = g.food || null, fedWords = food ? [num(food.hp) && `${Math.round(num(food.hp))} health`, num(food.st) && `${Math.round(num(food.st))} stamina`, num(food.eitr) && `${Math.round(num(food.eitr))} eitr`].filter(Boolean) : [];
-  const bodyWhy = [armTotal && (ARMOUR_WORD[A] || A), D && DIET_WORD[D], fedWords.length ? "fed for " + fedWords.join(", ") : food && "unfed"].filter(Boolean);
+  const bodyWhy = [armTotal && (ARMOUR_WORD[A] || A), D && DIET_WORD[D], fedWords.length ? "fed for " + fedWords.join(", ") : food && !D && "unfed"].filter(Boolean);
   // 2. the weapons: a minute of fighting gear in hand decides; before that, what is carried
   const hand = g.hand || {}, held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), heldTotal = held.reduce((t, [, v]) => t + num(v), 0);
   const fought = held.filter(([k]) => FIGHT[k]), fightTotal = fought.reduce((t, [, v]) => t + num(v), 0);
