@@ -17,14 +17,19 @@
   /* ---------- the roster, and the one picked ----------
      The roster stands alone in the middle until a player is picked; then it
      steps to the left as a column and the player's page opens beside it. */
-  .app{align-items:stretch}
-  .roster{flex:1 1 auto;min-width:0;overflow:auto;padding:1.3rem .9rem 2.4rem;transition:flex-basis .28s ease,max-width .28s ease}
-  .roster > *{max-width:660px;margin-left:auto;margin-right:auto}
-  .app.picked .roster{flex:0 0 372px;max-width:372px;background:var(--bg-2);border-right:1px solid var(--line);padding:1rem .8rem 2rem}
-  .app.picked .roster > *{max-width:none}
-  .detail{flex:1 1 auto;min-width:0;overflow:auto;padding:1.3rem 1.5rem 2.4rem}
-  .detail[hidden]{display:none}
+  .app{align-items:stretch;overflow:hidden;--ease:cubic-bezier(.2,.7,.2,1)}   /* the page slides in from past the edge */
+  /* the widths are lengths on both sides so the roster slides rather than jumps */
+  .roster{flex:0 0 100%;max-width:100%;min-width:0;overflow:auto;padding:1.3rem .9rem 2.4rem;border-right:1px solid transparent;
+    transition:flex-basis .36s var(--ease),max-width .36s var(--ease),background-color .36s,border-color .36s,padding .36s var(--ease)}
+  .roster > *{max-width:660px;margin-left:auto;margin-right:auto;transition:max-width .36s var(--ease)}
+  .app.picked .roster{flex-basis:372px;max-width:372px;background:var(--bg-2);border-right-color:var(--line);padding:1rem .8rem 2rem}
+  .app.picked .roster > *{max-width:100%}
+  /* the page takes what the roster gives up, and comes in from the right as it does */
+  .detail{flex:1 1 0;min-width:0;overflow:auto;padding:1.3rem 1.5rem 2.4rem;opacity:0;transform:translateX(28px);visibility:hidden;
+    transition:opacity .3s ease .1s,transform .4s var(--ease) .06s,visibility 0s .42s}
+  .app.picked .detail{opacity:1;transform:none;visibility:visible;transition-delay:.1s,.06s,0s}
   .detail > *{max-width:820px}
+  @media (prefers-reduced-motion:reduce){ .roster,.roster > *,.detail{transition:none} }
 
   /* the tools: two dropdowns, side by side */
   .tools{display:flex;gap:.6rem;margin-top:.9rem}
@@ -101,12 +106,15 @@
 
   /* a phone shows one or the other; the page scrolls as a whole */
   @media (max-width:760px){
-    .app{display:block;height:auto}
-    .roster,.detail{overflow:visible;padding:1rem .9rem 2rem}
+    .app{display:block;height:auto;overflow:visible;overflow-x:hidden}
+    .roster,.detail{overflow:visible;padding:1rem .9rem 2rem;transition:none}
     .app.picked .roster{display:none}
+    .app:not(.picked) .detail{display:none}
+    .app.picked .detail{animation:slidein .3s var(--ease)}   /* a shown element cannot transition in, so it animates */
     .dhead .back{display:inline-flex}
     .row .mini{gap:.3rem}
   }
+  @keyframes slidein{from{opacity:0;transform:translateX(24px)}}
 </style>
 </head>
 <body>
@@ -164,7 +172,7 @@
     <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
   </section>
 
-  <section class="detail" id="detail" hidden>
+  <section class="detail" id="detail">
     <div class="dhead" id="dhead"></div>
     <div id="dbody"></div>
   </section>
@@ -203,10 +211,11 @@ const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURICompo
 
 // ---------- the bosses ----------
 // Silhouettes of our own in the marker icons' style: a stag, the tree, the heap,
-// the dragon, the crowned skull, the queen, the burning one, the frost wyrm.
-const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader", writhan: "Writhan"};
-const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader", "writhan"];
-const NOT_BOSS = new Set(["serpent"]);     // a sea serpent sets a key too, but it is prey
+// the dragon, the crowned skull, the queen, the burning one. A key the page does
+// not know -- the Deep North's, once it falls -- shows with the ring and its name.
+const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
+const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader"];
+const NOT_BOSS = new Set(["serpent", "writhan"]);     // the sea serpent and the writhan set keys too, but they are prey
 const BOSS_ICON = {
   "boss-eikthyr":[["M10.4 11.2 7.4 8.2 5.6 9.8 6.6 6.6 3.8 4.2 7.6 5 7 1.6 9.6 5.8 11.6 8.8z","#d9c7a6"],
                   ["M13.6 11.2 16.6 8.2 18.4 9.8 17.4 6.6 20.2 4.2 16.4 5 17 1.6 14.4 5.8 12.4 8.8z","#d9c7a6"],
@@ -232,9 +241,6 @@ const BOSS_ICON = {
   "boss-fader":[["M12 1.6c2 4.2 6.2 6.2 6.2 11.6 0 4.8-2.8 8-6.2 8s-6.2-3.2-6.2-8c0-5.4 4.2-7.4 6.2-11.6z","#ef8b3f"],
                 ["M12 9.2c1.4 2.8 3.6 3.8 3.6 6.8 0 2.4-1.6 4-3.6 4s-3.6-1.6-3.6-4c0-3 2.2-4 3.6-6.8z","#f8cf72",1],
                 ["M9.9 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M12.3 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#14130e",1]],
-  "boss-writhan":[["M2.2 12.4 8.2 7.4 15 6.4c4 0 7 3 7 6.8l-6-1.2-2 5-6-1z","#bfd6e6"],
-                  ["M8.8 7.4 7.6 1.8 11.8 6.6zM14.2 6.4 15 1.2l2.4 5.2z","#8aa5b8"],
-                  ["M15.2 9.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#7ad6ff",1]],
   "boss-other":[["M12 2.4a9.6 9.6 0 1 0 0 19.2a9.6 9.6 0 1 0 0-19.2z","#4a5548"],
                 ["M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z","#0f1310",1],
                 ["M12 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z","#e8b45f",1]],
@@ -375,7 +381,6 @@ async function whereIs(name, at){
 function pick(name){
   PICK = name || null; DLAST = "";
   document.getElementById("app").classList.toggle("picked", !!PICK);
-  document.getElementById("detail").hidden = !PICK;
   for(const b of document.querySelectorAll("#list .row")) b.classList.toggle("pick", b.dataset.name === PICK);
   if(PICK){ renderDetail(); document.getElementById("detail").scrollTop = 0; }
 }
