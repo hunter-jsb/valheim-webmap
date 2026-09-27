@@ -55,15 +55,23 @@
   top when the creature was not yet alerted -- partial, since a hit on a creature the
   hitter's own game runs never reaches the server.
 * Players have a class: a title of two words, how they fight and their trade. The gear
-  decides the first -- eitr-weave and a staff make a mage, a two-hander or a shield beside
-  them a battlemage, a bow an archer, ranger or marksman by the armour's weight, a shield a
-  sentinel, warden or knight, a two-hander a berserker or a champion, a knife a rogue (an
-  assassin when the backstabs are half the hits), one-handed steel a brawler, fighter or
-  warrior. The deeds give the second: the roster's top builder is the architect, a builder
-  who also fells and mines an engineer, a builder who mostly roams an explorer, the rest
-  builders, miners, lumberjacks and explorers. Either half may be missing; the title sits
-  on the roster row and the player's page with its reason, a Gear group shows what they were
-  last seen wearing, and the spotlight turns through it. Time in hand is the working
+  decides the first. Eitr-weave makes a Mage; a two-hander or shield beside it a Battlemage,
+  a knife a Nightblade, a bow an Arcane Archer. A staff without the robes makes a Sorcerer,
+  a Spellsword with steel, a Templar in heavy armour. A bow makes an Archer, Ranger or
+  Marksman by the armour's weight, a Hunter with a knife or spear, a Skirmisher with steel;
+  a crossbow an Arbalist. A knife makes a Rogue, an Assassin once backstabs are half the
+  hits. A two-hander makes a Berserker, a Champion in heavy armour, a Vanguard when it is
+  the atgeir. Sword and shield make a Sentinel, Warden or Knight; axe and shield a Huscarl,
+  spear and shield a Hoplite; steel alone a Brawler, Duelist, Fighter or Warrior, a Raider
+  with the axe, a Spearman, a Bruiser with the mace. Armour alone says Scout, Fighter or
+  Warrior, and before any gear is seen, twenty deaths at a worse pace than half the roster
+  say Berserker. The deeds give the second: the roster's top builder is the Architect, a
+  builder who also mines an Engineer, who also fells a Carpenter, who also farms a
+  Homesteader; the roster's Slayer; Builders, Miners, Lumberjacks, Farmers; a roamer an
+  Explorer or, a third of it at sea, a Seafarer; an Angler; a Wayfarer of the portals.
+  Either half may be missing. The title sits on the roster row (under the name when the
+  list is narrow) and on the player's page with its reason, a Gear group shows what they
+  were last seen wearing, and the spotlight turns through it. Time in hand is the working
   evidence: the server sees blows landed only on creatures another player owns, and skills
   never leave the character file. Faint until ten minutes have had something in hand; the
   worn set carries the two back slots so a mage building all night stays a mage.

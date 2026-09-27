@@ -60,6 +60,9 @@
   .row.ok.pick{border-color:var(--gold)}
   .row{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:0 .6rem;align-items:center}
   .row .rh{display:flex;align-items:center;gap:.45rem;min-width:0}
+  .roster{container-type:inline-size}
+  /* a narrow list (a phone, or the list beside an open page) keeps the name whole and drops the title under it */
+  @container (max-width:560px){ .row .rh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot nm seen" "cls cls cls";align-items:center} .row .rh .cls{grid-area:cls;justify-self:start;margin-top:.3rem} .row .rh .seen{grid-area:seen} .row .rh .nm{grid-area:nm} .row .rh .dot{grid-area:dot} }
   .row .radar{grid-column:2;grid-row:1 / span 2;width:58px;height:58px;display:block}
   .row .radar .fill{fill:var(--gold);fill-opacity:.22;stroke:var(--gold);stroke-width:1.2;stroke-linejoin:round}
   .row .radar .grid{fill:none;stroke:var(--line);stroke-width:1}
@@ -81,7 +84,7 @@
   /* the player's page */
   .dhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .dhead .back{display:none;height:30px;padding:0 .5rem;font-size:.76rem}
-  .dhead h2{font-size:1.4rem;font-weight:700;color:var(--bright);display:flex;align-items:center;gap:.55rem;min-width:0}
+  .dhead h2{font-size:1.4rem;font-weight:700;color:var(--bright);display:flex;align-items:center;gap:.55rem;min-width:0;flex-wrap:wrap}
   .dhead .state{font-size:.78rem;color:var(--muted)}
   .dhead.ok .state{color:var(--ok)}
   .dhead .state i{font-style:normal;color:var(--muted)}
@@ -344,6 +347,7 @@ function familyOf(name){
 }
 const FIGHT = {staff: "magic", bow: "ranged", crossbow: "ranged", shield: "shield", knife: "knife", sword: "melee", axe: "melee", mace: "melee", spear: "melee", polearm: "melee"};
 const twoHander = n => /^(thsword|battleaxe|sledge|atgeir)/i.test(String(n || ""));
+const seaShare = p => { const b = p.biomes || [], all = b.reduce((t, x) => t + num(x.m), 0); return all ? num((b.find(x => x.biome === "Ocean") || {}).m)/all : 0; };
 function classify(p){
   const g = p.gear || {}, why = [];
   // 1. wearing
@@ -354,14 +358,14 @@ function classify(p){
   const hand = g.hand || {}, held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), heldTotal = held.reduce((t, [, v]) => t + num(v), 0);
   const fought = held.filter(([k]) => FIGHT[k]), fightTotal = fought.reduce((t, [, v]) => t + num(v), 0);
   const worn = g.worn || {}, carriedNames = [worn.right, worn.left, worn.rightBack, worn.leftBack].filter(n => FIGHT[familyOf(n)]), carried = [...new Set(carriedNames.map(familyOf))];
-  const F = {magic: 0, ranged: 0, shield: 0, knife: 0, melee: 0};
+  const F = {magic: 0, ranged: 0, shield: 0, knife: 0, melee: 0}, FS = {};
   let twoh = 0;
   if(fightTotal >= 60){
-    for(const [k, v] of fought) F[FIGHT[k]] += num(v)/fightTotal*(k === "axe" ? .5 : 1);   // an axe is half a tool
+    for(const [k, v] of fought){ FS[k] = num(v)/fightTotal; F[FIGHT[k]] += FS[k]*(k === "axe" ? .5 : 1); }   // an axe is half a tool
     twoh = num(hand.twohanded)/fightTotal;
     why.push(fought.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 2).map(([k, v]) => `${FAMILY_WORD[k] || k} ${Math.round(100*num(v)/heldTotal)}%`).join(" and ") + " of the time in hand");
   } else if(carried.length){
-    for(const k of carried) F[FIGHT[k]] += 1;
+    for(const k of carried){ FS[k] = 1; F[FIGHT[k]] += 1; }
     twoh = carriedNames.some(twoHander) ? 1 : 0;
     why.push(`carries ${carried.map(k => FAMILY_WORD[k]).join(" and ")}`);
   }
@@ -371,28 +375,46 @@ function classify(p){
     const kind = [["ranged", "shots"], ["magic", "spells"], ["backstab", "backstabs"], ["melee", "blows"]].sort((a, b) => num(hits[b[0]]) - num(hits[a[0]]))[0];
     why.push(`${num(hits[kind[0]])} ${kind[1]} landed`);
   }
-  // a quarter of the fighting counts as a way of fighting; the armour colours the name
+  // a quarter of the fighting counts as a way of fighting; the armour and the weapon colour the name
   const facets = Object.entries(F).filter(([, v]) => v >= .25).sort((a, b) => b[1] - a[1]), has = k => facets.some(f => f[0] === k);
   const lead = facets.length ? facets[0][0] : null, shielded = has("shield") || carried.includes("shield");
+  const fam = k => num(FS[k]), steel = ["sword", "axe", "mace", "spear", "polearm"].sort((a, b) => fam(b) - fam(a))[0];
+  const hasGear = armTotal > 0 || heldTotal > 0 || carried.length > 0 || hitTotal > 0;
   let fighter = null;
-  if(A === "mage" || lead === "magic") fighter = has("melee") || shielded || has("knife") ? "Battlemage" : has("ranged") ? "Arcane Archer" : "Mage";
-  else if(lead === "ranged") fighter = {heavy: "Marksman", medium: "Ranger"}[A] || "Archer";
-  else if(lead === "knife") fighter = num(hits.backstab) >= 10 && num(hits.backstab)*2 >= hitTotal ? "Assassin" : "Rogue";
-  else if(lead === "melee" && twoh >= .5) fighter = A === "heavy" ? "Champion" : "Berserker";
-  else if(lead === "melee" || lead === "shield") fighter = shielded ? ({heavy: "Knight", medium: "Warden"}[A] || "Sentinel") : ({heavy: "Warrior", medium: "Fighter"}[A] || "Brawler");
+  if(A === "mage") fighter = has("knife") ? "Nightblade" : has("melee") || shielded ? "Battlemage" : has("ranged") ? "Arcane Archer" : "Mage";
+  else if(has("magic")) fighter = A === "heavy" ? "Templar" : has("melee") || shielded ? "Spellsword" : has("ranged") ? "Arcane Archer" : "Sorcerer";
+  else if(lead === "ranged") fighter = fam("crossbow") > fam("bow") ? "Arbalist" : has("knife") || fam("spear") >= .25 ? "Hunter" : has("melee") ? "Skirmisher" : {heavy: "Marksman", medium: "Ranger"}[A] || "Archer";
+  else if(lead === "knife") fighter = num(hits.backstab) >= 10 && num(hits.backstab)*2 >= hitTotal ? "Assassin" : has("ranged") ? "Hunter" : "Rogue";
+  else if(lead === "melee" || lead === "shield"){
+    if(twoh >= .5) fighter = steel === "polearm" ? "Vanguard" : A === "heavy" ? "Champion" : "Berserker";
+    else if(has("ranged")) fighter = "Skirmisher";
+    else if(shielded) fighter = steel === "axe" ? "Huscarl" : steel === "spear" ? "Hoplite" : {heavy: "Knight", medium: "Warden"}[A] || "Sentinel";
+    else fighter = steel === "axe" ? "Raider" : steel === "spear" ? "Spearman" : steel === "mace" ? "Bruiser" : {heavy: "Warrior", medium: "Fighter", light: "Duelist"}[A] || "Brawler";
+  }
   else fighter = {heavy: "Warrior", medium: "Fighter", light: "Scout"}[A] || null;
+  // nothing seen in hand yet: dying more often than half the roster says something too
+  const perDeath = q => num(q.deaths) ? num(q.dist_m)/num(q.deaths) : Infinity, pers = DATA.map(perDeath).filter(isFinite).sort((a, b) => a - b), median = pers.length ? pers[Math.floor(pers.length/2)] : 0;
+  if(!fighter && !hasGear && num(p.deaths) >= 20 && perDeath(p) <= median){ fighter = "Berserker"; why.push(`${num(p.deaths)} deaths, one every ${(perDeath(p)/1000).toFixed(1)} km`); }
   // 3. the trade, from the deeds: building against the roster's best, the rest in plain numbers
   const best = k => Math.max(1, ...DATA.map(q => num(q[k])));
-  const pieces = num(p.pieces), bestPieces = best("pieces"), taken = num(p.trees) + num(p.rocks), roam = num(p.dist_m)/best("dist_m");
-  const toolShare = heldTotal ? (num(hand.pickaxe) + num(hand.hoe) + num(hand.cultivator))/heldTotal : 0;
-  const building = pieces >= 1000 || (pieces >= 300 && pieces/bestPieces >= .2), harvesting = taken >= 100 || (taken >= 10 && toolShare >= .25);
+  const pieces = num(p.pieces), bestPieces = best("pieces"), trees = num(p.trees), rocks = num(p.rocks), taken = trees + rocks, roam = num(p.dist_m)/best("dist_m"), kills = num(p.kills), hops = num(p.hops);
+  const tool = k => heldTotal ? num(hand[k])/heldTotal : 0, farm = tool("hoe") + tool("cultivator"), fish = tool("fishing"), sea = seaShare(p);
+  const building = pieces >= 1000 || (pieces >= 300 && pieces/bestPieces >= .2), harvesting = taken >= 100 || (taken >= 10 && tool("pickaxe") + tool("axe") >= .25);
+  const roaming = (roam >= .5 || num(p.ships) >= 3) && !(building && pieces/bestPieces >= .25);   // a builder who mostly roams is an explorer
   const trade = building && pieces >= bestPieces ? "Architect"
-    : building && harvesting ? "Engineer"
-    : building && !(roam >= .5 && pieces/bestPieces < .25) ? "Builder"   // a builder who mostly roams is an explorer
-    : harvesting ? (num(p.rocks) >= num(p.trees) ? "Miner" : "Lumberjack")
-    : roam >= .5 || num(p.ships) >= 3 ? "Explorer" : null;
-  why.push(...[building && `${pieces.toLocaleString()} pieces built`, num(p.trees) >= 10 && `${num(p.trees)} trees felled`, num(p.rocks) >= 10 && `${num(p.rocks)} rocks broken`, trade === "Explorer" && `${Math.round(num(p.dist_m)/1000)} km travelled`].filter(Boolean));
-  const hasGear = armTotal > 0 || heldTotal > 0 || carried.length > 0 || hitTotal > 0;
+    : building && harvesting ? (trees > rocks ? "Carpenter" : "Engineer")
+    : building && farm >= .2 ? "Homesteader"
+    : kills >= 50 && kills >= .8*best("kills") ? "Slayer"
+    : building && !roaming ? "Builder"
+    : harvesting ? (rocks >= trees ? "Miner" : "Lumberjack")
+    : farm >= .2 ? "Farmer"
+    : roaming ? (sea >= .3 ? "Seafarer" : "Explorer")
+    : fish >= .1 ? "Angler"
+    : hops >= 200 && hops >= .8*best("hops") ? "Wayfarer" : null;
+  why.push(...[building && `${pieces.toLocaleString()} pieces built`, trees >= 10 && `${trees} trees felled`, rocks >= 10 && `${rocks} rocks broken`,
+    trade === "Slayer" && `${kills} kills`, (trade === "Homesteader" || trade === "Farmer") && `the hoe and cultivator ${Math.round(farm*100)}% of the time in hand`,
+    (trade === "Seafarer" || trade === "Explorer") && `${Math.round(num(p.dist_m)/1000)} km travelled`, trade === "Seafarer" && `${Math.round(sea*100)}% of it at sea`,
+    trade === "Angler" && `a fishing rod ${Math.round(fish*100)}% of the time in hand`, trade === "Wayfarer" && `${hops.toLocaleString()} portal hops`].filter(Boolean));
   const name = [fighter, trade].filter(Boolean).join(" ") || (hasGear ? "Wanderer" : "");
   if(!name) return null;
   // faint until ten minutes have had something in hand or the hits have come in
