@@ -18,3 +18,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Portions of the 3D view (WebMap/Models, WebMap/WorldObjects.cs, WebMap/TerrainPatches.cs,
+WebMap/Util, WebMap/web/js/view3d.js, WebMap/web/js/sky.js) are from
+f00d4tehg0dz/valheim-webmap (https://github.com/f00d4tehg0dz/valheim-webmap), under this
+same MIT licence. three.js, vendored under WebMap/web/vendor/three, is Copyright
+2010-2025 three.js authors, MIT.

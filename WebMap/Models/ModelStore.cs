@@ -44,6 +44,7 @@ namespace WebMap.Models
         // one export run: from a prefab queued on an empty queue to the queue running dry
         private static System.Diagnostics.Stopwatch run;
         private static int runStart, quiet;
+        private static double runBusy;         // seconds from the run's first export to its last
         private static bool indexDirty;
         private static int idleTicks;
         private static volatile bool extractDone;
@@ -237,7 +238,7 @@ namespace WebMap.Models
                     // a sweep queues prefabs as it meets them, so a run ends after a quiet spell, not at the first empty queue
                     if (run != null && ++quiet >= 15)
                     {
-                        ZLog.Log($"WebMap: model export done: {Exported - runStart} prefabs in {run.Elapsed.TotalSeconds:0}s; "
+                        ZLog.Log($"WebMap: model export done: {Exported - runStart} prefabs in {runBusy:0}s; "
                                + $"{Readable} with a model, {Unreadable} waiting on locked meshes, library {LibraryMB():0.0} MB");
                         run = null;
                     }
@@ -283,6 +284,7 @@ namespace WebMap.Models
                         catOf.TryGetValue(hash, out cat); catOf.Remove(hash);
                     }
                     ExportOne(hash, cat ?? "other");
+                    runBusy = run.Elapsed.TotalSeconds;
                     lock (queue) queued.Remove(hash);
                 }
                 if (Exported % 50 == 0 && indexDirty) { SaveIndex(); Rebuild(); }

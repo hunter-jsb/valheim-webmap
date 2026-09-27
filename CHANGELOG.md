@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+* The world in 3D. `view.html#at=x,z` stands you on a walked spot at eye height, looking
+  north, like a street view: drag to look, wheel or pinch to zoom the eye, WASD or the
+  arrows to walk, a click on the ground to walk there, and an Overview button for an orbit
+  camera over the same spot. The place card and the pin card offer **See in 3D**; 3D is
+  in the bar; the page links back to the map where you stand. Ported, with thanks, from
+  [f00d4tehg0dz/valheim-webmap](https://github.com/f00d4tehg0dz/valheim-webmap) (MIT): the prefab exporter and glTF writer, the model
+  library, the texture and mesh extractors that read the game's own asset files (the
+  dedicated server cannot read its textures, nor most meshes), the per-chunk world objects,
+  the instanced viewer with its canopy billboards, and the sky. three.js r180 is vendored
+  under `web/vendor/three`.
+* The ground under it is ours: `GET /height?cx=&cz=` answers a 256 m chunk
+  (`cx = floor(x / 256)`) as 257 x 257 little-endian int16 decimetres of height, a metre
+  apart, row 0 the south edge and column 0 the west, both edges included. It is built as
+  the game builds its heightmap -- the generator's height for each 64 m zone's corner
+  biomes, blended by smoothstep -- plus every zone's terraforming, decoded from its
+  `_TerrainCompiler`; trees sampled against it stand within 4 cm of it.
+* `GET /objects?cx=&cz=` answers a chunk's objects (OBJ1: prefab, position, rotation,
+  scale, player-built), `GET /prefabs` the model library's index and `/models/<file>` a
+  model or texture from it. `/objects` and `/height` answer 404 for a chunk nobody has
+  walked, and nothing about one is even recorded. `/state` carries `rev.objects`,
+  `rev.height` and `rev.models`, and `time` (the game day and the fraction of it the sun
+  goes by). New config under `[Models]`: `export_models`, `extract_textures`,
+  `extract_meshes`, `export_ms_per_frame`, `texture_max_size`, `object_categories`.
+* The mod serves subfolders of `web/` now (the vendored three.js keeps its layout), and
+  gzips text and the 3D chunks for a client that takes it.
+
 * The land has names. Once per world the mod reads the generator's own geography --
   landmasses, lakes, bays and mountain ranges from a sampled grid of biome and height,
   rivers from the generator's river list -- and gives each an Old Norse name from the

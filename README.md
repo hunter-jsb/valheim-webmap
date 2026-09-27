@@ -23,6 +23,10 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
   bundled page does not draw them yet.
 * **World render at the resolution you choose** — `render_size` 4096 halves the metres
   per pixel, and rendering no longer stalls the server.
+* **The world in 3D.** "See in 3D" on any walked spot stands you there at eye height:
+  the ground as the game shapes it, terraforming included, water, and every building,
+  tree and rock drawn with the game's own model, under a sky lit by the server's clock.
+  Look around, walk, or switch to an overview.
 * **Server announcements** on every player's screen, for restart warnings and the like.
 * Chat, deaths and joins in the message log; optional Discord notifications.
 
@@ -39,8 +43,9 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 
 ## Using the map
 
-The viewer at `http://your_ip:port` is four pages — the live map, a portal atlas drawn on
-a biome chart, a planning board for drawing and sharing routes, and per-player tallies —
+The viewer at `http://your_ip:port` is five pages — the live map, the world in 3D, a
+portal atlas drawn on a biome chart, a planning board for drawing and sharing routes, and
+per-player tallies —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
@@ -50,6 +55,56 @@ Our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).
+
+### The 3D view
+
+`view.html#at=<x>,<z>` (world metres; `&look=<degrees from north>` optional) is the world
+at that spot. The place card and the pin card on the map link there as **See in 3D**, and
+the page links back to the map at the same spot. It opens like a street view: at eye
+height, 1.8 m above the ground, looking north. Drag to look around; the wheel or a pinch
+zooms the eye, not the distance; `W A S D` or the arrows walk (`Shift` runs, `Q E` turn);
+a click on the ground walks there. **Overview** swaps in an orbit camera over the same
+spot, and back. Light follows the server's clock, or a time you pick; shadows are on
+except on phones.
+
+The ground is the game's own: the generator's heights blended across each 64 m zone the
+way the game blends them, plus every terraform players have made, coloured by biome from
+the chart, with water at 30 m. On it stands every object in the three 256 m chunks around
+you -- buildings, trees, rocks, bushes, ruins, boats -- each drawn with the game's model
+of it and placed, turned and scaled as in the world. Only chunks somebody has walked are
+sent at all; the rest stay dark, as on the map.
+
+### The model library
+
+The first time the sweep meets a prefab, the mod exports it as a glTF model on the game
+thread, within `export_ms_per_frame` a frame. The dedicated server cannot read most
+textures, or about one mesh in eight, so a background thread then reads those straight out
+of the game's own asset files, once per game version, and the models that wanted them are
+exported again. The log says so:
+
+```
+WebMap: exporting models into .../map_data/models as the sweep finds them, 6 ms a frame
+WebMap: extracting 199 textures from the game files in .../valheim_server_Data
+WebMap: 199 of 199 textures extracted from 1 files in 5s
+WebMap: 446 models to re-export with newly extracted textures
+WebMap: model export done: 1001 prefabs in 15s; 507 with a model, 39 waiting on locked meshes, library 64.4 MB
+WebMap: extracting 48 meshes from the game files in .../valheim_server_Data
+WebMap: 48 of 48 meshes extracted from 1 files in 3s
+WebMap: 45 models to re-export with newly extracted meshes
+WebMap: model export done: 45 prefabs in 0s; 539 with a model, 7 waiting on locked meshes, library 71.2 MB
+```
+
+That was our world on a desktop: two and a half minutes from the first sweep to the last
+model. It starts when someone first opens a page that reads the sweep, and a restart
+exports only what is new.
+
+It all lives in `map_data/models/`, beside the worlds' own folders, since prefabs are the
+same in every world: `index.json` (what was exported), `textures.json` (what the models
+want), a `<hash>.glb` per prefab, `tex_<name>.png` per texture and `meshes/*.bin` for the
+extracted meshes. On our world that is about 73 MB -- 57 MB of models, 14 MB of textures,
+2.4 MB of meshes -- and it survives restarts and updates of the mod. The models and
+textures are served to the 3D view; the meshes are game data and never leave the server.
+Delete the folder to export everything again.
 
 ### Chat commands
 
@@ -80,6 +135,20 @@ Standard BepInEx config, plus:
 * `show_vehicles` — report boats and carts at `/vehicles`. They are only ever reported in
   explored territory; off stops them being reported at all.
 
+For the 3D view, under `[Models]` (the host rewrites the config on restart, so the
+defaults are what runs):
+
+* `export_models` — export each prefab as a glTF model into the library, default true.
+  Off, the 3D view has ground and nothing on it.
+* `extract_textures` — read the models' textures out of the game files, default true.
+  Off: flat colours.
+* `extract_meshes` — read the meshes the engine keeps locked out of the game files,
+  default true. Off: those models are drawn as boxes of their size.
+* `export_ms_per_frame` — game-thread milliseconds a frame the export may take, default 6.
+* `texture_max_size` — longest edge of an extracted texture in pixels, default 512.
+* `object_categories` — what the 3D view is sent, of `piece,other,rock,bush,tree`, default
+  all five.
+
 ## HTTP endpoints
 
 | Path | Returns |
@@ -100,7 +169,11 @@ Standard BepInEx config, plus:
 | `/vehicles` | boats and carts, position and type (JSON) |
 | `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
-| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=` |
+| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset) |
+| `/height` | `?cx=&cz=`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): 257 x 257 little-endian int16, decimetres of world height, a metre apart; row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
+| `/objects` | `?cx=&cz=`, every visible object in the chunk as `OBJ1`, little-endian: `'OBJ1'`, u32 count, u32 prefab count, i32 prefab hashes, then 44 bytes an object -- u16 prefab index, u8 flags (1 = player-built), u8 pad, f32 x y z, f32 rotation quaternion x y z w, f32 scale x y z (Unity's frame, y up, z north). 404 for a chunk nobody has walked; its revision in `X-Rev` |
+| `/prefabs` | the model library's index: per prefab hash, its name `n`, category `c`, whether it has a model `m` and its version `v`, bounds `b`, and for foliage the canopy bounds `k`, leaf texture `kt` and tint `kc` (JSON) |
+| `/models/<file>` | a model (`<hash>.glb`, the hash as eight hex digits) or a texture (`tex_<name>.png`) from the library; cacheable for a day, `ETag` the file's time |
 | `/announce` | POST, see above |
 
 The structure sweep walks every ZDO on the game thread, a few thousand per frame;
@@ -171,6 +244,19 @@ Two things worth knowing: steamcmd fails `app_update` with
 transient, so just run it again. And on an SELinux host the bind mounts need `:z` or the
 container silently sees nothing.
 
+A fresh world has nothing in it until a player walks there -- the server builds zones only
+around players -- so the 3D view and the sweep want a real world. Copy one in (Valheim 1.0
+saves a world as a folder, `worlds_local/<name>/`) and run it under its own name, with its
+`fog.png` so the same ground counts as walked:
+
+```bash
+VALHEIM_TEST_WORLD=Mothership ./testserver.sh up
+podman cp Mothership valheim-test:/valheim-saves/worlds_local/
+podman cp fog.png valheim-test:/valheim/BepInEx/plugins/WebMap/map_data/Mothership/fog.png
+podman exec valheim-test chown -R steam:steam /valheim-saves/worlds_local /valheim/BepInEx/plugins/WebMap/map_data
+podman restart valheim-test
+```
+
 ## Licence and credit
 
 MIT where applicable.
@@ -178,11 +264,16 @@ MIT where applicable.
 * 1.0 update, structures, forest, vehicles, portals, graves and pieces by [Hunter Boyd](https://github.com/hunterjsb)
 * Maintained upstream by [Jeff Clark](https://github.com/h0tw1r3)
 * Original work by [Kyle Paulsen](https://github.com/kylepaulsen)
+* The 3D view's model export, asset readers, world objects, instanced viewer and sky are
+  ported from [f00d4tehg0dz/valheim-webmap] (MIT); its ground and street-view camera are ours
+* [three.js] r180 (MIT) is vendored under `WebMap/web/vendor/three`
 * Background by [webtreats], [CC BY 2.0]
 
 [h0tw1r3/valheim-webmap]: https://github.com/h0tw1r3/valheim-webmap
 [xn-valheim]: https://github.com/hunter-jsb/xn-valheim
 [BepInEx]: https://github.com/BepInEx/BepInEx
 [indifferentbroccoli/valheim-server-docker]: https://github.com/indifferentbroccoli/valheim-server-docker
+[f00d4tehg0dz/valheim-webmap]: https://github.com/f00d4tehg0dz/valheim-webmap
+[three.js]: https://threejs.org
 [webtreats]: https://www.flickr.com/photos/webtreatsetc/4081217254
 [CC BY 2.0]: https://creativecommons.org/licenses/by/2.0/
