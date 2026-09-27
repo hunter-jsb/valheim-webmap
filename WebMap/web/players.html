@@ -194,7 +194,7 @@
         <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
         <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
         <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them, or, when your own game was running the fight, with you standing there; a creature that despawns is nobody's kill.</li>
-        <li><b>Class</b> — read three ways and summed: what you wear (eitr-weave says mage, heavy armour tank, light armour rogue or archer); what weapons you carry, what you have held and, where the server saw them, what you have landed; and what you have done, as shares of the roster's best in pieces, trees and rocks, and kills. The reason names all three. Dashed until ten minutes have had something in hand or the hits have come in.</li>
+        <li><b>Class</b> — read three ways: what you wear (eitr-weave says mage, heavy armour tank, light armour rogue or archer); what weapons you carry on your back and in hand, what you have held and, where the server saw them, what you have landed; and what you have done, as shares of the roster's best in pieces, trees and rocks, and kills. The gear decides; a builder or a harvester is someone with no fighting identity at all. The reason names all three. Dashed until ten minutes have had something in hand or the hits have come in. The server sees hands and back slots, never the bag.</li>
         <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees and rocks together.</li>
         <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
         <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
@@ -307,11 +307,14 @@ function radar(p, size, big){
   return out + `</svg>`;
 }
 // ---------- the classes ----------
-// A class is read three ways and summed. Wearing: the armour on the back, known from
-// the first sample. Weapons: what is carried (the worn set shows the sheathed weapon
-// when a hand is empty), what has been held, and the hits the server saw. Doing: the
-// tallies, as shares of the roster's best. Anyone with a sample gets a class; it is
-// faint until ten minutes have had something in hand or the hits have come in.
+// A class is read three ways. Wearing: the armour on the back, known from the first
+// sample. Weapons: what is carried (the worn set shows the sheathed weapon when a hand
+// is empty, and the back slots on their own), what has been held, and the hits the
+// server saw. Doing: the tallies, as shares of the roster's best. The gear decides:
+// robes and staffs make a mage however long the hammer was in hand tonight; Builder
+// and Harvester are for players with no fighting identity at all. Anyone with a sample
+// gets a class; it is faint until ten minutes have had something in hand or the hits
+// have come in.
 const FAMILY_WORD = {bow: "a bow", crossbow: "a crossbow", staff: "a staff", shield: "a shield", knife: "a knife", sword: "a sword", axe: "an axe", mace: "a mace", spear: "a spear", polearm: "an atgeir", hammer: "the hammer", hoe: "the hoe", cultivator: "the cultivator", pickaxe: "a pickaxe", torch: "a torch", fishing: "a fishing rod", tool: "a tool"};
 const ARMOUR_WORD = {mage: "eitr-weave", heavy: "heavy armour", medium: "medium armour", light: "light armour", none: "no armour"};
 // an item's family from its prefab name, for what is carried but not being held
@@ -343,8 +346,8 @@ function classify(p){
   const arm = g.armor || {}, armTotal = Object.values(arm).reduce((t, v) => t + num(v), 0);
   const armClass = armTotal ? Object.entries(arm).sort((a, b) => num(b[1]) - num(a[1]))[0][0] : null;
   if(armClass){
-    ({mage: () => { S.Mage += 1; }, heavy: () => { S.Tank += .6; S.Fighter += .4; }, medium: () => { S.Fighter += .5; S.Rogue += .2; },
-      light: () => { S.Rogue += .5; S.Archer += .4; S.Builder += .2; S.Harvester += .2; }, none: () => { S.Builder += .3; S.Harvester += .3; }})[armClass]?.();
+    ({mage: () => { S.Mage += 1.5; }, heavy: () => { S.Tank += .8; S.Fighter += .5; }, medium: () => { S.Fighter += .6; S.Rogue += .3; },
+      light: () => { S.Rogue += .4; S.Archer += .4; }, none: () => {}})[armClass]?.();
     why.push(ARMOUR_WORD[armClass] || armClass);
   }
   // 2. weapons: carried, held, used
@@ -376,7 +379,10 @@ function classify(p){
   const took = [num(p.trees) >= 10 && `${num(p.trees)} trees felled`, num(p.rocks) >= 10 && `${num(p.rocks)} rocks broken`].filter(Boolean).join(" and ");
   const deeds = [[built, `${num(p.pieces).toLocaleString()} pieces built`], [harvest, took], [fought, `${num(p.kills)} kills`]].filter(d => d[0] > 0 && d[1]).sort((a, b) => b[0] - a[0])[0];
   if(deeds) why.push(deeds[1]);
-  const ranked = Object.entries(S).sort((a, b) => b[1] - a[1]), [name, score] = ranked[0];
+  // the fighting identity first; the working classes only when there is none
+  const fighting = Object.entries(S).filter(([k]) => COMBAT.has(k)).sort((a, b) => b[1] - a[1])[0];
+  const working = Object.entries(S).filter(([k]) => !COMBAT.has(k)).sort((a, b) => b[1] - a[1])[0];
+  const [name, score] = fighting[1] >= 0.5 ? fighting : working[1] >= 0.3 ? working : fighting;
   const noGear = !armTotal && !carried.length && heldTotal < 60 && hitTotal < 10;   // only the deeds speak: a builder can still be named, a nobody is not
   if(noGear && score < 0.3) return null;
   const early = noGear || (heldTotal < 600 && hitTotal < 10);
