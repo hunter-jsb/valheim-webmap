@@ -317,11 +317,13 @@ function radar(p, size, big){
   }
   return out + `</svg>`;
 }
-// A class is a title of two words: how one fights, from what is worn and what is in
-// hand, and one's trade, from the deeds. The gear decides the first: robes and staffs
-// make a mage however long the hammer was out tonight, and a two-hander beside them a
-// battlemage. Either half may be missing. The server sees blows landed only on creatures
-// another player owns, so time in hand is the working evidence and hits are a bonus.
+// A class is three parts. The first word is a compound of two: what is fought with
+// (the prefix: battle, blade, shield, bow, knife, spell) and what the body is (the root:
+// mage, knight, warrior, rogue, brute), read from the clothes and the food. The second
+// word is the trade, from the deeds. The gear decides the body -- robes and eitr make a
+// mage however long the hammer was out tonight -- and any part may be missing. The
+// server sees blows landed only on creatures another player owns, and never the foods
+// themselves, only the health, stamina and eitr they add; time in hand is the evidence.
 const FAMILY_WORD = {bow: "a bow", crossbow: "a crossbow", staff: "a staff", shield: "a shield", knife: "a knife", sword: "a sword", axe: "an axe", mace: "a mace", spear: "a spear", polearm: "an atgeir", hammer: "the hammer", hoe: "the hoe", cultivator: "the cultivator", pickaxe: "a pickaxe", torch: "a torch", fishing: "a fishing rod", tool: "a tool"};
 const ARMOUR_WORD = {mage: "eitr-weave", heavy: "heavy armour", medium: "medium armour", light: "light armour", none: "no armour"};
 // an item's family from its prefab name, for what is carried but not being held
@@ -348,53 +350,68 @@ function familyOf(name){
 const FIGHT = {staff: "magic", bow: "ranged", crossbow: "ranged", shield: "shield", knife: "knife", sword: "melee", axe: "melee", mace: "melee", spear: "melee", polearm: "melee"};
 const twoHander = n => /^(thsword|battleaxe|sledge|atgeir)/i.test(String(n || ""));
 const seaShare = p => { const b = p.biomes || [], all = b.reduce((t, x) => t + num(x.m), 0); return all ? num((b.find(x => x.biome === "Ocean") || {}).m)/all : 0; };
+// the compound, by the body (rows) and what it fights with (columns)
+const TITLE = {
+  mage:    {none: "Mage", spell: "Mage", battle: "Battlemage", blade: "Spellsword", shield: "Spellguard", bow: "Arcane Archer", knife: "Nightblade"},
+  knight:  {none: "Knight", spell: "Templar", battle: "Champion", blade: "Warrior", shield: "Paladin", bow: "Marksman", knife: "Executioner"},
+  warrior: {none: "Soldier", spell: "Warlock", battle: "Reaver", blade: "Fighter", shield: "Warden", bow: "Ranger", knife: "Rogue"},
+  rogue:   {none: "Rogue", spell: "Enchanter", battle: "Berserker", blade: "Duelist", shield: "Skirmisher", bow: "Archer", knife: "Assassin"},
+  brute:   {none: "Brute", spell: "Shaman", battle: "Berserker", blade: "Bruiser", shield: "Guardian", bow: "Hunter", knife: "Cutthroat"},
+  none:    {none: null, spell: "Sorcerer", battle: "Berserker", blade: "Brawler", shield: "Sentinel", bow: "Archer", knife: "Cutpurse"},
+};
+const DIET_WORD = {hearty: "hearty food", quick: "light, quick food", eitr: "eitr food", balanced: "a balanced table"};
 function classify(p){
-  const g = p.gear || {}, why = [];
-  // 1. wearing
+  const g = p.gear || {};
+  // 1. the body: clothes, and the food behind the health, stamina and eitr
   const arm = g.armor || {}, armTotal = Object.values(arm).reduce((t, v) => t + num(v), 0);
   const A = armTotal ? Object.entries(arm).sort((a, b) => num(b[1]) - num(a[1]))[0][0] : "none";
-  if(armTotal) why.push(ARMOUR_WORD[A] || A);
-  // 2. weapons: a minute of fighting gear in hand decides; before that, what is carried
+  const diet = g.diet || {}, fed = Object.entries(diet).filter(([k]) => k !== "none"), fedTotal = fed.reduce((t, [, v]) => t + num(v), 0);
+  const D = fedTotal && fedTotal >= num(diet.none) ? fed.sort((a, b) => num(b[1]) - num(a[1]))[0][0] : null;   // unfed more often than not says nothing
+  const root = A === "mage" || (D === "eitr" && A !== "heavy") ? "mage" : A === "heavy" ? "knight" : A === "medium" ? (D === "quick" ? "rogue" : "warrior")
+    : A === "light" ? (D === "hearty" ? "warrior" : "rogue") : D === "hearty" ? "brute" : "none";
+  const food = g.food || null, fedWords = food ? [num(food.hp) && `${Math.round(num(food.hp))} health`, num(food.st) && `${Math.round(num(food.st))} stamina`, num(food.eitr) && `${Math.round(num(food.eitr))} eitr`].filter(Boolean) : [];
+  const bodyWhy = [armTotal && (ARMOUR_WORD[A] || A), D && DIET_WORD[D], fedWords.length ? "fed for " + fedWords.join(", ") : food && "unfed"].filter(Boolean);
+  // 2. the weapons: a minute of fighting gear in hand decides; before that, what is carried
   const hand = g.hand || {}, held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), heldTotal = held.reduce((t, [, v]) => t + num(v), 0);
   const fought = held.filter(([k]) => FIGHT[k]), fightTotal = fought.reduce((t, [, v]) => t + num(v), 0);
   const worn = g.worn || {}, carriedNames = [worn.right, worn.left, worn.rightBack, worn.leftBack].filter(n => FIGHT[familyOf(n)]), carried = [...new Set(carriedNames.map(familyOf))];
-  const F = {magic: 0, ranged: 0, shield: 0, knife: 0, melee: 0}, FS = {};
+  const F = {magic: 0, ranged: 0, shield: 0, knife: 0, melee: 0}, FS = {}, armsWhy = [];
   let twoh = 0;
   if(fightTotal >= 60){
     for(const [k, v] of fought){ FS[k] = num(v)/fightTotal; F[FIGHT[k]] += FS[k]*(k === "axe" ? .5 : 1); }   // an axe is half a tool
     twoh = num(hand.twohanded)/fightTotal;
-    why.push(fought.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 2).map(([k, v]) => `${FAMILY_WORD[k] || k} ${Math.round(100*num(v)/heldTotal)}%`).join(" and ") + " of the time in hand");
+    armsWhy.push(fought.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 2).map(([k, v]) => `${FAMILY_WORD[k] || k} ${Math.round(100*num(v)/heldTotal)}%`).join(" and ") + " of the time in hand" + (twoh >= .5 ? ", two-handed" : ""));
   } else if(carried.length){
     for(const k of carried){ FS[k] = 1; F[FIGHT[k]] += 1; }
     twoh = carriedNames.some(twoHander) ? 1 : 0;
-    why.push(`carries ${carried.map(k => FAMILY_WORD[k]).join(" and ")}`);
+    armsWhy.push(`carries ${carried.map(k => FAMILY_WORD[k]).join(" and ")}`);
   }
   const hits = g.hits || {}, hitTotal = num(hits.melee) + num(hits.ranged) + num(hits.magic);
   if(hitTotal >= 10){
     F.magic += num(hits.magic)/hitTotal*.5; F.ranged += num(hits.ranged)/hitTotal*.5; F.melee += num(hits.melee)/hitTotal*.3; F.knife += num(hits.backstab)/hitTotal*.5;
     const kind = [["ranged", "shots"], ["magic", "spells"], ["backstab", "backstabs"], ["melee", "blows"]].sort((a, b) => num(hits[b[0]]) - num(hits[a[0]]))[0];
-    why.push(`${num(hits[kind[0]])} ${kind[1]} landed`);
+    armsWhy.push(`${num(hits[kind[0]])} ${kind[1]} landed`);
   }
-  // a quarter of the fighting counts as a way of fighting; the armour and the weapon colour the name
+  // a quarter of the fighting counts as a way of fighting; a mage's staff is already in the root, so the rest names the prefix
   const facets = Object.entries(F).filter(([, v]) => v >= .25).sort((a, b) => b[1] - a[1]), has = k => facets.some(f => f[0] === k);
-  const lead = facets.length ? facets[0][0] : null, shielded = has("shield") || carried.includes("shield");
+  const lead = (root === "mage" ? facets.find(f => f[0] !== "magic") || facets[0] : facets[0])?.[0] || null, shielded = has("shield") || carried.includes("shield");
   const fam = k => num(FS[k]), steel = ["sword", "axe", "mace", "spear", "polearm"].sort((a, b) => fam(b) - fam(a))[0];
+  const prefix = lead === "magic" ? "spell" : lead === "ranged" ? "bow" : lead === "knife" ? "knife" : lead === "shield" ? "shield" : lead === "melee" ? (twoh >= .5 ? "battle" : shielded ? "shield" : "blade") : "none";
   const hasGear = armTotal > 0 || heldTotal > 0 || carried.length > 0 || hitTotal > 0;
-  let fighter = null;
-  if(A === "mage") fighter = has("knife") ? "Nightblade" : has("melee") || shielded ? "Battlemage" : has("ranged") ? "Arcane Archer" : "Mage";
-  else if(has("magic")) fighter = A === "heavy" ? "Templar" : has("melee") || shielded ? "Spellsword" : has("ranged") ? "Arcane Archer" : "Sorcerer";
-  else if(lead === "ranged") fighter = fam("crossbow") > fam("bow") ? "Arbalist" : has("knife") || fam("spear") >= .25 ? "Hunter" : has("melee") ? "Skirmisher" : {heavy: "Marksman", medium: "Ranger"}[A] || "Archer";
-  else if(lead === "knife") fighter = num(hits.backstab) >= 10 && num(hits.backstab)*2 >= hitTotal ? "Assassin" : has("ranged") ? "Hunter" : "Rogue";
-  else if(lead === "melee" || lead === "shield"){
-    if(twoh >= .5) fighter = steel === "polearm" ? "Vanguard" : A === "heavy" ? "Champion" : "Berserker";
-    else if(has("ranged")) fighter = "Skirmisher";
-    else if(shielded) fighter = steel === "axe" ? "Huscarl" : steel === "spear" ? "Hoplite" : {heavy: "Knight", medium: "Warden"}[A] || "Sentinel";
-    else fighter = steel === "axe" ? "Raider" : steel === "spear" ? "Spearman" : steel === "mace" ? "Bruiser" : {heavy: "Warrior", medium: "Fighter", light: "Duelist"}[A] || "Brawler";
+  let fighter = TITLE[root][prefix];
+  // the weapon itself colours a few
+  if(root !== "mage"){
+    if(prefix === "bow" && fam("crossbow") > fam("bow")) fighter = "Arbalist";
+    else if(prefix === "bow" && (has("knife") || fam("spear") >= .25)) fighter = "Hunter";
+    else if(prefix === "battle" && steel === "polearm") fighter = "Vanguard";
+    else if(prefix === "shield" && steel === "axe" && (root === "knight" || root === "warrior")) fighter = "Huscarl";
+    else if(prefix === "shield" && steel === "spear") fighter = "Hoplite";
+    else if(prefix === "blade" && steel === "axe" && root !== "knight") fighter = "Raider";
   }
-  else fighter = {heavy: "Warrior", medium: "Fighter", light: "Scout"}[A] || null;
+  if(prefix === "knife" && num(hits.backstab) >= 10 && num(hits.backstab)*2 >= hitTotal) fighter = "Assassin";
   // nothing seen in hand yet: dying more often than half the roster says something too
   const perDeath = q => num(q.deaths) ? num(q.dist_m)/num(q.deaths) : Infinity, pers = DATA.map(perDeath).filter(isFinite).sort((a, b) => a - b), median = pers.length ? pers[Math.floor(pers.length/2)] : 0;
-  if(!fighter && !hasGear && num(p.deaths) >= 20 && perDeath(p) <= median){ fighter = "Berserker"; why.push(`${num(p.deaths)} deaths, one every ${(perDeath(p)/1000).toFixed(1)} km`); }
+  if(!fighter && !hasGear && num(p.deaths) >= 20 && perDeath(p) <= median){ fighter = "Berserker"; armsWhy.push(`${num(p.deaths)} deaths, one every ${(perDeath(p)/1000).toFixed(1)} km`); }
   // 3. the trade, from the deeds: building against the roster's best, the rest in plain numbers
   const best = k => Math.max(1, ...DATA.map(q => num(q[k])));
   const pieces = num(p.pieces), bestPieces = best("pieces"), trees = num(p.trees), rocks = num(p.rocks), taken = trees + rocks, roam = num(p.dist_m)/best("dist_m"), kills = num(p.kills), hops = num(p.hops);
@@ -411,12 +428,15 @@ function classify(p){
     : roaming ? (sea >= .3 ? "Seafarer" : "Explorer")
     : fish >= .1 ? "Angler"
     : hops >= 200 && hops >= .8*best("hops") ? "Wayfarer" : null;
-  why.push(...[building && `${pieces.toLocaleString()} pieces built`, trees >= 10 && `${trees} trees felled`, rocks >= 10 && `${rocks} rocks broken`,
+  const deedsWhy = [building && `${pieces.toLocaleString()} pieces built`, trees >= 10 && `${trees} trees felled`, rocks >= 10 && `${rocks} rocks broken`,
     trade === "Slayer" && `${kills} kills`, (trade === "Homesteader" || trade === "Farmer") && `the hoe and cultivator ${Math.round(farm*100)}% of the time in hand`,
     (trade === "Seafarer" || trade === "Explorer") && `${Math.round(num(p.dist_m)/1000)} km travelled`, trade === "Seafarer" && `${Math.round(sea*100)}% of it at sea`,
-    trade === "Angler" && `a fishing rod ${Math.round(fish*100)}% of the time in hand`, trade === "Wayfarer" && `${hops.toLocaleString()} portal hops`].filter(Boolean));
+    trade === "Angler" && `a fishing rod ${Math.round(fish*100)}% of the time in hand`, trade === "Wayfarer" && `${hops.toLocaleString()} portal hops`].filter(Boolean);
   const name = [fighter, trade].filter(Boolean).join(" ") || (hasGear ? "Wanderer" : "");
   if(!name) return null;
+  // the reason names the three parts: prefix (weapons), root (body), trade (deeds)
+  const part = (label, words) => words.length ? (label ? `${label}: ` : "") + words.join(", ") : null;
+  const why = [part(fighter && prefix !== "none" ? prefix : null, armsWhy), part(fighter && root !== "none" ? root : null, bodyWhy), part(trade && trade.toLowerCase(), deedsWhy)].filter(Boolean);
   // faint until ten minutes have had something in hand or the hits have come in
   const early = !hasGear || (heldTotal < 600 && hitTotal < 10);
   return {name, early, why: why.join(" \u00b7 ") || "nothing to go on yet", top: heldTotal ? held.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3).map(([k, v]) => ({fam: k, share: num(v)/heldTotal})) : []};

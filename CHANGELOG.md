@@ -54,27 +54,27 @@
   that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
   top when the creature was not yet alerted -- partial, since a hit on a creature the
   hitter's own game runs never reaches the server.
-* Players have a class: a title of two words, how they fight and their trade. The gear
-  decides the first. Eitr-weave makes a Mage; a two-hander or shield beside it a Battlemage,
-  a knife a Nightblade, a bow an Arcane Archer. A staff without the robes makes a Sorcerer,
-  a Spellsword with steel, a Templar in heavy armour. A bow makes an Archer, Ranger or
-  Marksman by the armour's weight, a Hunter with a knife or spear, a Skirmisher with steel;
-  a crossbow an Arbalist. A knife makes a Rogue, an Assassin once backstabs are half the
-  hits. A two-hander makes a Berserker, a Champion in heavy armour, a Vanguard when it is
-  the atgeir. Sword and shield make a Sentinel, Warden or Knight; axe and shield a Huscarl,
-  spear and shield a Hoplite; steel alone a Brawler, Duelist, Fighter or Warrior, a Raider
-  with the axe, a Spearman, a Bruiser with the mace. Armour alone says Scout, Fighter or
-  Warrior, and before any gear is seen, twenty deaths at a worse pace than half the roster
-  say Berserker. The deeds give the second: the roster's top builder is the Architect, a
-  builder who also mines an Engineer, who also fells a Carpenter, who also farms a
-  Homesteader; the roster's Slayer; Builders, Miners, Lumberjacks, Farmers; a roamer an
-  Explorer or, a third of it at sea, a Seafarer; an Angler; a Wayfarer of the portals.
-  Either half may be missing. The title sits on the roster row (under the name when the
-  list is narrow) and on the player's page with its reason, a Gear group shows what they
-  were last seen wearing, and the spotlight turns through it. Time in hand is the working
-  evidence: the server sees blows landed only on creatures another player owns, and skills
-  never leave the character file. Faint until ten minutes have had something in hand; the
-  worn set carries the two back slots so a mage building all night stays a mage.
+* Players have a class in three parts. The first word is a compound: what is fought with
+  gives the prefix (battle for a two-hander, blade, shield, bow, knife, spell) and the body
+  gives the root (mage, knight, warrior, rogue, brute), read from the clothes and the food
+  -- the server never sees the foods, only the health, stamina and eitr they add, so the
+  mod tallies a diet (`hearty`, `quick`, `eitr`, `balanced`, `none`) beside the armour and
+  reports the latest food-borne figures. The two make Battlemage, Spellsword, Spellguard,
+  Nightblade, Arcane Archer; Templar, Champion, Paladin, Marksman, Executioner; Warlock,
+  Reaver, Fighter, Warden, Ranger; Enchanter, Berserker, Duelist, Skirmisher, Archer,
+  Assassin; Shaman, Bruiser, Guardian, Hunter, Cutthroat; and the weapon itself colours a
+  few: Arbalist, Vanguard, Huscarl, Hoplite, Raider. Before any gear is seen, twenty deaths
+  at a worse pace than half the roster say Berserker. The second word is the trade, from
+  the deeds: the roster's top builder is the Architect, a builder who also mines an
+  Engineer, who also fells a Carpenter, who also farms a Homesteader; the roster's Slayer;
+  Builders, Miners, Lumberjacks, Farmers; a roamer an Explorer or, a third of it at sea, a
+  Seafarer; an Angler; a Wayfarer of the portals. Any part may be missing. The title sits
+  on the roster row (under the name when the list is narrow) and on the player's page with
+  its reason spelled out part by part, a Gear group shows what they were last seen wearing,
+  and the spotlight turns through it. Time in hand is the working evidence: the server
+  sees blows landed only on creatures another player owns, and skills never leave the
+  character file. Faint until ten minutes have had something in hand; the worn set carries
+  the two back slots so a mage building all night stays a mage.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
