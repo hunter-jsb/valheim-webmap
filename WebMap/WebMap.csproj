@@ -35,6 +35,7 @@
     <Reference Include="Mono.Security"><HintPath>..\libs\valheim\Mono.Security.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine"><HintPath>..\libs\valheim\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>..\libs\valheim\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AnimationModule"><HintPath>..\libs\valheim\UnityEngine.AnimationModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>..\libs\valheim\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="SoftReferenceableAssets"><HintPath>..\libs\valheim\SoftReferenceableAssets.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Splatform"><HintPath>..\libs\valheim\Splatform.dll</HintPath><Private>false</Private></Reference>

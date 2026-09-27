@@ -36,6 +36,8 @@ namespace WebMap.Models
             public float[] canopy;            // foliage bounds in model space (x0,y0,z0,x1,y1,z1), or null
             public string canopyTex;          // leaf texture file, or null
             public float[] canopyColor;       // leaf tint 0..1
+            public string ct, lt;             // a rig part's paint over the body's chest and legs, texture files
+            public int tp;                    // a rig part's wanted textures that were there when it was exported
         }
 
         private static string root;
@@ -43,6 +45,7 @@ namespace WebMap.Models
         private static readonly Queue<int> queue = new Queue<int>();
         private static readonly HashSet<int> queued = new HashSet<int>();
         private static readonly Dictionary<int, string> catOf = new Dictionary<int, string>();
+        private static readonly ConcurrentDictionary<int, string> rigNames = new ConcurrentDictionary<int, string>();   // a rig part's hash is its name's
         private static volatile string prefabsJson = "{\"rev\":0,\"prefabs\":{}}";
         private static volatile int rev;
         // one export run: from a prefab queued on an empty queue to the queue running dry
@@ -99,6 +102,8 @@ namespace WebMap.Models
                                 info.canopyTex = JsonParser.Str(d, "kt", null);
                                 var kc = JsonParser.Arr(d, "kc");
                                 if (kc != null && kc.Count == 3) { info.canopyColor = new float[3]; for (int i = 0; i < 3; i++) info.canopyColor[i] = (float)(kc[i] is double x ? x : 0); }
+                                info.ct = JsonParser.Str(d, "ct", null); info.lt = JsonParser.Str(d, "lt", null); info.tp = (int)JsonParser.Num(d, "tp");
+                                if (info.cat == Rig.Cat && info.name != null) rigNames[h] = info.name;
                                 // only trust entries whose file still exists
                                 if (!info.ok || File.Exists(Path.Combine(root, FileName(h)))) index[h] = info;
                             }
@@ -149,6 +154,12 @@ namespace WebMap.Models
             var missing = new HashSet<string>();
             foreach (var i in index.Values)
             {
+                // a rig part names its body paint rather than drawing it: any texture turned up since sends it again
+                if (i.cat == Rig.Cat)
+                {
+                    if (Present(i.wants) > i.tp) { Request(i.hash, i.cat, force: true); again++; }
+                    continue;
+                }
                 // a prefab with no geometry can never become textured: re-exporting it forever helps nobody
                 if (i.wants.Count == 0 || !i.ok) continue;
                 bool needs = false;
@@ -172,6 +183,13 @@ namespace WebMap.Models
                 foreach (var w in i.wants)
                     if (seen.Add(w) && !File.Exists(Path.Combine(root, PrefabExporter.TextureFileName(w)))) list.Add(w);
             return list;
+        }
+
+        private static int Present(List<string> wants)
+        {
+            int n = 0;
+            foreach (var w in wants) if (File.Exists(Path.Combine(root, PrefabExporter.TextureFileName(w)))) n++;
+            return n;
         }
 
         private static bool IsFoliageWant(string texName)
@@ -219,6 +237,15 @@ namespace WebMap.Models
         public static string FileName(int hash) => unchecked((uint)hash).ToString("x8") + ".glb";
 
         public static bool Known(int hash) => index.ContainsKey(hash);
+
+        // Game thread (the player snapshot): a part of a live player's rig, exported once like any prefab.
+        public static void RequestRig(string name)
+        {
+            int h = name.GetStableHashCode();
+            if (index.ContainsKey(h)) return;
+            rigNames[h] = name;
+            Request(h, Rig.Cat);
+        }
 
         // Main thread (from the sweep). Queues an export if this prefab is new.
         public static void Request(int hash, string cat, bool force = false)
@@ -294,7 +321,7 @@ namespace WebMap.Models
                             jobHash = queue.Dequeue();
                             catOf.TryGetValue(jobHash, out cat); catOf.Remove(jobHash);
                         }
-                        job = ExportOne(jobHash, cat ?? "other");
+                        job = cat == Rig.Cat ? ExportRig(jobHash) : ExportOne(jobHash, cat ?? "other");
                     }
                     bool more;
                     try { more = job.MoveNext(); }
@@ -370,6 +397,41 @@ namespace WebMap.Models
                 }
             }
             finally { if (held) try { loc.m_prefab.Release(); } catch { } }
+            Record(hash, info);
+        }
+
+        // A live player's rig part: RigExporter's glTF, its body paint named beside it.
+        private static IEnumerator ExportRig(int hash)
+        {
+            rigNames.TryGetValue(hash, out string name);
+            var info = new Info { hash = hash, cat = Rig.Cat, name = name ?? ("#" + hash) };
+            if (name != null && WebMapConfig.EXPORT_MODELS)
+            {
+                var r = new PrefabExporter.Result { category = Rig.Cat };
+                try
+                {
+                    if (RigExporter.Export(name, root, r))
+                    {
+                        byte[] glb = r.Write();
+                        if (glb != null)
+                        {
+                            File.WriteAllBytes(Path.Combine(root, FileName(hash)), glb);
+                            info.ok = true; info.tris = r.triangles; info.bounds = r.bounds; info.tex = r.textured; info.ver = Fnv.Of(glb);
+                            Readable++;
+                        }
+                        else if (r.renderers > 0) Unreadable++;
+                        info.renderers = r.renderers; info.unreadable = r.unreadable; info.wants = r.wants; info.meshWants = r.meshWants; info.meshMissing = r.meshMissing;
+                        info.ct = r.overlayChest; info.lt = r.overlayLegs; info.tp = Present(r.wants);
+                    }
+                }
+                catch (Exception e) { ZLog.LogWarning($"WebMap: model export of {name} failed: {e.Message}"); }
+            }
+            Record(hash, info);
+            yield break;
+        }
+
+        private static void Record(int hash, Info info)
+        {
             // a re-export was counted once already
             if (index.TryGetValue(hash, out var old)) { if (old.ok) Readable--; else if (old.renderers > 0) Unreadable--; }
             index[hash] = info;
@@ -464,6 +526,9 @@ namespace WebMap.Models
                 if (i.canopyTex != null) j.Prop("kt", i.canopyTex);
                 if (i.canopyColor != null) { j.Key("kc").BeginArray(); foreach (float v in i.canopyColor) j.Value(v, 3); j.End(); }
             }
+            if (i.ct != null) j.Prop("ct", i.ct);
+            if (i.lt != null) j.Prop("lt", i.lt);
+            if (full && i.cat == Rig.Cat) j.Prop("tp", i.tp);
             j.End();
         }
 

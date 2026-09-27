@@ -35,13 +35,17 @@ namespace WebMap.Models
             public byte[] glb; public float[] bounds = new float[6]; public int triangles; public bool textured; public bool readable;
             public bool location; public float[] shape;   // a location's bounds from what it draws, read or not
             internal GlbWriter writer; internal string name; internal List<List<GlbWriter.Primitive>> looks;
+            internal float[] posed;                       // a rig part's bounds as it stands, not as its skin is stored
+            public string overlayChest, overlayLegs;      // a rig part's paint on the body, texture files
             // the glTF from what Export gathered: no engine calls, so any thread; null with no geometry
             public byte[] Write()
             {
                 if (writer == null) return null;
                 if (looks != null) foreach (var l in looks) writer.Add(Join(l));
                 looks = null;
-                return glb = writer.Write(name, out bounds);
+                glb = writer.Write(name, out bounds);
+                if (posed != null) bounds = posed;
+                return glb;
             }
             public int renderers, unreadable, foliageSkipped;
             public List<string> wants = new List<string>();   // texture names the materials reference (present or not)
@@ -206,44 +210,8 @@ namespace WebMap.Models
                 Matrix4x4 m = toRoot * t.localToWorldMatrix;
                 if (loc != null) try { Grow(res, mesh.bounds, m); } catch { }
 
-                // geometry: from the engine when the mesh is readable, else from the mesh cache
-                // (MeshExtractor fills it from the game files); a locked mesh not cached yet is skipped
-                float[] pos, nrm = null, uv = null; int vcount; List<uint[]> subIdx = null;
-                bool readable = false;
-                try { readable = mesh.isReadable; } catch { }
-                if (readable)
-                {
-                    Vector3[] verts; Vector3[] norms; Vector2[] uvs;
-                    try { verts = mesh.vertices; norms = mesh.normals; uvs = mesh.uv; }
-                    catch { readable = false; verts = null; norms = null; uvs = null; }
-                    if (!readable || verts == null || verts.Length == 0) { res.unreadable++; continue; }
-                    vcount = verts.Length;
-                    pos = new float[vcount * 3];
-                    if (norms != null && norms.Length == vcount) nrm = new float[vcount * 3];
-                    if (uvs != null && uvs.Length == vcount) uv = new float[vcount * 2];
-                    for (int i = 0; i < vcount; i++)
-                    {
-                        pos[i * 3] = verts[i].x; pos[i * 3 + 1] = verts[i].y; pos[i * 3 + 2] = verts[i].z;
-                        if (nrm != null) { nrm[i * 3] = norms[i].x; nrm[i * 3 + 1] = norms[i].y; nrm[i * 3 + 2] = norms[i].z; }
-                        if (uv != null) { uv[i * 2] = uvs[i].x; uv[i * 2 + 1] = uvs[i].y; }
-                    }
-                }
-                else
-                {
-                    int vc = 0, subCount = 0, idx0 = 0;
-                    try { vc = mesh.vertexCount; subCount = mesh.subMeshCount; } catch { }
-                    try { idx0 = (int)mesh.GetIndexCount(0); } catch { }
-                    string key = string.IsNullOrEmpty(mesh.name) || vc <= 0 ? null : MeshCache.Key(mesh.name, vc, subCount, idx0);
-                    var cached = key != null ? MeshCache.Load(modelsDir, key) : null;
-                    if (key != null && !res.meshWants.Contains(key)) res.meshWants.Add(key);
-                    if (cached == null)
-                    {
-                        if (key != null && !res.meshMissing.Contains(key)) res.meshMissing.Add(key);
-                        res.unreadable++; continue;
-                    }
-                    pos = cached.positions; nrm = cached.normals; uv = cached.uvs; subIdx = cached.subMeshes; vcount = pos.Length / 3;
-                }
-                res.readable = true;
+                if (!Geometry(mesh, modelsDir, res, out float[] pos, out float[] nrm, out float[] uv, out List<uint[]> subIdx)) continue;
+                int vcount = pos.Length / 3;
 
                 Matrix4x4 nm = m.inverse.transpose;
                 bool mirrored = m.determinant < 0;   // negative scale flips winding once more
@@ -263,16 +231,7 @@ namespace WebMap.Models
                 int subs = subIdx != null ? subIdx.Count : mesh.subMeshCount;
                 for (int s = 0; s < subs; s++)
                 {
-                    uint[] raw;
-                    if (subIdx != null) raw = subIdx[s];
-                    else
-                    {
-                        int[] idx;
-                        try { idx = mesh.GetTriangles(s); } catch { continue; }
-                        if (idx == null) continue;
-                        raw = new uint[idx.Length];
-                        for (int i = 0; i < idx.Length; i++) raw[i] = (uint)idx[i];
-                    }
+                    uint[] raw = Triangles(mesh, subIdx, s);
                     if (raw == null || raw.Length < 3) continue;
                     uint[] indices = new uint[raw.Length];
                     for (int i = 0; i + 2 < raw.Length; i += 3)
@@ -323,6 +282,61 @@ namespace WebMap.Models
             res.triangles = tris;
         }
 
+        // A mesh's vertices in its own frame: from the engine when it is readable, else from the mesh
+        // cache (MeshExtractor fills it from the game files); false for a locked mesh not cached yet.
+        internal static bool Geometry(Mesh mesh, string modelsDir, Result res, out float[] pos, out float[] nrm, out float[] uv, out List<uint[]> subIdx)
+        {
+            pos = nrm = uv = null; subIdx = null;
+            bool readable = false;
+            try { readable = mesh.isReadable; } catch { }
+            if (readable)
+            {
+                Vector3[] verts; Vector3[] norms; Vector2[] uvs;
+                try { verts = mesh.vertices; norms = mesh.normals; uvs = mesh.uv; }
+                catch { readable = false; verts = null; norms = null; uvs = null; }
+                if (!readable || verts == null || verts.Length == 0) { res.unreadable++; return false; }
+                int vcount = verts.Length;
+                pos = new float[vcount * 3];
+                if (norms != null && norms.Length == vcount) nrm = new float[vcount * 3];
+                if (uvs != null && uvs.Length == vcount) uv = new float[vcount * 2];
+                for (int i = 0; i < vcount; i++)
+                {
+                    pos[i * 3] = verts[i].x; pos[i * 3 + 1] = verts[i].y; pos[i * 3 + 2] = verts[i].z;
+                    if (nrm != null) { nrm[i * 3] = norms[i].x; nrm[i * 3 + 1] = norms[i].y; nrm[i * 3 + 2] = norms[i].z; }
+                    if (uv != null) { uv[i * 2] = uvs[i].x; uv[i * 2 + 1] = uvs[i].y; }
+                }
+            }
+            else
+            {
+                int vc = 0, subCount = 0, idx0 = 0;
+                try { vc = mesh.vertexCount; subCount = mesh.subMeshCount; } catch { }
+                try { idx0 = (int)mesh.GetIndexCount(0); } catch { }
+                string key = string.IsNullOrEmpty(mesh.name) || vc <= 0 ? null : MeshCache.Key(mesh.name, vc, subCount, idx0);
+                var cached = key != null ? MeshCache.Load(modelsDir, key) : null;
+                if (key != null && !res.meshWants.Contains(key)) res.meshWants.Add(key);
+                if (cached == null)
+                {
+                    if (key != null && !res.meshMissing.Contains(key)) res.meshMissing.Add(key);
+                    res.unreadable++; return false;
+                }
+                pos = cached.positions; nrm = cached.normals; uv = cached.uvs; subIdx = cached.subMeshes;
+            }
+            res.readable = true;
+            return true;
+        }
+
+        // sub-mesh s's triangles, from the cache's lists when the mesh came from there
+        internal static uint[] Triangles(Mesh mesh, List<uint[]> subIdx, int s)
+        {
+            if (subIdx != null) return s < subIdx.Count ? subIdx[s] : null;
+            int[] idx;
+            try { idx = mesh.GetTriangles(s); } catch { return null; }
+            if (idx == null) return null;
+            var raw = new uint[idx.Length];
+            for (int i = 0; i < idx.Length; i++) raw[i] = (uint)idx[i];
+            return raw;
+        }
+
         // A location's parts, one primitive per look (Join, in Write): a camp of three hundred parts is a dozen draws.
         private static List<GlbWriter.Primitive> Look(Dictionary<string, List<GlbWriter.Primitive>> looks, GlbWriter.Primitive p)
         {
@@ -368,7 +382,7 @@ namespace WebMap.Models
         private static bool IsLeafName(string n) => n.Contains("leaf") || n.Contains("leaves") || n.Contains("branch") || n.Contains("needle") || n.Contains("foliage") || n.Contains("canopy") || n.Contains("grass") || n.Contains("_bush") || n.StartsWith("bush") || n.Contains("shrub") || n.Contains("bloom") || n.Contains("flower");
         private static bool IsWoodName(string n) => n.Contains("bark") || n.Contains("trunk") || n.Contains("log") || n.Contains("stump") || n.Contains("root") || n.Contains("wood") || n.Contains("stem");
 
-        private static void ApplyMaterial(GlbWriter.Primitive prim, Material mat, string modelsDir, Color32 fallback, Result res)
+        internal static void ApplyMaterial(GlbWriter.Primitive prim, Material mat, string modelsDir, Color32 fallback, Result res)
         {
             prim.r = fallback.r / 255f; prim.g = fallback.g / 255f; prim.b = fallback.b / 255f;
             if (mat == null) return;
@@ -428,6 +442,12 @@ namespace WebMap.Models
                 foreach (var prop in altColorProps)
                     try { if (mat.HasProperty(prop)) { tex = mat.GetTexture(prop) as Texture2D; if (tex != null) break; } } catch { }
             }
+            return TextureFile(tex, modelsDir, res);
+        }
+
+        // A texture's file in the models dir, as ExportTexture finds or writes it; its name is wanted either way.
+        internal static string TextureFile(Texture2D tex, string modelsDir, Result res)
+        {
             if (tex == null || string.IsNullOrEmpty(tex.name)) return null;
             string name = tex.name;
             if (!res.wants.Contains(name)) res.wants.Add(name);

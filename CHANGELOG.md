@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+* Live players in 3D as themselves: the body they chose (the game's two), their skin and hair
+  colour, their hair and beard, and what they wear and hold -- helmet, chest, legs, cape,
+  belt, trinket, what is in each hand and what is slung on the back -- facing their way,
+  their name above. The server runs no animation, so the mod plays the game's own idle clip
+  once on a copy of the Player's rig and keeps that standing pose; the body and every
+  garment are exported as skinned glTF (joints, weights, inverse binds) over the Player's
+  skeleton in that pose, and a held or slung item hangs from its attach point as a node
+  under its bone, so everything a look names stands together where it belongs. A look
+  resolves as VisEquipment attaches it: a helmet hides the hair or swaps it for its hat
+  cut, a sheathed bow goes to the bow's place on the back and a torch to its own. Skin and
+  hair are tinted in the viewer, the body's chest and legs paint (the tunic or trousers a
+  garment paints on the skin) laid over the skin there too. `/state` players carry `yaw`
+  and `look` (the body, the colours, each slot's prefab and the parts to draw); the library
+  gains a part per body and per worn item (category `rig`) as players are seen, about 20 KB
+  each. A player is dressed again only when their look changes, from parts baked once and
+  shared, so six players cost a few dozen draws. The index format is unchanged. The mod now
+  builds against the game's `UnityEngine.AnimationModule.dll` too.
 * The world's locations in 3D: the traders' camps, the Bog Witch's hut, crypt, cave and
   dwarven entrances, the boss altars, stone circles and runestones. The game networks a
   location only as a marker (a LocationProxy) and every game spawns the rest itself, so the

@@ -338,6 +338,11 @@ namespace WebMap
                 if (showPos)
                 {
                     sb.Append(FormattableString.Invariant($",\"x\":{pos.x:0.##},\"z\":{pos.z:0.##}"));
+                    // the 3D view draws them as the game does: facing their way, in what they wear
+                    sb.Append(FormattableString.Invariant($",\"yaw\":{zdoData.GetRotation().eulerAngles.y:0}"));
+                    string look = null;
+                    try { look = Models.RigExporter.LookJson(zdoData); } catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: a player's look failed: " + e.Message); }
+                    if (look != null) sb.Append(",\"look\":").Append(look);
                 }
                 sb.Append("}");
                 entries.Add(sb.ToString());

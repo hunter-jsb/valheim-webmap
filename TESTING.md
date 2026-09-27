@@ -39,7 +39,11 @@ guards against; there is one per failure, not one per branch.
    plan. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
    escaping, ages, vehicles. Not reached: anything signed in (renaming, the pin card, hub
    names), the plan's tools and shared links, sorting and the boss board, and drawing
-   itself beyond what it leaves behind.
+   itself beyond what it leaves behind. Live players in 3D: which part a look hangs on
+   which joint and the skin a part's glTF carries, **dotnet test**; when a player is dressed
+   again, **node --test**; the standing pose, the export and the rig as drawn, **nothing**:
+   a running server (`./testserver.sh`, where nobody can log in) and a player's look fed to
+   the view by hand.
 6. **Fog reveal and save** (`UpdateFogTextureLoop`, `SaveFogTexture`): the map stops
    revealing, or forgets on a restart. **Nothing**.
 7. **Spoilers.** What stands in unwalked ground must not be reported. Portals, `/at` and
