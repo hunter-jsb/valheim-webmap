@@ -1165,7 +1165,7 @@ async function boot(){
 const v3dEl = document.getElementById("v3d"), v3d$ = id => document.getElementById(id);
 const PHONE3D = matchMedia("(max-width:760px), (pointer:coarse)").matches;
 const DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-let V3D = null, V3D_LOADING = null, IN3D = false, LAST_STATE = null, V3D_TIME = "server", V3D_SHADOWS = !PHONE3D;
+let V3D = null, V3D_LOADING = null, IN3D = false, LAST_STATE = null, V3D_TIME = "server", V3D_SHADOWS = !PHONE3D, RELEASE_T = 0;
 function loadView3D(){
   if(!V3D_LOADING) V3D_LOADING = import("./js/view3d.js").then(({View3D}) => {
     V3D = new View3D(v3d$("v3dCanvas"), {api: API, phone: PHONE3D, geom: {size: MapCore.geom.size, pixel: MapCore.geom.pixel}});
@@ -1198,6 +1198,9 @@ function leave3D(keepHash){
   if(!V3D) return;
   const f = V3D.focus(), q = toPx(f.x, f.z);
   V3D.stop();
+  // back in within two minutes is instant; a map left up longer holds no 3D world (the tour hops back in)
+  clearTimeout(RELEASE_T);
+  if(!TOUR.on) RELEASE_T = setTimeout(() => { if(!IN3D && !TOUR.on) V3D.release(); }, 120000);
   V.centre(q.px, q.py);
   if(keepHash !== true) history.replaceState(null, "", location.pathname + location.search + `#at=${Math.round(f.x)},${Math.round(f.z)},${V.scale.toFixed(2)}`);
 }

@@ -677,7 +677,8 @@ if (uFogOn > 0.5) {
       const key = lookKey(p.look);
       if (key !== e.key) { e.key = key; this.dress(e, p.look, key); }
     }
-    for (const [id, e] of this.players) if (!seen.has(id)) { this.playerGroup.remove(e.group); this.players.delete(id); }
+    // the name tag is the player's own; the body's parts are shared and stay in the builder
+    for (const [id, e] of this.players) if (!seen.has(id)) { this.playerGroup.remove(e.group); this.players.delete(id); e.label.material.map.dispose(); e.label.material.dispose(); }
   }
 
   // A player's body: their rig once its parts are in the library, a plain figure until then.
@@ -920,6 +921,20 @@ if (uFogOn > 0.5) {
     this.running = false;
     this.keys.clear();
     if (this.frame) { cancelAnimationFrame(this.frame); this.frame = 0; }
+  }
+
+  // A map left up a while lets the 3D world go -- ground, objects and every model, a few
+  // thousand GPU buffers after a tour -- and the next step in fetches what it needs again.
+  release() {
+    if (this.running) return;
+    this.jobs = [];
+    for (const k of [...this.chunks.keys()]) this.dropChunk(k);
+    for (const k of [...this.objChunks.keys()]) this.dropObjects(k);
+    this.objData.clear();
+    const free = (m) => { for (const t of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'alphaMap']) if (m[t]) m[t].dispose(); m.dispose(); };
+    for (const p of this.models.values()) p.then((parts) => { for (const pc of parts || []) { pc.geometry.dispose(); [].concat(pc.material).forEach(free); } });
+    this.models.clear();
+    this.renderer.renderLists.dispose();
   }
 
   resize() {
