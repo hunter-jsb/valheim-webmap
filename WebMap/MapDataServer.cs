@@ -75,7 +75,8 @@ namespace WebMap
             {"css", "text/css"},
             {"png", "image/png"},
             {"jpg", "image/jpeg"},
-            {"webp", "image/webp"}
+            {"webp", "image/webp"},
+            {"woff2", "font/woff2"}          // web/fonts, the brand's face
         };
 
         private readonly System.Threading.Timer broadcastTimer;
