@@ -86,9 +86,14 @@ export class View3D {
 
     // where you stand and where you look: heading in degrees clockwise from north, pitch up
     this.me = { x: 0, z: 0, y: water + EYE, heading: 0, pitch: 0 };
+    this.eye = EYE;               // the eye over the ground: a Viking's, or higher on the tour's flights
     this.mode = 'street';
     this.spin = 0;                // degrees a second the overview turns on its own (the tour)
     this.orbitDist = 140;         // metres the overview stands off the circled point
+    this.orbitPitch = 45;         // degrees it looks down at it
+    this.lift = 0;                // metres the circled point rides above the ground (E and Q, or the tour)
+    this.moves = [];              // the tour's timed moves, run by the frame loop
+    this.ahead = [];              // the tour's places to come, loaded while the current beat plays
     this.orbit = new MapControls(this.camera, canvas);
     this.orbit.enabled = false;
     this.orbit.enableDamping = true;
@@ -471,7 +476,11 @@ if (uFogOn > 0.5) {
     }
     if (this.objChunks.get(key) !== entry) return;
     if (!data.objs) { entry.loading = false; entry.missing = true; this.disposeObjects(entry, true); return; }
-    const objs = data.objs;
+    // the fetch's turn in the queue ends with its bytes; the models load and the meshes build behind it
+    this.buildObjects(key, entry, data.objs, tier);
+  }
+
+  async buildObjects(key, entry, objs, tier) {
     entry.count = objs.length;
     const byPrefab = new Map();
     for (const o of objs) {
@@ -733,14 +742,155 @@ if (uFogOn > 0.5) {
   // The overview: from behind and above where you stood, looking at it.
   aimOrbit() {
     const y = this.standAt(this.me.x, this.me.z) ?? this.waterLevel, h = this.me.heading * Math.PI / 180, d = this.orbitDist || 140;
+    const p = this.orbitPitch * Math.PI / 180, across = d * Math.cos(p);
     this.orbit.target.set(this.me.x, y, -this.me.z);
-    this.camera.position.set(this.me.x - Math.sin(h) * d * 0.7, y + d * 0.7, -this.me.z + Math.cos(h) * d * 0.7);
-    this.lift = 0;                   // metres the circled point rides above the ground (E and Q)
+    this.camera.position.set(this.me.x - Math.sin(h) * across, y + d * Math.sin(p), -this.me.z + Math.cos(h) * across);
+    this.lift = 0;
     this.orbit.update();
   }
 
   setSpin(degPerSec) { this.spin = degPerSec || 0; }
   setOrbitDist(d) { this.orbitDist = d; if (this.mode === 'orbit') { this.aimOrbit(); this.applyFog(); this.update(); } }
+
+  // ---------------------------------------------------------------- the tour's camera
+  // The cinematic's hand on the view, never a person's: an orbit at a pitch over a lifted point,
+  // a dolly, a crane, a look around, a walk or a flight along a line. Moves run in the frame
+  // loop; each resolves when it is done or stilled.
+  setOrbit({ dist = this.orbitDist, pitch = this.orbitPitch, lift = this.lift } = {}) {
+    this.orbitDist = dist; this.orbitPitch = pitch; this.lift = lift;
+    if (this.mode === 'orbit') { this.placeOrbit(); this.applyFog(); this.scheduleUpdate(); }
+  }
+  // the camera about the circled point at the orbit's distance and pitch, from the side it is on
+  placeOrbit() {
+    const t = this.orbit.target, c = this.camera.position, az = Math.atan2(c.x - t.x, c.z - t.z);
+    const p = this.orbitPitch * Math.PI / 180, d = this.orbitDist;
+    c.set(t.x + Math.sin(az) * Math.cos(p) * d, t.y + Math.sin(p) * d, t.z + Math.cos(az) * Math.cos(p) * d);
+  }
+  move(ms, step, ease = (t) => t * t * (3 - 2 * t)) {
+    return new Promise((done) => this.moves.push({ t0: performance.now(), ms: Math.max(1, ms), step, ease, done }));
+  }
+  runMoves(now, dt) {
+    for (const m of this.moves.slice()) {
+      const t = Math.min(1, (now - m.t0) / m.ms);
+      m.step(m.ease(t), dt);
+      if (t >= 1) { this.moves.splice(this.moves.indexOf(m), 1); m.done(); }
+    }
+  }
+  // the overview's distance from a to b
+  dolly(a, b, ms) { return this.move(ms, (e) => { this.orbitDist = a + (b - a) * e; this.placeOrbit(); this.scheduleUpdate(); }); }
+  // the camera's height over the circled point from a to b, its ground distance kept
+  crane(a, b, ms) {
+    const t = this.orbit.target, c = this.camera.position, across = Math.max(1, Math.hypot(c.x - t.x, c.z - t.z));
+    return this.move(ms, (e) => {
+      const h = a + (b - a) * e;
+      this.orbitDist = Math.hypot(across, h); this.orbitPitch = Math.atan2(h, across) * 180 / Math.PI;
+      this.placeOrbit(); this.scheduleUpdate();
+    });
+  }
+  // at rest, the heading swept from a to b degrees
+  pan(a, b, ms) { return this.move(ms, (e) => { this.me.heading = ((a + (b - a) * e) % 360 + 360) % 360; }); }
+  // Stand at (x, z) with the eye `eye` metres over the ground, pitched; a cut, so no easing up to it.
+  stand(x, z, heading, { eye = EYE, pitch = 0 } = {}) {
+    this.eye = eye;
+    const g = this.standAt(x, z);
+    if (g !== null) this.me.y = g + eye;
+    this.goTo(x, z, heading);
+    this.me.pitch = pitch;
+  }
+  // Along a line of world points [[x, z], ...] at speed metres a second, the eye following the
+  // ground below, facing ahead or toward look ({x, z}).
+  walk(points, speed, { eye = this.eye, look = null, pitch = this.me.pitch } = {}) {
+    const len = [0];
+    for (let i = 1; i < points.length; i++) len.push(len[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+    const L = len[len.length - 1];
+    this.eye = eye; this.me.pitch = pitch; this.glide = null;
+    let i = 1;
+    return this.move(L / Math.max(0.5, speed) * 1000, (e, dt) => {
+      const s = e * L;
+      while (i < len.length - 1 && len[i] < s) i++;
+      const a = points[i - 1], b = points[i], u = (s - len[i - 1]) / Math.max(1e-6, len[i] - len[i - 1]);
+      this.me.x = a[0] + (b[0] - a[0]) * u; this.me.z = a[1] + (b[1] - a[1]) * u;
+      const want = (look ? Math.atan2(look.x - this.me.x, look.z - this.me.z) : Math.atan2(b[0] - a[0], b[1] - a[1])) * 180 / Math.PI;
+      const turn = ((want - this.me.heading) % 360 + 540) % 360 - 180;
+      this.me.heading = (this.me.heading + turn * Math.min(1, dt * 1.5) + 360) % 360;
+      this.scheduleUpdate();
+    }, (t) => t);
+  }
+  // every move stopped and the camera as a hand finds it: a Viking's eye, the overview's pitch
+  still() {
+    for (const m of this.moves.splice(0)) m.done();
+    this.spin = 0; this.eye = EYE; this.me.pitch = 0; this.orbitPitch = 45; this.lift = 0;
+  }
+
+  // ---------------------------------------------------------------- the tour's places to come
+  // Each spec is a place the tour cuts to next -- {x, z, dist, pitch} for an overview, street and
+  // eye for a stand, path for a walk or a flight -- and wants what that view will: its near chunks
+  // built, models and all, and the rings its distance reaches. While the map is up only these are
+  // held, so the world the tour has left goes; an empty list lets them go too, fetches under way
+  // landing nowhere.
+  prefetch(specs) {
+    this.ahead = (specs || []).filter(Boolean);
+    if (!this.ahead.length && !this.running) {
+      this.jobs = [];
+      for (const [k, c] of [...this.chunks]) if (c.loading && !c.mesh) this.chunks.delete(k);
+      for (const [k, o] of [...this.objChunks]) if (o.loading) this.dropObjects(k);
+      return;
+    }
+    this.update();
+  }
+  // Is a spec's view built: every near chunk's ground and objects in (or known unwalked), or from
+  // far up most of the ground its nearer ring wants.
+  ready(spec) {
+    if (!spec || !this.walked || !this.prefabs.size) return false;
+    const g = new Map(), o = new Map();
+    this.specRings(spec, g, o, 0);
+    const near = [...o.values()].filter((w) => w.tier === 'near');
+    if (near.length) {
+      for (const w of near) {
+        const k = w.cx + ',' + w.cz, c = this.chunks.get(k), e = this.objChunks.get(k);
+        if (!c || !(c.mesh || c.missing)) return false;
+        if (!c.missing && (!e || e.loading || !(e.missing || e.count !== undefined))) return false;
+      }
+      return true;
+    }
+    const mid = [...g.values()].filter((w) => w.pri < 3e5);
+    const got = mid.filter((w) => { const c = this.chunks.get(w.cx + ',' + w.cz); return c && (c.mesh || c.missing); }).length;
+    return mid.length > 0 && got >= mid.length * 0.85;
+  }
+  // How far the eye sees from (x, z) along a heading before the ground or a thing is in the way:
+  // a stand in the tour is chosen to see out, not into a rock.
+  clearance(x, z, heading, eye = EYE, far = 40, ground = true) {
+    const g = this.standAt(x, z);
+    if (g === null) return 0;
+    const h = heading * Math.PI / 180, cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), targets = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const k = (cx + dx) + ',' + (cz + dz), c = this.chunks.get(k), o = this.objChunks.get(k);
+      if (ground && c && c.mesh) targets.push(c.mesh);
+      if (o && o.group) targets.push(o.group);
+    }
+    this.raycaster.set(_v2.set(x, g + eye, -z), _ahead.set(Math.sin(h), 0, -Math.cos(h)));
+    this.raycaster.far = far;
+    const hit = this.raycaster.intersectObjects(targets, true)[0];
+    return hit ? hit.distance : far;
+  }
+  // metres between the near ring's samples: a metre underfoot, two on a phone or from a flight's height
+  nearStep(eye) { return this.phone || eye > 10 ? 2 : 1; }
+  // a spec as a view: a path is its stretch of near ring, point by point, the start first
+  specRings(s, g, o, base) {
+    if (s.path) {
+      let along = 0;
+      for (let i = 0; i < s.path.length; i++) {
+        if (i) along += Math.hypot(s.path[i][0] - s.path[i - 1][0], s.path[i][1] - s.path[i - 1][1]);
+        const [x, z] = s.path[i];
+        this.rings({ x, z, camX: x, camZ: z, up: 0, r: { d: 0, mid: 0, far: 0 }, near: true, step: this.nearStep(s.eye || EYE) }, g, o, base + along);
+      }
+      return;
+    }
+    const d = s.dist || 0, street = !!s.street || this.stepless;
+    const r = street ? { d, mid: 0, far: 0 } : { d, mid: Math.min(3000, Math.max(500, d * 1.1)), far: Math.min(16000, Math.max(1500, d * 5)) };
+    this.rings({ x: s.x, z: s.z, camX: s.x, camZ: s.z, up: s.street ? 0 : d * Math.sin((s.pitch ?? 45) * Math.PI / 180), r,
+                 near: !!s.street || d < NEAR_CAMERA || this.stepless, step: this.nearStep(s.street ? s.eye || EYE : EYE) }, g, o, base);
+  }
 
   // The haze closes in at the edge of what is loaded, kilometres out when the overview is
   // pulled back; the sea is one plane, grown to the horizon.
@@ -879,11 +1029,16 @@ if (uFogOn > 0.5) {
       if (t >= 1) { this.glide = null; this.settle(); }
       this.scheduleUpdate();
     }
-    const ground = this.standAt(this.me.x, this.me.z);
+    let ground = this.standAt(this.me.x, this.me.z);
+    // a flight clears the ground it is about to cross, not only what is under it
+    if (ground !== null && this.eye > 5) {
+      const h = this.me.heading * Math.PI / 180;
+      for (const d of [25, 50, 80]) { const g = this.standAt(this.me.x + Math.sin(h) * d, this.me.z + Math.cos(h) * d); if (g !== null && g > ground) ground = g; }
+    }
     if (ground !== null) {
-      const want = ground + EYE;
-      // steps and slopes ease rather than jolt; a fresh arrival snaps
-      this.me.y = Math.abs(want - this.me.y) > 30 ? want : this.me.y + (want - this.me.y) * Math.min(1, dt * 12);
+      const want = ground + this.eye;
+      // steps and slopes ease rather than jolt, a flight rides the ground's shape more softly; a fresh arrival snaps
+      this.me.y = Math.abs(want - this.me.y) > 30 ? want : this.me.y + (want - this.me.y) * Math.min(1, dt * (this.eye > 5 ? 1.5 : 12));
     }
     const h = this.me.heading * Math.PI / 180, p = this.me.pitch * Math.PI / 180;
     this.camera.position.set(this.me.x, this.me.y, -this.me.z);
@@ -958,6 +1113,7 @@ if (uFogOn > 0.5) {
     this.frame = requestAnimationFrame(() => this.loop());
     const now = performance.now(), dt = Math.min(0.1, (now - (this.lastFrame || now)) / 1000);
     this.lastFrame = now;
+    if (this.moves.length) this.runMoves(now, dt);
     if (this.mode === 'street') { this.handleKeys(dt); this.placeCamera(dt); }
     else {
       this.handleKeys(dt);
@@ -973,6 +1129,9 @@ if (uFogOn > 0.5) {
         const want = Math.max(h, this.waterLevel) + (this.lift || 0);
         if (Math.abs(want - t.y) > 0.05) { const d = (want - t.y) * Math.min(1, dt * 10); t.y += d; this.camera.position.y += d; }
       }
+      // a low orbit rides over a rise between it and the point, never through it
+      const c = this.camera.position, gc = this.heightAt(c.x, -c.z);
+      if (gc !== null && c.y < Math.max(gc, this.waterLevel) + 3) { c.y = Math.max(gc, this.waterLevel) + 3; this.camera.lookAt(t); }
     }
     for (const p of this.players.values()) p.label.quaternion.copy(this.camera.quaternion);
     // the shadow box stands a little ahead of you, where the eye is
@@ -1006,27 +1165,19 @@ if (uFogOn > 0.5) {
   // no ring wants any more is dropped, so a pull-out and a fly-over stay within budget
   // (MAX_GROUND chunks of ground, MAX_OBJECTS of objects). Beyond the near ring only walked
   // chunks are asked for (the explored mask says which); the server refuses the rest anyway.
+  // The tour's places to come are wanted after the view's own, and alone while it is stopped.
   update() {
-    if (!this.running) return;
-    const f = this.focus(), fx = Math.floor(f.x / CHUNK), fz = Math.floor(f.z / CHUNK), r = this.reach(), now = Date.now();
-    const wantG = [], wantO = [];
-    // the camera over the ground: a chunk's distance is from there, height and all
-    const cam = this.camera.position, camX = this.mode === 'orbit' ? cam.x : f.x, camZ = this.mode === 'orbit' ? -cam.z : f.z;
-    const up = this.mode === 'orbit' ? cam.y - this.orbit.target.y : 0, nearOn = this.mode !== 'orbit' || r.d < NEAR_CAMERA || this.stepless;
-    const span = Math.max(1, Math.ceil(r.far / CHUNK) + 1), cx0 = Math.floor(camX / CHUNK), cz0 = Math.floor(camZ / CHUNK);
-    for (let cz = Math.min(fz, cz0) - span; cz <= Math.max(fz, cz0) + span; cz++)
-      for (let cx = Math.min(fx, cx0) - span; cx <= Math.max(fx, cx0) + span; cx++) {
-        const d = Math.hypot((cx + 0.5) * CHUNK - camX, (cz + 0.5) * CHUNK - camZ, up);
-        if (nearOn && Math.abs(cx - fx) <= 1 && Math.abs(cz - fz) <= 1) {
-          wantG.push({ cx, cz, step: this.phone ? 2 : 1, pri: d }); wantO.push({ cx, cz, tier: 'near', pri: d + 1 }); continue;
-        }
-        if (!this.isWalked(cx, cz)) continue;
-        if (d <= r.mid) { wantG.push({ cx, cz, step: d < 700 ? 2 : d < 1500 ? 4 : 8, pri: 1e5 + d }); wantO.push({ cx, cz, tier: 'mid', pri: 2e5 + d }); }
-        else if (d <= r.far) wantG.push({ cx, cz, step: d < 3000 ? 8 : 16, pri: 3e5 + d });
-      }
-    wantG.sort((a, b) => a.pri - b.pri); wantO.sort((a, b) => a.pri - b.pri);
-    const g = new Map(wantG.slice(0, MAX_GROUND).map((w) => [w.cx + ',' + w.cz, w]));
-    const o = new Map(wantO.slice(0, MAX_OBJECTS).map((w) => [w.cx + ',' + w.cz, w]));
+    if (!this.running && !this.ahead.length) return;
+    const now = Date.now(), wg = new Map(), wo = new Map();
+    if (this.running) {
+      // the camera over the ground: a chunk's distance is from there, height and all
+      const f = this.focus(), r = this.reach(), cam = this.camera.position, orbit = this.mode === 'orbit';
+      this.rings({ x: f.x, z: f.z, camX: orbit ? cam.x : f.x, camZ: orbit ? -cam.z : f.z, up: orbit ? cam.y - this.orbit.target.y : 0, r,
+                   near: !orbit || r.d < NEAR_CAMERA || this.stepless, step: this.nearStep(orbit ? EYE : this.eye) }, wg, wo, 0);
+    }
+    this.ahead.forEach((s, i) => this.specRings(s, wg, wo, 5e4 + i * 1e4));
+    const g = new Map([...wg.values()].sort((a, b) => a.pri - b.pri).slice(0, MAX_GROUND).map((w) => [w.cx + ',' + w.cz, w]));
+    const o = new Map([...wo.values()].sort((a, b) => a.pri - b.pri).slice(0, MAX_OBJECTS).map((w) => [w.cx + ',' + w.cz, w]));
     const jobs = [];
     for (const [key, w] of g) {
       const c = this.chunks.get(key);
@@ -1046,6 +1197,31 @@ if (uFogOn > 0.5) {
     this.pump();
     this.applyFog();
     this.status();
+  }
+
+  // One view's rings into wg and wo: the near ring around its focus while its camera is close,
+  // then the walked chunks out to its mid and far reach, measured from the camera. A chunk two
+  // views want is kept at the finer detail and the sooner turn; base puts one view after another.
+  rings(v, wg, wo, base) {
+    const add = (m, w) => {
+      const k = w.cx + ',' + w.cz, e = m.get(k);
+      if (!e) return m.set(k, w);
+      e.pri = Math.min(e.pri, w.pri);
+      if (w.step < e.step) e.step = w.step;
+      if (w.tier === 'near') e.tier = 'near';
+    };
+    const fx = Math.floor(v.x / CHUNK), fz = Math.floor(v.z / CHUNK), r = v.r;
+    const span = Math.max(1, Math.ceil(r.far / CHUNK) + 1), cx0 = Math.floor(v.camX / CHUNK), cz0 = Math.floor(v.camZ / CHUNK);
+    for (let cz = Math.min(fz, cz0) - span; cz <= Math.max(fz, cz0) + span; cz++)
+      for (let cx = Math.min(fx, cx0) - span; cx <= Math.max(fx, cx0) + span; cx++) {
+        const d = Math.hypot((cx + 0.5) * CHUNK - v.camX, (cz + 0.5) * CHUNK - v.camZ, v.up);
+        if (v.near && Math.abs(cx - fx) <= 1 && Math.abs(cz - fz) <= 1) {
+          add(wg, { cx, cz, step: v.step, pri: base + d }); add(wo, { cx, cz, tier: 'near', pri: base + d + 1 }); continue;
+        }
+        if (!this.isWalked(cx, cz)) continue;
+        if (d <= r.mid) { add(wg, { cx, cz, step: d < 700 ? 2 : d < 1500 ? 4 : 8, pri: base + 1e5 + d }); add(wo, { cx, cz, tier: 'mid', pri: base + 2e5 + d }); }
+        else if (d <= r.far) add(wg, { cx, cz, step: d < 3000 ? 8 : 16, pri: base + 3e5 + d });
+      }
   }
 
   status() {
