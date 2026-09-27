@@ -26,6 +26,23 @@
   the locations at `/locations`, in walked ground only and built once a sweep, and `/pieces`
   rows carry a sixth field, `by`, the builder's index into a new `players` list (`-1` for one
   never seen online), the fifth now `-1` on a piece that does not burn.
+* The 3D view's light and air. Everything it draws is hazed toward the sky's own colour
+  with distance, an exponential height fog summed along each sight line (1/3,800 a metre
+  at the sea, thinning by e every 1,200 m up): thickest along level lines low down, thin
+  looking down from high, so from 2 km up a continent fades into the distance while the
+  ground under you stays clear; contrast and colour fall with it, the mist over unwalked
+  sea included, and the fog at the edge of what is loaded takes the sky's colour too. The
+  sun carries the day: it crosses the north 45 degrees up at noon (65 before), at 3.4
+  (2.6) over a cooler sky fill, and the environment the ground is lit by now sees dim ground
+  below the horizon rather than more sky, so a slope turned from the sun shades; dawn and
+  dusk are low and warm. The overview stops down as it climbs, to 0.57 of the exposure
+  under a high sun and 0.78 at dusk, so the land sits in the mid-tones below a brighter
+  haze; a standing view keeps its exposure. A chunk's edge normals span the coarsest step
+  meeting there and are taken again as its neighbours load, so no seam or ring boundary
+  shows in the light. `setClock(frac)` eases to a time of day and holds it over the live
+  clock for a beat of the tour; `setClock(null)` gives the clock back. On the far view in
+  a headless Chrome: the same 4,937 draw calls, and no slower, 34 ms a frame against 37.
+
 * Kitchen deeds: cooking, brewing, honey and smelting, per player. The server never sees a
   bag, but it sees the stations: the sweep hands every cooking station, oven, fermenter,
   hive and smelter (kiln, windmill, spinning wheel and refinery too) to a poll that reads
