@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+<title>Valheim WebMap</title>
+<meta name="description" content="The map mod's settings, for the server's admins.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪓</text></svg>">
+<link rel="stylesheet" href="site.css">
+<script src="site-config.js"></script>
+<script src="map-core.js"></script>
+<style>
+  body{min-height:100%}
+  .wrap{max-width:820px;margin:0 auto;padding:1.4rem .9rem 3rem}
+  .rows{display:grid;gap:.6rem;margin-top:1rem}
+  /* one setting: its name and what it does, the value, and who set it */
+  .set{display:grid;grid-template-columns:minmax(0,1fr) 12rem;gap:.5rem 1rem;align-items:start}
+  .set .k{font-family:var(--mono);font-size:.82rem;color:var(--bright);font-weight:600}
+  .set .k .tag{font-family:var(--font);font-weight:500;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;margin-left:.5rem;color:var(--muted)}
+  .set .k .tag.restart{color:var(--gold)}
+  .set .d{font-size:.76rem;color:var(--muted);margin-top:.2rem;line-height:1.45}
+  .set .who{font-size:.68rem;color:var(--faint);margin-top:.25rem}
+  .set .who b{color:var(--muted);font-weight:500}
+  .set form{display:grid;gap:.35rem}
+  .set .field{font-family:var(--mono);font-size:.82rem}
+  .set .btnrow .btn{height:30px;min-width:0;padding:0 .55rem;font-size:.74rem}
+  .set .note{margin-top:0}
+  .banner{margin-top:.8rem}
+  @media (max-width:560px){ .set{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<nav class="nav" data-page="settings"></nav>
+<script>MapCore.nav();</script>
+<main class="wrap">
+  <h1 class="title">Settings</h1>
+  <p class="sub" id="sub">The map mod's settings, kept by the server. Changes apply at once unless marked, and every change is posted to the Discord.</p>
+  <p class="note bad" id="note"></p>
+  <div class="card banner" id="restart" hidden><b>A restart is due.</b> <span class="note">A setting marked <em>restart</em> has changed; it takes effect when the server next restarts.</span></div>
+  <div class="rows" id="rows"></div>
+  <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
+</main>
+
+<script>
+const API = MapCore.cfg.api, esc = MapCore.esc;
+MapCore.fetchConfig(API).catch(() => {});
+let SETTINGS = null;
+
+function ago(t){ const d = Math.max(0, Math.floor(Date.now()/1000) - t); return d < 90 ? "just now" : d < 5400 ? Math.round(d/60) + " min ago" : d < 172800 ? Math.round(d/3600) + " h ago" : Math.round(d/86400) + " d ago"; }
+
+function row(s){
+  const input = s.kind === "bool"
+    ? `<select class="field" name="value"><option value="true"${s.value === "true" ? " selected" : ""}>true</option><option value="false"${s.value === "false" ? " selected" : ""}>false</option></select>`
+    : `<input class="field" name="value" value="${esc(s.secret ? "" : s.value)}" placeholder="${esc(s.secret ? (s.set ? "set · paste a new one to replace it" : "not set") : s.default)}" autocomplete="off"${s.secret ? ' type="password"' : ""}>`;
+  return `<div class="card set" data-key="${esc(s.key)}">
+    <div><div class="k">${esc(s.key)}<span class="tag${s.live ? "" : " restart"}">${s.live ? "live" : "restart"}</span></div>
+      <div class="d">${esc(s.desc)}</div>
+      <div class="who">${s.given ? `set by <b>${esc(s.by || "someone")}</b> ${s.t ? ago(s.t) : ""} · the config says ${esc(s.secret ? (s.default ? "set" : "nothing") : s.default || "nothing")}` : "the config's own value"}</div></div>
+    <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">Save</button>${s.given ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
+  </div>`;
+}
+function render(){
+  document.getElementById("rows").innerHTML = SETTINGS.settings.map(row).join("");
+  document.getElementById("restart").hidden = !SETTINGS.restart;
+}
+async function load(){
+  const me = await MapCore.whoami();
+  const note = document.getElementById("note"), rows = document.getElementById("rows");
+  if(!me){ note.textContent = "Sign in with Discord to see the settings."; rows.innerHTML = ""; return; }
+  if(!me.admin){ note.textContent = "The settings are for the server's admins."; rows.innerHTML = ""; return; }
+  try{
+    const r = await fetch(API + "/settings", {headers: MapCore.authHeaders(), cache: "no-store"});
+    if(!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
+    SETTINGS = await r.json(); note.textContent = ""; render();
+    document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
+  }catch(e){ note.textContent = e.message === "HTTP 404" ? "This server does not take settings from the site yet (it needs the mod build that does)." : e.message; }
+}
+document.getElementById("rows").addEventListener("submit", async e => {
+  e.preventDefault();
+  const card = e.target.closest(".set"), key = card.dataset.key, n = card.querySelector("[data-note]");
+  n.className = "note"; n.textContent = "saving…";
+  try{
+    const r = await MapCore.post(API, "/settings", {key, value: e.target.value.value});
+    SETTINGS = r.settings; render();
+    if(r.restart) document.getElementById("restart").hidden = false;
+  }catch(err){ n.className = "note bad"; n.textContent = err.message || "could not save"; }
+});
+document.getElementById("rows").addEventListener("click", async e => {
+  const b = e.target.closest("[data-reset]"); if(!b) return;
+  const card = b.closest(".set"), n = card.querySelector("[data-note]");
+  n.className = "note"; n.textContent = "resetting…";
+  try{ const r = await MapCore.post(API, "/settings", {key: card.dataset.key, value: ""}); SETTINGS = r.settings; render(); }
+  catch(err){ n.className = "note bad"; n.textContent = err.message || "could not reset"; }
+});
+load();
+</script>
+</body>
+</html>

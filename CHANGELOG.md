@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+* Admins, and settings from the site. A signed-in member who owns the Discord guild, holds
+  a role with its administrator permission, or holds the role the deployment names is an
+  admin: the bar shows a gear, and `settings.html` lists the mod's settings with what each
+  does and whether it applies live or at the next restart. The mod keeps what admins set in
+  `settings.tsv` beside the map data and lays it over the BepInEx config, which the host
+  rewrites on restart. `GET`/`POST /settings` behind the shared token and an `X-Admin` the
+  Worker sets after checking the member's roles again.
+* Every write from the site -- a name, a pin, a setting -- answers with the line it logged,
+  and the Worker posts it to the guild's channel through the bot.
+
 ## 2.13.0
 
 * The land has names. Once per world the mod reads the generator's own geography --

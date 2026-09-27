@@ -793,7 +793,9 @@ function renderWho(){
   if(!me){ el.innerHTML = '<a href="#" class="in">Sign in</a>'; el.querySelector(".in").onclick = e => { e.preventDefault(); signIn(); }; return; }
   const av = me.avatar ? `<img class="av" alt="" src="https://cdn.discordapp.com/avatars/${encodeURIComponent(me.id)}/${encodeURIComponent(me.avatar)}.png?size=64">`
                        : `<span class="av">${esc((me.name || "?").slice(0, 1))}</span>`;
-  el.innerHTML = av + `<span class="nm">${esc(me.name || "")}</span><a href="#" class="out" title="Sign out">&times;</a>`;
+  el.innerHTML = av + `<span class="nm">${esc(me.name || "")}</span>`
+    + (me.admin ? `<a href="settings.html" class="gear" title="Settings (admin)">&#9881;</a>` : "")
+    + `<a href="#" class="out" title="Sign out">&times;</a>`;
   el.querySelector(".out").onclick = e => { e.preventDefault(); signOut(); };
 }
 
