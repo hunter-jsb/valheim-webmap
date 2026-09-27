@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+* The tour grows to about twenty stops a cycle, drawn through every kind of place before any
+  repeats, and remembers what the last cycle showed so the next differs: every boat and cart,
+  the loneliest gate, the newest death and the oldest grave, each builder's own build ("Rurik's
+  stronghold", "Withers' outpost"), the busiest kitchen, a ridge flown along its peak line, a
+  bay's shore flown from the water, a dock or a beach looking out to sea, where people go under
+  the trails, and the world's own locations -- boss altars, burial chambers, troll caves, sunken
+  crypts, fuling villages, dvergr outposts, infested mines, tar pits, ruins, wrecks, runestones,
+  stone circles, Hildir's hideouts -- circled as tightly as their model allows. In 3D a stop is
+  seen by a move of its kind: a low sweep, a crane from a man's height to an overview, a dolly in
+  from far off, a land at a slant of its own, a flight across a settlement; or at eye height, in
+  a base's yard with a slow pan, walking through the settlement or along the shore, out to sea
+  from a dock, down from a summit, round the gates of a hub, a stand chosen to see out rather
+  than into a wall or a rock. The map lands at a zoom of the stop's kind, drifts across the
+  biggest builds at plan zoom and sometimes pulls slowly back. A caption carries a strip of
+  figures matched to the place, and every third or fourth stop is one of the world's figures
+  over a far drift of the map. The 3D view builds the next place while the current one plays --
+  its chunks, objects, models and far rings -- and the cut waits for its near ring, holding the
+  map a few seconds and leaving a place still loading on the map rather than cutting into a
+  half-built world; only the places shown and coming next are held, and a chunk's fetch no
+  longer holds its turn in the queue while its models load. View3D gained `setOrbit`, `dolly`,
+  `crane`, `pan`, `stand`, `walk`, `still`, `prefetch`, `ready` and `clearance`. The mod tells
+  the locations at `/locations`, in walked ground only and built once a sweep, and `/pieces`
+  rows carry a sixth field, `by`, the builder's index into a new `players` list (`-1` for one
+  never seen online), the fifth now `-1` on a piece that does not burn.
 * The tour shows who a stop is about. At someone online, the latest death or a grave,
   their card stands at the side of the stage, over the map and the 3D view alike: the
   name, the class with its reason under the pointer, "online now" and where or when they

@@ -192,7 +192,7 @@ function corners(w, d, yaw){
 function parsePieces(json){
   const per = 1/geom.pixel, half = geom.size/2, prefabs = (json && json.prefabs) || [];
   const seen = new Set(), out = [];
-  for(const [k, x, z, yaw, lit] of (json && json.pieces) || []){
+  for(const [k, x, z, yaw, lit, by] of (json && json.pieces) || []){
     const p = prefabs[k]; if(!p) continue;
     const kind = kindOf(p.n);
     const key = kind + ":" + x.toFixed(1) + ":" + z.toFixed(1) + ":" + yaw;
@@ -201,7 +201,8 @@ function parsePieces(json){
                px: x*per + half, py: half - z*per,
                w: Math.max(p.w*per, 0.08), d: Math.max(p.d*per, 0.08),
                c: "#" + (kind === "roof" && !p.n.includes("_top") ? shade(p.c, yaw) : p.c)};
-    if(FIRE.test(p.n.toLowerCase())) q.fire = lit === undefined ? 1 : lit;   // an older server says nothing: lit
+    if(FIRE.test(p.n.toLowerCase())) q.fire = lit === undefined || lit < 0 ? 1 : lit;   // unknown, or an older server saying nothing: lit
+    if(by >= 0) q.by = by;           // who built it, an index into the document's players
     q.o = corners(q.w, q.d, yaw);
     out.push(q);
   }

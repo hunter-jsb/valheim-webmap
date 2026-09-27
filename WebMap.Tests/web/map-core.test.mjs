@@ -55,12 +55,14 @@ test("every storey of a build lands on one footprint", () => {
   assert.equal(out.length, 2);                         // the same spot and turn is one; a turn is another
 });
 
-test("a fire carries its fuel, and one from an older server is lit", () => {
-  const out = MapCore.parsePieces({prefabs, pieces: [[3, 0, 0, 0, 0], [4, 10, 0, 0], [5, 20, 0, 0]]});
+test("a fire carries its fuel, one whose fuel is unknown or from an older server is lit, and each its builder", () => {
+  const out = MapCore.parsePieces({prefabs, pieces: [[3, 0, 0, 0, 0, 1], [4, 10, 0, 0], [5, 20, 0, 0, -1, -1], [3, 30, 0, 0, -1, 2]]});
   const at = x => out.find(p => Math.abs(p.px - MapCore.toPx(x, 0).px) < 1e-6);
   assert.equal(at(0).fire, 0);
   assert.equal(at(10).fire, 1);
   assert.equal("fire" in at(20), false);
+  assert.equal(at(30).fire, 1);
+  assert.deepEqual([at(0).by, at(10).by, at(20).by, at(30).by], [1, undefined, undefined, 2]);
 });
 
 test("a piece turns as the game turns it: a positive yaw takes east round to south, clockwise on screen", () => {

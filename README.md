@@ -64,11 +64,37 @@ Players only appear once they set **visible to other players** on the in-game ma
 ### The cinematic
 
 The ▶ among the map's buttons, or a link ending in `#tour`, plays the world for a screen
-left open: its places one after another, flown to on the map with the layer that makes
-each worth seeing, then circled in 3D where the ground is walked. Any touch ends it.
-A stop about a player -- someone online, the latest death, a grave -- carries their card
-at the side, as their row on the players page reads them: the class, the pentagon, the
-four figures, and their Viking turning beside them (a phone keeps the figures alone).
+left open, about twenty places a cycle drawn through every kind before any repeats, the next
+cycle picking what this one did not: who is on, the portal hubs and the loneliest gate, the
+biggest builds and each builder's own ("Rurik's stronghold"), where people die, the newest
+death and the oldest grave, the traders, every boat and cart, the busiest kitchen, the lands,
+the tallest peak and a ridge flown along its peak line, the biggest lake, the longest river, a
+bay and its shore flown from the water, a dock or a beach looking out to sea, the pins and
+names players gave, the world's own locations (boss altars, burial chambers, troll caves,
+sunken crypts, fuling villages, dvergr outposts, infested mines, tar pits, ruins, wrecks,
+runestones, stone circles, Hildir's hideouts), and where people go, the trails over the whole
+walked world. Each is flown to on the map with the layer that makes it worth seeing, landed on
+at a zoom of its kind (a build at plan zoom, drifted across), then seen in 3D where the ground
+is walked by a move of its kind: circled at a pitch of its own, swept low, craned up from a
+man's height to an overview, dollied in from far off, a land from kilometres up at a slant, or
+flown across a settlement, along a ridge or a shore -- or stood in at eye height: in a base's
+yard turning slowly, walking through the settlement or along the water, looking out to sea
+from a dock, down from a summit, or round the gates of a hub, always where the eye sees out
+rather than into a wall. The caption names the place with a strip of figures matched to it --
+a hub's gates and its farthest pair, a build's pieces and its top builder's share, whose
+deaths at a bad spot, a land's area and walked share, a location's kind and biome, the meals
+at a kitchen -- and every third or fourth stop is one of the world's figures over a slow drift
+of the whole walked world. Now and then the map pulls slowly back instead of cutting away.
+Any touch ends it. A stop about a player -- someone online, the newest death, a grave --
+carries their card at the side, as their row on the players page reads them: the class, the
+pentagon, the four figures, and their Viking turning beside them (a phone keeps the figures
+alone).
+
+While one place plays, the 3D view builds the next -- its ground, objects and models, and the
+far rings its distance needs -- and the cut waits until the chunks around it are in, holding
+the map a few seconds longer if need be, and leaves a place still loading on the map rather
+than cut into a half-built world. Only the places being shown and coming next are held, so
+the world the tour has left goes.
 
 ### The 3D view
 
@@ -247,7 +273,8 @@ defaults are what runs):
 | `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs `X-Announce-Token` and `X-Admin: 1`, credits `X-User` |
 | `/discord/guilds` | the bot's guilds, `{"guilds":[{"id","name"}]}`, for the settings picker; same gate as `/settings` |
 | `/discord/channels` | `?guild=` a guild's text and announcement channels, `{"channels":[{"id","name"}]}`; same gate |
-| `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
+| `/pieces` | every placed piece as `[prefab, x, z, yaw, lit, by]` against a table of prefab footprint and colour and a `players` list: `lit` is a torch's, fire pit's or hearth's fuel, `1` while it burns, `0` once out, `-1` on a piece that does not burn or is not known; `by` who built it, an index into `players` by the name the stats know them by, `-1` for a builder never seen online (JSON, a few hundred KB for a busy world) |
+| `/locations` | the world's locations -- altars, crypts, caves, camps, ruins, wrecks, runestones and the rest, by the game's prefab name -- where the ground is walked: `{"locations":[{"kind","x","z"}],"count"}`, built once a sweep (JSON) |
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
