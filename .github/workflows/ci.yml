@@ -1,0 +1,33 @@
+# Every push and pull request: the mod builds, its logic passes dotnet test, and
+# the viewer's core passes node --test. The end-to-end checks want a live server
+# and a Chrome, so they stay a step run by hand (tools/check.mjs).
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: ./.github/actions/game-assemblies
+
+      - name: Build the mod
+        run: dotnet build WebMap/WebMap.csproj -c Release -v minimal
+
+      - name: dotnet test
+        run: dotnet test WebMap.Tests
+
+      - name: node --test
+        run: node --test
