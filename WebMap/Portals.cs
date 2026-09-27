@@ -23,7 +23,7 @@ namespace WebMap
 
         private static readonly Dictionary<int, bool> isPortal = new Dictionary<int, bool>();
         private static readonly List<Entry> found = new List<Entry>();
-        private static volatile string json = "{\"portals\":[],\"count\":0}";
+        private static volatile string json = "{\"portals\":[],\"count\":0";
         public static volatile float[] Positions = new float[0];   // x, z pairs of the portals in walked ground
 
         // Where each portal last led: a gate retagged and standing unlinked still
@@ -114,8 +114,8 @@ namespace WebMap
                     sb.Append(System.FormattableString.Invariant($",\"last\":{{\"x\":{l.x:0.#},\"z\":{l.z:0.#}}}"));
                 sb.Append('}');
             }
-            sb.Append("],\"count\":").Append(n).Append(",\"named\":").Append(Features.HubNamesJson()).Append("}");
-            json = sb.ToString();
+            sb.Append("],\"count\":").Append(n);
+            json = sb.ToString();       // closed at read time, once the hub names are added
             if (changed && !saving && dir != null)
             {
                 saving = true;
@@ -142,6 +142,7 @@ namespace WebMap
             Positions = pos.ToArray();
         }
 
-        public static string GetJson() => json;
+        // the hub names ride along as they are now, not as they were at the last sweep
+        public static string GetJson() => json + ",\"named\":" + Features.HubNamesJson() + "}";
     }
 }

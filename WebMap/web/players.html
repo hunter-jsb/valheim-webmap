@@ -190,9 +190,10 @@ function card(p){
 
 const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
 const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader"];
+const NOT_BOSS = new Set(["serpent"]);     // a sea serpent sets a key too, but it is prey
 function renderBosses(list){
   const el = document.getElementById("bosses");
-  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, ""));
+  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => !NOT_BOSS.has(k));
   const keys = BOSS_ORDER.concat(down.filter(k => !BOSS_ORDER.includes(k)));
   el.hidden = !list;
   el.innerHTML = `<span class="lb eyebrow">Bosses</span>` + keys.map(k => {
