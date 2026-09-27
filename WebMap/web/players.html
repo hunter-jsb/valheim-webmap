@@ -81,7 +81,30 @@
   .dhead .links{margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap}
   .dhead .links .btn{height:30px;padding:0 .6rem;font-size:.74rem}
   .top{display:grid;grid-template-columns:minmax(0,1fr) 232px;gap:.6rem 1.4rem;align-items:start;margin-top:1.1rem}
+  .side{display:grid;gap:.9rem;width:232px}
   .radar.big{width:232px;height:232px;display:block;overflow:visible}
+  /* the spotlight: one figure, a line of context, a small picture; it turns on its own */
+  .spot{padding:.6rem .75rem .65rem;cursor:pointer;user-select:none;min-height:9.2rem;display:flex;flex-direction:column}
+  .spot .eyebrow{display:flex;justify-content:space-between;gap:.5rem}
+  .spot .eyebrow .n{font-weight:400;letter-spacing:0;text-transform:none;color:var(--faint)}
+  .spot .in{flex:1 1 auto;transition:opacity .3s ease,transform .3s ease}
+  .spot .in.out{opacity:0;transform:translateY(5px)}
+  .spot .v{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.3rem;line-height:1.2;font-variant-numeric:tabular-nums}
+  .spot .v small{font-size:.76rem;font-weight:500;color:var(--muted)}
+  .spot .c{font-size:.74rem;color:var(--muted);margin-top:.2rem;line-height:1.35}
+  .spot svg{display:block;width:100%;height:34px;margin-top:.55rem;overflow:visible}
+  .spot .ax{stroke:var(--line);stroke-width:1}
+  .spot .sd{fill:var(--faint)}
+  .spot .sm{fill:var(--gold);stroke:var(--card);stroke-width:1.5}
+  .spot .rg{fill:none;stroke:var(--line);stroke-width:4}
+  .spot .rf{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round}
+  .spot .bb{fill:var(--well);stroke:var(--line);stroke-width:1}
+  .spot .bf{fill:var(--gold)}
+  .spot .t{font-size:9.5px;fill:var(--muted)}
+  .spot .t .tb{font-weight:600;fill:var(--ink-2)}
+  .spot .dots{display:flex;gap:4px;margin-top:.55rem}
+  .spot .dots i{width:5px;height:5px;border-radius:50%;background:var(--line)}
+  .spot .dots i.on{background:var(--gold)}
   .radar.big .fill{fill:var(--gold);fill-opacity:.2;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
   .radar.big .grid{fill:none;stroke:var(--line);stroke-width:1}
   .radar.big .spoke{stroke:var(--hair);stroke-width:1}
@@ -133,6 +156,8 @@
     .row .mini{gap:.3rem}
     .top{grid-template-columns:1fr;justify-items:center}
     .top .groups{width:100%}
+    .side{width:100%;max-width:320px}
+    .radar.big{width:232px;margin:0 auto}
     .figs{grid-template-columns:repeat(3,minmax(0,1fr))}
   }
   @keyframes slidein{from{opacity:0;transform:translateX(24px)}}
@@ -438,8 +463,8 @@ function renderDetail(){
     + group("Presence",
         fig(num(p.joins), "joins", nil(num(p.joins)))
         + fig(num(p.chat), "chat lines", nil(num(p.chat))))
-    + `</div>` + radar(p, 232, true) + `</div>` + biomeRows(p);
-  if(html !== DLAST){ body.innerHTML = html; DLAST = html; }
+    + `</div><div class="side">` + radar(p, 232, true) + `<div class="card spot" id="spot" title="Next"></div></div></div>` + biomeRows(p);
+  if(html !== DLAST){ body.innerHTML = html; DLAST = html; spotlight(p); }
   if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
 }
 // the ground under an online player, in the world's own names: "in Homeplains, Meadows"
@@ -452,8 +477,84 @@ async function whereIs(name, at){
   if(PICK === name) renderDetail();
 }
 
+// ---------- the spotlight ----------
+// One figure at a time, with where it sits among the roster and a small picture:
+// the roster as dots on a line with the player lit, a share of everything as a
+// ring, a health bar, the streak against the walk since. Six seconds each; a
+// hover holds it and a click moves on. Figures the player has nothing of are skipped.
+const ord = n => n + (["st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 3 : n % 10 - 1] || "th");
+function rankLine(p, get, top, bottom, desc = true){
+  const v = get(p), better = DATA.filter(q => desc ? get(q) > v : get(q) < v).length, of = DATA.length;
+  return better === 0 ? top : of > 1 && better === of - 1 ? bottom : `${ord(better + 1)} of ${of} on the roster`;
+}
+function strip(p, get){
+  const max = Math.max(1e-9, ...DATA.map(get)), x = v => (4 + 192*Math.sqrt(Math.min(1, v/max))).toFixed(1);
+  return `<svg viewBox="0 0 200 34"><line class="ax" x1="4" y1="17" x2="196" y2="17"/>`
+    + DATA.filter(q => q !== p).map(q => `<circle class="sd" cx="${x(get(q))}" cy="17" r="3"/>`).join("")
+    + `<circle class="sm" cx="${x(get(p))}" cy="17" r="5.5"/></svg>`;
+}
+function ring(share, text){
+  const r = 12, C = 2*Math.PI*r;
+  return `<svg viewBox="0 0 200 34"><circle class="rg" cx="17" cy="17" r="${r}"/>`
+    + `<circle class="rf" cx="17" cy="17" r="${r}" stroke-dasharray="${(C*Math.max(.02, share)).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 17 17)"/>`
+    + `<text class="t" x="40" y="21"><tspan class="tb">${Math.round(share*100)}%</tspan> ${esc(text)}</text></svg>`;
+}
+function bars(rows){   // [{frac, label, colour?}]: one thin bar each, labelled at the right
+  const h = rows.length > 1 ? 12 : 16, gap = 4;
+  return `<svg viewBox="0 0 200 ${rows.length*(h + gap)}">` + rows.map((r, i) => { const y = i*(h + gap);
+    return `<rect class="bb" x="0" y="${y}" width="130" height="${h}" rx="3"/><rect class="bf" x="0" y="${y}" width="${Math.max(2, 130*Math.min(1, r.frac)).toFixed(1)}" height="${h}" rx="3"${r.colour ? ` style="fill:${r.colour}"` : ""}/>`
+      + `<text class="t" x="136" y="${y + h/2 + 3.5}">${esc(r.label)}</text>`; }).join("") + `</svg>`;
+}
+const slice = (p, get) => { const all = DATA.reduce((t, q) => t + get(q), 0); return all ? get(p)/all : 0; };   // of everyone's together
+const SPOTS = [
+  p => num(p.deaths) ? {k: "Deaths", v: `${num(p.deaths)}`, c: rankLine(p, q => num(q.deaths), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.deaths))} : null,
+  p => num(p.dist_m) ? {k: "Distance", v: `${km(p.dist_m)} <small>km</small>`, c: rankLine(p, q => num(q.dist_m), "farthest on the roster", "least on the roster"), svg: strip(p, q => num(q.dist_m))} : null,
+  p => kpd(p) ? {k: "Survivor", v: `${kpd(p) >= 10 ? Math.round(kpd(p)) : kpd(p).toFixed(1)} <small>km per death</small>`, c: rankLine(p, kpd, "safest on the roster", "deadliest on the roster"), svg: strip(p, kpd)} : null,
+  p => num(p.close_calls) ? {k: "Closest call", v: `${Math.round(num(p.lowest_hp)*100)}% <small>health</small>`, c: `${plural(num(p.close_calls), "close call")}: under a tenth and back`, svg: bars([{frac: num(p.lowest_hp), label: "and lived", colour: "var(--off)"}])} : null,
+  p => (p.streak_m || {}).best ? {k: "Best streak", v: `${km(p.streak_m.best)} <small>km without dying</small>`, c: `${km(p.streak_m.now)} km since the last death`, svg: bars([{frac: 1, label: "best"}, {frac: num(p.streak_m.now)/num(p.streak_m.best), label: "since the last"}])} : null,
+  p => { const b = (p.biomes || []).filter(r => num(r.deaths) > 0 && num(r.m) > 0).sort((a, c) => num(c.deaths)/num(c.m) - num(a.deaths)/num(a.m))[0];
+         return b ? {k: "Deadliest ground", v: esc(b.biome), c: `${per(b.deaths, b.m)} there, ${plural(num(b.deaths), "death")} in ${km(b.m)} km`, svg: bars([{frac: num(b.deaths)/Math.max(1, num(p.deaths)), label: "of all deaths", colour: INK[b.biome]}])} : null; },
+  p => { const b = (p.biomes || []).filter(r => num(r.deaths) === 0 && num(r.m) >= 1000).sort((a, c) => num(c.m) - num(a.m))[0];
+         return b ? {k: "Safest ground", v: esc(b.biome), c: `${km(b.m)} km there without a death`, svg: bars([{frac: num(b.m)/Math.max(1, num(p.dist_m)), label: "of all km", colour: INK[b.biome]}])} : null; },
+  p => num(p.pieces) ? {k: "Builder", v: `${num(p.pieces)} <small>pieces</small>`, c: rankLine(p, q => num(q.pieces), "most on the roster", "fewest on the roster"), svg: ring(slice(p, q => num(q.pieces)), "of everything standing")} : null,
+  p => num(p.portals) ? {k: "Gates", v: `${num(p.portals)} <small>portals</small>`, c: rankLine(p, q => num(q.portals), "most on the roster", "fewest on the roster"), svg: ring(slice(p, q => num(q.portals)), "of the world's gates")} : null,
+  p => num(p.ships) ? {k: "Fleet", v: `${num(p.ships)} <small>${num(p.ships) === 1 ? "ship" : "ships"} afloat</small>`, c: rankLine(p, q => num(q.ships), "the roster's biggest fleet", "smallest"), svg: ring(slice(p, q => num(q.ships)), "of every hull")} : null,
+  p => num(p.hops) ? {k: "Hops", v: `${num(p.hops)} <small>portal trips</small>`, c: rankLine(p, q => num(q.hops), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.hops))} : null,
+  p => num(p.kills) ? {k: "Slayer", v: `${num(p.kills)} <small>kills</small>`, c: rankLine(p, q => num(q.kills), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.kills))} : null,
+  p => num(p.trees) + num(p.rocks) ? {k: "Harvester", v: `${num(p.trees)} <small>trees</small> · ${num(p.rocks)} <small>rocks</small>`, c: rankLine(p, q => num(q.trees) + num(q.rocks), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.trees) + num(q.rocks))} : null,
+  p => num(p.pins) ? {k: "Pins", v: `${num(p.pins)}`, c: rankLine(p, q => num(q.pins), "most on the roster", "fewest on the roster"), svg: ring(slice(p, q => num(q.pins)), "of the map's pins")} : null,
+  p => num(p.chat) ? {k: "Chat", v: `${num(p.chat)} <small>lines</small>`, c: rankLine(p, q => num(q.chat), "the roster's loudest", "the roster's quietest"), svg: ring(slice(p, q => num(q.chat)), "of everything said")} : null,
+  p => num(p.joins) ? {k: "Joins", v: `${num(p.joins)}`, c: rankLine(p, q => num(q.joins), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.joins))} : null,
+  p => { const r = p.runs || {}, n = num(r.ok) + num(r.failed) + num(r.rescued) + num(r.open); if(!n) return null;
+         return {k: "Corpse runs", v: `${num(r.ok)} <small>recovered</small>`, c: [num(r.failed) && `${num(r.failed)} failed`, num(r.rescued) && `${num(r.rescued)} rescued by others`, num(r.open) && `${num(r.open)} still out there`].filter(Boolean).join(" · ") || "every grave reclaimed",
+                 svg: bars([{frac: num(r.ok)/n, label: `${Math.round(100*num(r.ok)/n)}% got back`, colour: "var(--ok)"}])}; },
+];
+const SPOT = {list: [], i: 0, timer: 0, held: false};
+function spotlight(p){
+  const el = document.getElementById("spot"); if(!el) return;
+  SPOT.list = SPOTS.map(f => f(p)).filter(Boolean);
+  el.hidden = !SPOT.list.length; if(el.hidden) return;
+  if(SPOT.i < 0) SPOT.i = Math.floor(Math.random()*SPOT.list.length);     // a fresh pick starts anywhere
+  SPOT.i %= SPOT.list.length;
+  showSpot(false);
+  clearInterval(SPOT.timer);
+  SPOT.timer = setInterval(() => { if(PICK && !SPOT.held && document.visibilityState === "visible") showSpot(true); }, 6000);
+  el.onmouseenter = () => { SPOT.held = true; }; el.onmouseleave = () => { SPOT.held = false; };
+  el.onclick = () => showSpot(true);
+}
+function showSpot(advance){
+  const el = document.getElementById("spot"); if(!el || !SPOT.list.length) return;
+  if(advance) SPOT.i = (SPOT.i + 1) % SPOT.list.length;
+  const s = SPOT.list[SPOT.i], n = SPOT.list.length;
+  const html = `<div class="in${advance ? " out" : ""}"><div class="eyebrow"><span>${esc(s.k)}</span><span class="n">${SPOT.i + 1}/${n}</span></div>`
+    + `<div class="v">${s.v}</div><div class="c">${s.c}</div>${s.svg}</div>`
+    + `<div class="dots">${SPOT.list.map((_, i) => `<i${i === SPOT.i ? ' class="on"' : ""}></i>`).join("")}</div>`;
+  el.innerHTML = html;
+  if(advance) requestAnimationFrame(() => requestAnimationFrame(() => { const i = el.querySelector(".in"); if(i) i.classList.remove("out"); }));
+}
+
 function pick(name){
-  PICK = name || null; DLAST = "";
+  PICK = name || null; DLAST = ""; SPOT.i = -1; clearInterval(SPOT.timer);
   document.getElementById("app").classList.toggle("picked", !!PICK);
   for(const b of document.querySelectorAll("#list .row")) b.classList.toggle("pick", b.dataset.name === PICK);
   if(PICK){ renderDetail(); document.getElementById("detail").scrollTop = 0; }

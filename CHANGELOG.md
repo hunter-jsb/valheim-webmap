@@ -11,7 +11,10 @@
   has a pentagon -- Explorer (km, portal hops and km at sea together), Builder (pieces),
   Survivor (km per death), Slayer (kills), Harvester (trees and rocks together), each side
   a share of the roster's best, square-rooted -- small on the row and labelled on the page. Picking a player slides the page open, and its figures read
-  in five groups: Survival, Journeys, Deeds, Building, Presence.
+  in five groups: Survival, Journeys, Deeds, Building, Presence. A spotlight beside the pentagon
+  turns through the player's figures one at a time -- where each sits among the roster, a
+  share of everything, the closest call, the streak against the walk since -- with a small
+  picture for each; a hover holds it, a click moves on.
 * Kills, trees felled and rocks broken, per player: `kills`, `trees` and `rocks` in
   `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). The server
   runs none of it, so it reads what passes through it: a hit sent to another player's
