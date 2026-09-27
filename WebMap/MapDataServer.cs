@@ -69,14 +69,16 @@ namespace WebMap
 
     public class MapDataServer
     {
-        private static readonly Dictionary<string, string> contentTypes = new Dictionary<string, string> {
+        // Every kind of file under web/: anything else answers 404, so a new asset type needs a row here.
+        internal static readonly Dictionary<string, string> contentTypes = new Dictionary<string, string> {
             {"html", "text/html"},
             {"js", "text/javascript"},
             {"css", "text/css"},
             {"png", "image/png"},
             {"jpg", "image/jpeg"},
             {"webp", "image/webp"},
-            {"woff2", "font/woff2"}          // web/fonts, the brand's face
+            {"woff2", "font/woff2"},         // web/fonts, the brand's face
+            {"txt", "text/plain"}
         };
 
         private readonly System.Threading.Timer broadcastTimer;
