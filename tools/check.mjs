@@ -102,12 +102,13 @@ async function portals() {
     return {loose: loose.length, wrong: wrong.map(q => q.name)}; })()`);
   check("portals: one dashed spoke for each tagged portal standing unlinked", built && d && !d.wrong.length,
         d ? `${d.loose} standing unlinked` + (d.wrong.length ? `; wrong: ${d.wrong.join(", ")}` : "") : "");
-  // a spoke row whose far side is a hub: the click picks that hub, not the map
+  // a spoke row: the click opens the far side close up with the gate you arrive at lit
   const t = await p.ev(`(() => {
-    const row = [...document.querySelectorAll(".spokes a.go[data-go]")].find(a => { const s = SITES.find(x => siteKey(x) === a.dataset.go); return s && s.portals.length > 1; });
-    if(!row) return null; row.click(); return {to: row.dataset.go, focus: FOCUS && siteKey(FOCUS), page: location.pathname}; })()`);
-  check("portals: a gate steps through to the hub on its far side", built && (!t || (t.focus === t.to && t.page.endsWith("portals.html"))),
-        t ? `picked ${t.focus}` : "no hub-to-hub gate to try");
+    const row = document.querySelector(".spokes a.go[data-go]"); if(!row) return null;
+    row.click(); const lit = document.querySelector("#inMarks .mk.here");
+    return {to: row.dataset.go, at: row.dataset.at, open: !document.getElementById("inside").hidden, key: IN && IN.key, lit: lit && lit.dataset.id, marks: document.querySelectorAll("#inMarks .mk:not(.pin)").length, page: location.pathname}; })()`);
+  check("portals: a gate opens the far side close up, the arrival gate lit", built && (!t || (t.open && t.key === t.to && t.lit === t.at && t.marks > 0 && t.page.endsWith("portals.html"))),
+        t ? `${t.marks} gates at ${t.key}, ${t.lit} lit` : "no linked gate to try");
   await p.done("portals");
 }
 

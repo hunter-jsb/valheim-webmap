@@ -41,6 +41,39 @@
   .spokes li:not(.sector) > .go{flex:1 1 auto;min-width:0}
   .spokes .mp{flex:0 0 auto;align-self:center;padding:.2rem .4rem;color:var(--faint);font-size:.9rem;line-height:1}
   .spokes .mp:hover{color:var(--portal);background:none}
+  .card h3 .open{color:inherit;text-decoration:none}
+  .card h3 .open:hover{color:var(--portal)}
+  /* close up: the base as it stands, each gate where a player walks to it */
+  .inside{position:absolute;inset:0;z-index:15;background:var(--stage);display:flex;flex-direction:column;cursor:default}
+  .inside[hidden]{display:none}
+  .inside .hdr{display:flex;gap:.55rem;align-items:center;padding:.4rem .7rem;background:var(--sheet);border-bottom:1px solid var(--line);flex:0 0 auto}
+  .inside .hdr > .ic{width:20px;height:20px;overflow:visible;flex:0 0 auto}
+  .inside .hdr h2{font-size:.95rem;font-weight:600;color:var(--bright);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inside .hdr .meta{margin:0 auto 0 0;font-size:.72rem;color:var(--muted);white-space:nowrap}
+  .inside .hdr .btn{height:30px;min-width:0;padding:0 .6rem;font-size:.74rem}
+  .inside .field{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:grab}
+  .inside .field.dragging{cursor:grabbing}
+  .inside .field canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .inside .marks{position:absolute;inset:0;pointer-events:none}
+  .inside .mk{position:absolute;left:0;top:0;width:0;height:0}
+  .inside .mk .ic{position:absolute;left:-11px;top:-11px;width:22px;height:22px;overflow:visible;pointer-events:auto;filter:var(--shadow-ink)}
+  .inside .mk .lb{position:absolute;left:0;top:12px;z-index:1;transform:translateX(-50%);white-space:nowrap;font-size:.72rem;font-weight:600;color:var(--bright);text-shadow:var(--halo-text);pointer-events:auto}
+  .inside .mk.here .lb{z-index:2}
+  .inside .mk [data-go]{cursor:pointer}
+  .inside .mk [data-go]:hover{color:var(--portal)}
+  .inside .mk.free .ic,.inside .mk.free .lb{opacity:.55}
+  .inside .mk.dial .lb{color:var(--unknown)}
+  .inside .mk.here .ic{filter:drop-shadow(0 0 7px var(--portal))}
+  .inside .mk.here .lb{color:var(--portal)}
+  .inside .mk.here::before{content:"";position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;border:2px solid var(--portal);animation:here 1.5s ease-out infinite}
+  @keyframes here{from{transform:scale(.5);opacity:1}to{transform:scale(1.4);opacity:0}}
+  .inside .mk.mini .lb{display:none}          /* crowded out: the icon keeps the place, hover reads it */
+  .inside .mk.mini:hover .lb{display:block}
+  .inside .mk.pin .ic{width:15px;height:15px;left:-7px;top:-7px;opacity:.85}
+  .inside .mk.pin .lb{font-weight:500;font-size:.66rem;color:var(--ink-2);top:7px}
+  .inside .gates{padding:.4rem .7rem;margin:0;border-top:1px solid var(--line);background:var(--sheet);flex:0 0 auto;max-height:5.4rem;overflow:auto}
+  .inside .gates .gate{cursor:pointer}
+  .inside .empty{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);color:var(--muted);font-size:.8rem;text-shadow:var(--halo-text)}
   .spokes .g{color:var(--bright);font-weight:600}
   .spokes .arr{color:var(--portal)}
   .spokes .to{color:var(--ink)}
@@ -142,7 +175,7 @@
       &#183; drag to pan, scroll or pinch to zoom</p>
     <div class="btnrow" id="hubs" hidden></div>
     <div class="list" id="list"></div>
-    <p class="foot"><span id="stamp"></span> &#183; a gate takes you through to its far side; &#8982; opens the map there<span class="credits"> &#183;
+    <p class="foot"><span id="stamp"></span> &#183; a hub opens close up, a gate takes you through to where it leads; &#8982; opens the map there<span class="credits"> &#183;
       <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
   </aside>
 
@@ -154,6 +187,15 @@
     <div class="rose">N &#8593;</div>
     <div class="mapctl top"><button class="btn map" id="fitBtn" type="button" tabindex="-1" title="Fit every portal">&#8962;</button></div>
     <div class="sbar"><span class="sline" id="scaleBar"></span><span id="scaleTxt"></span></div>
+    <!-- the close up: a hub as it stands, over the render and the base's floor plan -->
+    <div class="inside" id="inside" hidden>
+      <div class="hdr"><svg class="ic"><use href="#ic-portal"></use></svg><h2 id="inName"></h2><span class="meta" id="inMeta"></span>
+        <a class="btn quiet" id="inMap" href="#" title="Open the map here">Map</a><a class="btn quiet" id="in3d" href="#" title="Stand here in 3D">3D</a>
+        <button class="btn quiet" id="inClose" type="button" title="Back to the network (Esc)">&times;</button></div>
+      <div class="field" id="inField"><canvas id="inCv"></canvas><div class="marks" id="inMarks"></div>
+        <div class="rose">N &#8593;</div><div class="sbar"><span class="sline" id="inSline"></span><span id="inStxt"></span></div></div>
+      <div class="gates" id="inGates"></div>
+    </div>
   </div>
 </div>
 
@@ -249,7 +291,7 @@ const LAY = MapCore.layers(API, () => draw());
 let scratch = null, sctx = null;
 let NODES = [], SPOKES = [], SPOKE = new Map(), BBOX = null, HOVER = new Set(), FITTED = false;
 // the window onto the chart; a touch is the only hover a phone has, so a press sets it
-const V = MapCore.view(stage, {paint, max: ZMAX, min: .4, guard: ".mapctl", capture: false,
+const V = MapCore.view(stage, {paint, max: ZMAX, min: .4, guard: ".mapctl, .inside", capture: false,
   down: e => { setHover(keysOf(e.target)); }, resize: () => { if(NODES.length) measure(); }});
 function draw(){ V.request(); }
 
@@ -438,25 +480,121 @@ function fitAll(){ if(BBOX) fitPx(BBOX); else V.fitWorld(); }
 // a drag that began on a node is a pan, not a click through to the map
 net.addEventListener("click", e => {
   if(V.moved > 6){ e.preventDefault(); return; }
-  const a = e.target.closest("[data-go]"); if(a){ e.preventDefault(); goThrough(a.dataset.go, a.dataset.via); }
+  const a = e.target.closest("[data-go]"); if(a){ e.preventDefault(); openInside(a.dataset.go, a.dataset.at); }
 });
-// Through the gate: the view lands on its far side -- a hub is picked and its card
-// brought up, a lone place is framed with the hub it hangs off -- and the line
-// just travelled stays lit a moment. The map is a step further, by the glyph.
-let LIT = 0;
-function goThrough(key, via){
-  const dst = SITES.find(s => siteKey(s) === key); if(!dst) return;
-  if(dst.portals.length > 1){
-    FOCUS = dst; renderHubChips(HUBS); applyFocus(); fitHub(dst);
-    const card = listEl.querySelector(`.card[data-hub="${CSS.escape(hubId(dst))}"]`);
-    if(card) card.scrollIntoView({block: "start", behavior: "smooth"});
-  }else{
-    const sp = SPOKE.get(via), pts = sp ? [sp.a, sp.b] : [dst];
-    fitPx(pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}));
+
+// ---------- the close up ----------
+// A hub as it stands: the render with the base's floor plan over it, and each gate
+// where a player walks to it. Going through a gate lands you here with the gate
+// you arrive at lit; a gate's mark takes you on through it. House pins say what
+// the buildings are. The floor plan comes the first time a close up opens.
+const inside = document.getElementById("inside"), inField = document.getElementById("inField");
+const inCv = document.getElementById("inCv"), inCtx = inCv.getContext("2d"), inMarks = document.getElementById("inMarks");
+let IN = null;                                                   // {key, at} while one is open
+let PIECES = null, PIECES_REV = null, PIECE_REV = null, PIECES_LOADING = null;
+const HV = MapCore.view(inField, {paint: paintInside, max: MapCore.MAX_ZOOM, min: 8, guard: ".ic, .lb"});
+const INSCENE = MapCore.viewCache((g, v) => {
+  MapCore.drawRasters(g, v, LAY.imgs, {bg: "#05070a"});
+  if(PIECES) MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= MapCore.PLAN_ZOOM});
+}, () => HV.request());
+function paintInside(){
+  const dpr = Math.min(devicePixelRatio || 1, 2), W = inField.clientWidth, H = inField.clientHeight;
+  if(!W || !H) return;
+  if(inCv.width !== Math.round(W*dpr) || inCv.height !== Math.round(H*dpr)){ inCv.width = Math.round(W*dpr); inCv.height = Math.round(H*dpr); }
+  INSCENE.draw(inCtx, {scale: HV.scale, tx: HV.tx, ty: HV.ty, w: W, h: H, pix: dpr}, "#05070a");
+  inCtx.setTransform(1, 0, 0, 1, 0, 0);
+  // gates in a ring stand a few metres apart: a label that would sit on another
+  // gives way, the lit gate's first and then in the strip's order
+  const taken = [];
+  for(const m of [...inMarks.children].sort((a, b) => b.classList.contains("here") - a.classList.contains("here"))){
+    const x = +m.dataset.px*HV.scale + HV.tx, y = +m.dataset.py*HV.scale + HV.ty, w = +m.dataset.w || 0;
+    m.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+    if(!w) continue;
+    const r = {x0: x - w/2 - 3, y0: y + 8, x1: x + w/2 + 3, y1: y + 26};
+    const hit = taken.some(t => r.x0 < t.x1 && r.x1 > t.x0 && r.y0 < t.y1 && r.y1 > t.y0);
+    m.classList.toggle("mini", hit); if(!hit) taken.push(r);
   }
-  setHover(via ? [via] : []);
-  clearTimeout(LIT); LIT = setTimeout(() => setHover([]), 1800);
+  const mpp = GEOM.pixel/HV.scale; let m = 1;
+  while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
+  while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
+  document.getElementById("inSline").style.width = Math.round(m/mpp) + "px";
+  document.getElementById("inStxt").textContent = m >= 1000 ? (m/1000) + " km" : Math.round(m) + " m";
 }
+function loadPieces(){
+  if(PIECE_REV == null || (PIECES && PIECES_REV === PIECE_REV) || PIECES_LOADING) return;
+  const rev = PIECE_REV;
+  PIECES_LOADING = MapCore.fetchJSON(API, "/pieces?v=" + rev)
+    .then(pj => { if(pj && pj.pieces){ PIECES = MapCore.parsePieces(pj); PIECES_REV = rev; INSCENE.invalidate(); HV.request(); } })
+    .catch(() => {}).finally(() => { PIECES_LOADING = null; });
+}
+function openInside(key, at){
+  const site = SITES.find(x => siteKey(x) === key); if(!site) return;
+  IN = {key, at: at || null};
+  inside.hidden = false;
+  fillInside(site);
+  const q = site.portals.map(p => MapCore.toPx(p.x, p.z)), side = 70/GEOM.pixel;   // never tighter than 70 m
+  const x0 = Math.min(...q.map(a => a.px)), x1 = Math.max(...q.map(a => a.px)), y0 = Math.min(...q.map(a => a.py)), y1 = Math.max(...q.map(a => a.py));
+  const bw = Math.max(x1 - x0, side), bh = Math.max(y1 - y0, side);
+  HV.fitBox((x0 + x1)/2 - bw/2, (y0 + y1)/2 - bh/2, bw, bh, 1.7, 2);
+  loadPieces();
+  history.replaceState(null, "", "#in=" + key + (at ? "&at=" + encodeURIComponent(at) : ""));
+}
+function closeInside(){ IN = null; inside.hidden = true; history.replaceState(null, "", location.pathname + location.search); }
+function fillInside(site){
+  const by = new Map(LIST.map(p => [p.id, p]));
+  const twin = p => { const q = (p.to && p.to !== "0") ? by.get(p.to) : null; return (q && q.id !== p.id) ? q : null; };
+  const siteOfId = id => SITES.find(x => x.portals.some(p => p.id === id));
+  const free = site.portals.filter(p => !twin(p)).length, spot = (IN.at && by.get(IN.at)) || site;
+  document.getElementById("inName").textContent = site.label;
+  document.getElementById("inMeta").textContent = `${plural(site.portals.length, "gate")}${free ? ` · ${free} free` : ""} · ${Math.round(site.x)}, ${Math.round(site.z)}`;
+  document.getElementById("inMap").href = `index.html#at=${Math.round(site.x)},${Math.round(site.z)},48`;
+  document.getElementById("in3d").href = `index.html#3d=${Math.round(spot.x)},${Math.round(spot.z)}`;
+  const marks = [], chips = [];
+  for(const p of site.portals.slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""))){
+    const q = twin(p), k = MapCore.toPx(p.x, p.z), cls = q ? "on" : p.name ? "dial" : "free", dst = q && siteOfId(q.id);
+    const on = dst ? ` data-go="${siteKey(dst)}" data-at="${esc(q.id)}" title="Through to ${esc(dst.label)}"` : "";
+    marks.push(`<div class="mk ${cls}${IN.at === p.id ? " here" : ""}" data-id="${esc(p.id)}" data-px="${k.px}" data-py="${k.py}">`
+      + `<svg class="ic"${on}><use href="#ic-portal"></use></svg><span class="lb"${on}>${esc(p.name || "free")}</span></div>`);
+    chips.push(`<a class="gate ${q ? "on" : "free"}${IN.at === p.id ? " hl" : ""}" href="#" data-find="${esc(p.id)}"`
+      + ` title="${dst ? `leads to ${esc(dst.label)}` : p.name ? "tagged, nothing answers" : "no tag"}">${esc(p.name || "free")}</a>`);
+  }
+  for(const pin of PINS){
+    if(!pin.text || Math.hypot(pin.x - site.x, pin.z - site.z) > 160) continue;
+    const k = MapCore.toPx(pin.x, pin.z), ic = (MapCore.PIN_ICON || {})[pin.type] || "pin-dot";
+    marks.push(`<div class="mk pin" data-px="${k.px}" data-py="${k.py}"><svg class="ic"><use href="#ic-${ic}"></use></svg><span class="lb">${esc(pin.text)}</span></div>`);
+  }
+  inMarks.innerHTML = marks.join("");
+  for(const m of inMarks.children){ const lb = m.querySelector(".lb"); m.dataset.w = lb ? lb.offsetWidth : 0; }
+  document.getElementById("inGates").innerHTML = chips.join("");
+  HV.request();
+}
+// the gate to find: lit on the ground and in the strip, and brought to the middle
+function light(id, centre){
+  IN.at = id;
+  inMarks.querySelectorAll(".mk.here").forEach(m => m.classList.remove("here"));
+  document.querySelectorAll("#inGates .hl").forEach(c => c.classList.remove("hl"));
+  const m = inMarks.querySelector(`.mk[data-id="${CSS.escape(id)}"]`), c = document.querySelector(`#inGates [data-find="${CSS.escape(id)}"]`);
+  if(m){ m.classList.add("here"); if(centre) HV.centre(+m.dataset.px, +m.dataset.py, HV.scale); }
+  if(c) c.classList.add("hl");
+  history.replaceState(null, "", "#in=" + IN.key + "&at=" + encodeURIComponent(id));
+}
+inMarks.addEventListener("click", e => {
+  const a = e.target.closest("[data-go]"); if(a) openInside(a.dataset.go, a.dataset.at);
+});
+document.getElementById("inGates").addEventListener("click", e => {
+  const c = e.target.closest("[data-find]"); if(!c) return;
+  e.preventDefault(); light(c.dataset.find, true);
+});
+document.getElementById("inClose").addEventListener("click", closeInside);
+document.addEventListener("keydown", e => { if(e.key === "Escape" && IN) closeInside(); });
+// a link into a close up, followed while the page is already open
+addEventListener("hashchange", () => {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if(h.get("in")){ if(!IN || IN.key !== h.get("in") || IN.at !== h.get("at")) openInside(h.get("in"), h.get("at")); }
+  else if(IN) closeInside();
+});
+inside.addEventListener("wheel", e => e.stopPropagation(), {passive: false});   // the diagram beneath keeps its zoom
+
 stage.addEventListener("pointermove", e => { if(!e.buttons) setHover(keysOf(e.target)); });
 stage.addEventListener("pointerleave", () => setHover([]));
 document.getElementById("fitBtn").onclick = fitAll;
@@ -484,14 +622,14 @@ function panel(site, sps){
   const chip = g => {
     const s = sps.find(x => x.gate === g);
     return `<a class="gate ${s ? "on" : "free"}" href="${link(g.id)}" tabindex="-1"`
-      + (s ? ` data-s="${s.k}" data-go="${siteKey(s.dst)}" data-via="${s.k}" title="Through to ${esc(s.dst.label)}"` : "")
+      + (s ? ` data-s="${s.k}" data-go="${siteKey(s.dst)}" data-at="${esc(s.at)}" title="Through to ${esc(s.dst.label)}"` : "")
       + `>${esc(g.name || (s ? "untagged" : "free"))}</a>`;
   };
   const gates = site.portals.slice().sort((a, b) => rank(a) - rank(b));
   const linked = gates.filter(g => sps.some(x => x.gate === g)).length, big = gates.length > 6;
   const sum = big ? `<a class="gate sum" tabindex="-1" title="Show or hide the linked gates">${linked} linked</a>` : "";
   return `<div class="panel${big ? " big" : ""}"><div class="ttl">`
-    + `<a href="${link(site.portals[0].id)}" tabindex="-1">${site.pin ? esc(site.pin) : "Hub"}</a>`
+    + `<a href="${link(site.portals[0].id)}" data-go="${siteKey(site)}" tabindex="-1" title="Close up">${site.pin ? esc(site.pin) : "Hub"}</a>`
     + `<span class="n">${plural(site.portals.length, "gate")}</span></div>`
     + `<div class="gates">${gates.filter(g => !sps.some(x => x.gate === g)).map(chip).join("")}${sum}${gates.filter(g => sps.some(x => x.gate === g)).map(chip).join("")}</div></div>`;
 }
@@ -504,7 +642,7 @@ function hubCard(hub, sps){
     + `<span class="xz">${Math.round(hub.x)}, ${Math.round(hub.z)}</span> &#183; `
     + (d < 50 ? "the world centre" : `${bearing(hub.x, hub.z)}, ${span(d)} out`);
   const one = sps.filter(s => s.kind === "link").length === 1;
-  const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a class="go" href="${link(s.target)}" data-go="${siteKey(s.dst)}" data-via="${s.k}" title="Through to ${esc(s.dst.label)}">`
+  const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a class="go" href="${link(s.target)}" data-go="${siteKey(s.dst)}" data-at="${esc(s.at)}" title="Through to ${esc(s.dst.label)}">`
     + `<span class="g">${s.kind === "dial" ? "dial " : ""}${esc(s.tag)}</span><span class="arr">&#8594;</span>`
     + `<span class="to">${esc(s.dst.label)}</span> <span>&#183; ${span(s.d)} ${s.ab}</span>`
     + `<span class="st ${s.kind === "dial" ? "dial" : "on"}">`
@@ -517,7 +655,7 @@ function hubCard(hub, sps){
   const title = EDITING === id
     ? `<form class="rename" data-hub="${esc(id)}"><input class="field" name="name" maxlength="40" value="${esc(hub.given || "")}" placeholder="${esc(hub.pin || "name this hub")}" autocomplete="off">`
       + `<div class="btnrow"><button class="btn" type="submit">Save</button>${hub.given ? '<button class="btn quiet" type="button" data-clear>Back to its gates</button>' : ""}<button class="btn quiet" type="button" data-cancel>Cancel</button></div></form>`
-    : `<h3><svg class="ic"><use href="#ic-portal"></use></svg><span>${esc(hub.label)}`
+    : `<h3><svg class="ic"><use href="#ic-portal"></use></svg><span><a class="open" href="${link(hub.portals[0].id)}" data-go="${siteKey(hub)}" title="Close up">${esc(hub.label)}</a>`
       + (me ? ` <a href="#" class="edit" data-rename="${esc(id)}" title="Rename this hub">&#9998;</a>` : "")
       + (hub.given && hub.tags.length ? `<span class="tags">${esc(hub.tags.join(" · "))}</span>` : "") + `</span></h3>`;
   const find = sps.length > 10 ? `<div class="find"><input class="field" type="search" data-find="${esc(id)}" placeholder="find a gate&#8230;" value="${esc(FILTER.get(id) || "")}" autocomplete="off"></div>` : "";
@@ -542,7 +680,7 @@ listEl.addEventListener("input", e => {
 });
 listEl.addEventListener("click", e => {
   const go = e.target.closest("[data-go]");
-  if(go){ e.preventDefault(); goThrough(go.dataset.go, go.dataset.via); return; }
+  if(go){ e.preventDefault(); openInside(go.dataset.go, go.dataset.at); return; }
   const pen = e.target.closest("[data-rename]");
   if(pen){ e.preventDefault(); EDITING = pen.dataset.rename; LAST = ""; render(LIST); const f = listEl.querySelector(".rename input"); if(f){ f.focus(); f.select(); } return; }
   if(e.target.closest("[data-cancel]")){ EDITING = null; LAST = ""; render(LIST); return; }
@@ -643,11 +781,11 @@ function render(list){
     for(const g of hub.portals){
       const q = twin(g); if(!q) continue;
       const dst = siteOf.get(q.id); if(dst === hub) continue;
-      sps.push({kind: "link", tag: g.name || "untagged", gate: g, dst, target: g.id});
+      sps.push({kind: "link", tag: g.name || "untagged", gate: g, dst, target: g.id, at: q.id});
     }
     for(const p of dials){
       const dst = siteOf.get(p.id); if(dst === hub || dialHub(p) !== hub) continue;
-      sps.push({kind: "dial", tag: p.name, dst, target: p.id});
+      sps.push({kind: "dial", tag: p.name, dst, target: p.id, at: p.id});
     }
     for(const s of sps){
       const dx = s.dst.x - hub.x, dz = s.dst.z - hub.z;
@@ -683,8 +821,8 @@ function render(list){
     const dial = sps.every(s => s.kind === "dial");
     const o = sps[0].a === site ? sps[0].b : sps[0].a;
     const d = Math.hypot(site.x-o.x, site.z-o.z), ab = abbr(site.x-o.x, site.z-o.z);
-    nodes.push({site, kind: dial ? "dial" : "rem", pri: dial ? 2 : 1, d, go: siteKey(o), via: sps[0].k,
-      keys: sps.map(s => s.k), href: link(p0.id), title: `${site.pin || p0.name || "untagged"} · through to ${o.label}`,
+    nodes.push({site, kind: dial ? "dial" : "rem", pri: dial ? 2 : 1, d, go: siteKey(site), at: p0.id,
+      keys: sps.map(s => s.k), href: link(p0.id), title: `${site.pin || p0.name || "untagged"} · close up`,
       html: ico + `<span class="lb"><span class="t">${dial ? `<span class="dl">dial </span>` : ""}`
         + `${esc(p0.name || sps[0].tag)}</span><span class="d">${span(d)} ${ab}</span></span>`});
   }
@@ -693,7 +831,7 @@ function render(list){
   const netHTML = nodes.map((n, i) => n.kind === "hub"
     ? `<div class="node hub" id="n${i}">${n.html}</div>`
     : `<a class="node ${n.kind}" id="n${i}" href="${n.href}" tabindex="-1" data-s="${n.keys.join(" ")}"`
-      + (n.go ? ` data-go="${n.go}" data-via="${n.via}"` : "") + ` title="${esc(n.title)}">${n.html}</a>`).join("");
+      + (n.go ? ` data-go="${n.go}" data-at="${esc(n.at)}"` : "") + ` title="${esc(n.title)}">${n.html}</a>`).join("");
   const sig = netHTML + "|" + sites.map(s => Math.round(s.px) + "," + Math.round(s.py)).join(";");
   if(sig !== LAST_NET){
     LAST_NET = sig;
@@ -730,6 +868,7 @@ function render(list){
   if(!list.length) html = `<p class="empty">No portals standing in this world yet.</p>`;
   // untouched DOM on the minute, so no flicker; and never under someone's typing
   if(html !== LAST && !(EDITING && LAST && listEl.querySelector(".rename"))){ listEl.innerHTML = html; LAST = html; listEl.querySelectorAll(".card[data-hub]").forEach(applyFilter); }
+  if(IN){ const s = SITES.find(x => siteKey(x) === IN.key); if(s) fillInside(s); else closeInside(); }
 }
 
 // One /state carries the portals, the pins and the fog's revision; the fog itself
@@ -745,6 +884,8 @@ async function load(){
     // a server that does not yet say which chart it has still has one: ask for it by the old name
     const cr = (s.rev && s.rev.chart) || "1";
     if(cr !== CHART_REV){ CHART_REV = cr; LAY.load("chart", "/chart", CHART_REV); }
+    PIECE_REV = (s.rev && s.rev.pieces) || "0";
+    if(IN) loadPieces();
     render(((s.portals || {}).portals) || []);
     document.getElementById("note").textContent = "";
     document.getElementById("stamp").textContent = "updated " + new Date().toLocaleTimeString();
@@ -759,6 +900,8 @@ async function load(){
   LAY.loadBase();
   try{ WORLD = (await MapCore.fetchConfig(API)).world || ""; }catch(e){}
   await load();
+  const h = new URLSearchParams(location.hash.slice(1));
+  if(h.get("in")) openInside(h.get("in"), h.get("at"));
   setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
   document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") load(); });
 })();
