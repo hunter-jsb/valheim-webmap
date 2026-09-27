@@ -211,18 +211,22 @@ export class View3D {
     if (!buf) { entry.missing = true; this.status(); return; }
     // the revision is the world's: a terraform elsewhere moves it, and this chunk stands as it was
     const sum = checksum(buf);
-    if (entry.mesh && entry.sum === sum && entry.step === step) return;
+    entry.asked = step;
+    if (entry.mesh && entry.sum === sum) return;
     entry.sum = sum;
-    const n = CHUNK / step + 1, raw = new Int16Array(buf), heights = new Float32Array(n * n);
+    // the grid is as wide as the bytes say: a mod from before ?step= answers every chunk at a
+    // metre, and then the view keeps to the near ring rather than fetch continents at full size
+    const n = Math.round(Math.sqrt(buf.byteLength / 2)), raw = new Int16Array(buf), heights = new Float32Array(n * n);
+    if (step > 1 && n === CHUNK + 1 && !this.stepless) { this.stepless = true; console.warn('3D: this server sends every chunk at a metre; the far rings are off'); this.scheduleUpdate(); }
     for (let i = 0; i < heights.length; i++) heights[i] = raw[i] / 10;
-    entry.heights = heights; entry.n = n; entry.step = step;
+    entry.heights = heights; entry.n = n; entry.step = CHUNK / (n - 1);
     this.buildTerrain(entry);
     // the neighbours' edge normals read this chunk's heights: at the same detail, rebuild theirs to match
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nb = this.chunks.get((cx + dx) + ',' + (cz + dz));
-      if (nb && nb.mesh && nb.step === step && step <= 2) this.buildTerrain(nb);
+      if (nb && nb.mesh && nb.step === entry.step && entry.step <= 2) this.buildTerrain(nb);
     }
-    if (step <= 2) this.settle();
+    if (entry.step <= 2) this.settle();
     this.status();
   }
 
@@ -936,7 +940,7 @@ if (uFogOn > 0.5) {
   // it; mid, ground and what reads from afar; far, ground alone and coarse. Street view
   // keeps to the near ring, whose fog closes in before the rest would show.
   reach() {
-    if (this.mode !== 'orbit') return { d: 0, mid: 0, far: 0 };
+    if (this.mode !== 'orbit' || this.stepless) return { d: this.mode === 'orbit' ? this.camera.position.distanceTo(this.orbit.target) : 0, mid: 0, far: 0 };
     const d = this.camera.position.distanceTo(this.orbit.target);
     return { d, mid: Math.min(3000, Math.max(500, d * 1.1)), far: Math.min(16000, Math.max(1500, d * 5)) };
   }
@@ -951,7 +955,7 @@ if (uFogOn > 0.5) {
     const wantG = [], wantO = [];
     // the camera over the ground: a chunk's distance is from there, height and all
     const cam = this.camera.position, camX = this.mode === 'orbit' ? cam.x : f.x, camZ = this.mode === 'orbit' ? -cam.z : f.z;
-    const up = this.mode === 'orbit' ? cam.y - this.orbit.target.y : 0, nearOn = this.mode !== 'orbit' || r.d < NEAR_CAMERA;
+    const up = this.mode === 'orbit' ? cam.y - this.orbit.target.y : 0, nearOn = this.mode !== 'orbit' || r.d < NEAR_CAMERA || this.stepless;
     const span = Math.max(1, Math.ceil(r.far / CHUNK) + 1), cx0 = Math.floor(camX / CHUNK), cz0 = Math.floor(camZ / CHUNK);
     for (let cz = Math.min(fz, cz0) - span; cz <= Math.max(fz, cz0) + span; cz++)
       for (let cx = Math.min(fx, cx0) - span; cx <= Math.max(fx, cx0) + span; cx++) {
@@ -970,7 +974,7 @@ if (uFogOn > 0.5) {
     for (const [key, w] of g) {
       const c = this.chunks.get(key);
       if (c && (c.loading || (c.missing && !c.stale))) continue;
-      if (!c || c.stale || c.step !== w.step || (c.failed && now - c.failed > 5000))
+      if (!c || c.stale || c.asked !== w.step || (c.failed && now - c.failed > 5000))
         jobs.push({ pri: w.pri, run: () => this.loadChunk(w.cx, w.cz, w.step) });
     }
     for (const key of [...this.chunks.keys()]) if (!g.has(key)) this.dropChunk(key);
