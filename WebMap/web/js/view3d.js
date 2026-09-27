@@ -352,14 +352,22 @@ uniform float uFogOn; uniform float uWorld; uniform float uFogShift; uniform flo
   float grain = (texture2D(uDetail, dp / 24.0).r - 0.5) * 0.30 + (texture2D(uDetail, dp / 5.0).g - 0.5) * 0.18;
   diffuseColor.rgb *= biome * (1.0 + grain);
 }` : '#include <map_fragment>')
-        // the fog of war darkens the land only: the sea runs on to the horizon everywhere, and
-        // where nobody has walked there is no land to darken
+        // The fog of war darkens walked land at its edge, and where nobody has walked there is
+        // no land at all -- so the sea there turns to mist banks, and from far up water and
+        // the unknown read apart. Explored sea stays blue to the horizon.
         .replace('#include <dithering_fragment>', ground ? `#include <dithering_fragment>
 if (uFogOn > 0.5) {
   float wx = vGroundPos.x, wz = -vGroundPos.z;
   float explored = texture2D(uFog, vec2(wx * uWorld + 0.5 + uFogShift, wz * uWorld + 0.5 + uFogShift)).r;
   gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.0), 0.8 * (1.0 - smoothstep(0.35, 0.65, explored)));
-}` : '#include <dithering_fragment>');
+}` : `#include <dithering_fragment>
+if (uFogOn > 0.5) {
+  float wx = vGroundPos.x, wz = -vGroundPos.z;
+  float explored = texture2D(uFog, vec2(wx * uWorld + 0.5 + uFogShift, wz * uWorld + 0.5 + uFogShift)).r;
+  float bank = texture2D(uDetail, vec2(wx, wz) / 900.0).r;
+  vec3 mist = mix(vec3(0.50, 0.55, 0.58), vec3(0.70, 0.73, 0.75), bank);
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, mist, 0.85 * (1.0 - smoothstep(0.35, 0.65, explored)));
+}`);
     };
     mat.customProgramCacheKey = () => 'ground-' + kind;
     return mat;

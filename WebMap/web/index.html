@@ -1365,12 +1365,28 @@ function caption(s){
 }
 async function tourStop(s, run){
   const alive = () => TOUR.on && TOUR.run === run;
+  // a spot still under fog has nothing to show and is not flown to at all
+  const fog = MapCore.explored(LAYERS.imgs.fog), q = toPx(s.x, s.z);
+  if(!s.far && !(fog && fog(q.px, q.py))) return;
   caption(s);
-  if(s.layer) showLayer(s.layer);
-  if(s.detail && !showDetail(s.detail)) setDetail(s.detail, true);
-  const q = toPx(s.x, s.z);
-  if(s.fit){ const W = stage.clientWidth, H = stage.clientHeight, c = toPx(s.fit.cx, s.fit.cz); await flyTo(c.px, c.py, Math.min(W/(s.fit.w/GEOM.pixel*1.4), H/(s.fit.h/GEOM.pixel*1.4)), 5000); }
-  else { await flyTo(q.px, q.py, Math.min(6, s.zoom), 3500); if(!alive()) return; await flyTo(q.px, q.py, s.zoom, 3000); }
+  // what this stop switches on, it switches off again on the way out
+  const undo = [];
+  if(s.layer && HIDDEN.has(s.layer)){ showLayer(s.layer); undo.push(() => { HIDDEN.add(s.layer); applyHidden(); drawRaster(); }); }
+  if(s.detail && !showDetail(s.detail)){ setDetail(s.detail, true); undo.push(() => setDetail(s.detail, false)); }
+  try{ await tourLegs(s, alive); }finally{ undo.forEach(f => f()); }
+}
+async function tourLegs(s, alive){
+  const q = toPx(s.x, s.z), W = stage.clientWidth, H = stage.clientHeight;
+  // The way there is flown high: out to where the walked world reads as a whole (or
+  // just far enough that here and there share the screen), then down onto the spot.
+  // Up close the fog is a black wall; from up there it is the world's shape.
+  const world = EXPLORED_BOX ? Math.min(W/(EXPLORED_BOX.w*1.3), H/(EXPLORED_BOX.h*1.3)) : V.fit;
+  const here = V.at(W/2, H/2), far = Math.hypot(q.px - here.px, q.py - here.py);
+  const high = Math.max(world, Math.min(V.scale, (W*0.45)/Math.max(far, 1)));
+  const down = s.fit ? Math.min(W/(s.fit.w/GEOM.pixel*1.4), H/(s.fit.h/GEOM.pixel*1.4)) : s.zoom;
+  const c = s.fit ? toPx(s.fit.cx, s.fit.cz) : q;
+  if(high < V.scale*0.8){ await flyTo(c.px, c.py, high, 3200); if(!alive()) return; }
+  await flyTo(c.px, c.py, down, s.fit ? 4500 : 4200);
   if(!alive()) return; await sleepT(2500); if(!alive()) return;
   const fog = MapCore.explored(LAYERS.imgs.fog);
   if(s.dist && (s.far || (fog && fog(q.px, q.py)))){

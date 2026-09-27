@@ -8,7 +8,10 @@
   lands -- each flown to on the map with the layer that makes it worth seeing, held, then
   circled slowly in 3D where the ground is walked, a land from kilometres up. A caption
   names the place and why. Any touch ends it and puts the layers and the sidebar back.
-  The 3D view gained `setSpin` and `setOrbitDist` for it.
+  The 3D view gained `setSpin` and `setOrbitDist` for it. A stop switches its layer back off
+  on the way out; the way between stops is flown high, where the fog reads as the world's
+  shape rather than a black wall, and a spot still under fog is not flown to; in 3D the sea
+  nobody has sailed is mist, so from far up water and the unknown read apart.
 * Back to one face. The brand, a page's title and the map's capitals are the site's own sans
   in tracked capitals again; no font is served with the pages any more.
 * The players page reads as a roster: one row per player with the four figures people
