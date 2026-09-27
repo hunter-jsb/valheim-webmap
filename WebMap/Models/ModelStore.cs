@@ -52,6 +52,8 @@ namespace WebMap.Models
         private static System.Diagnostics.Stopwatch run;
         private static int runStart, quiet;
         private static double runBusy;         // seconds from the run's first export to its last
+        // the run's worst game-thread frame, and its slowest single step and whose it was
+        private static double runFrameMs, runStepMs; private static int runStepHash;
         private static bool indexDirty;
         private static int idleTicks;
         private static volatile bool extractDone;
@@ -269,12 +271,19 @@ namespace WebMap.Models
             {
                 if (job == null && QueueLength == 0)
                 {
-                    if (indexDirty) { SaveIndex(); WriteTexturesJson(); Rebuild(); indexDirty = false; }
+                    if (indexDirty)
+                    {
+                        sw.Restart();
+                        SaveIndex(); WriteTexturesJson(); Rebuild(); indexDirty = false;
+                        runFrameMs = Math.Max(runFrameMs, sw.Elapsed.TotalMilliseconds);
+                    }
                     // a sweep queues prefabs as it meets them, so a run ends after a quiet spell, not at the first empty queue
                     if (run != null && ++quiet >= 15)
                     {
+                        string slowest = index.TryGetValue(runStepHash, out var si) && si.name != null ? si.name : "#" + runStepHash;
                         ZLog.Log($"WebMap: model export done: {Exported - runStart} prefabs in {runBusy:0}s; "
-                               + $"{Readable} with a model, {Unreadable} waiting on locked meshes, library {LibraryMB():0.0} MB");
+                               + $"{Readable} with a model, {Unreadable} waiting on locked meshes, library {LibraryMB():0.0} MB; "
+                               + $"longest frame {runFrameMs:0.0} ms, slowest step {runStepMs:0.0} ms ({slowest})");
                         run = null;
                     }
                     // once a minute (and a few seconds after the first export): fetch missing textures from the
@@ -304,7 +313,7 @@ namespace WebMap.Models
                 quiet = 0;
                 if (run == null)
                 {
-                    run = System.Diagnostics.Stopwatch.StartNew(); runStart = Exported;
+                    run = System.Diagnostics.Stopwatch.StartNew(); runStart = Exported; runFrameMs = runStepMs = 0;
                     ZLog.Log($"WebMap: exporting models into {root} as the sweep finds them, {Math.Max(2, WebMapConfig.EXPORT_MS_PER_FRAME)} ms a frame");
                 }
                 sw.Restart();
@@ -324,14 +333,18 @@ namespace WebMap.Models
                         job = cat == Rig.Cat ? ExportRig(jobHash) : ExportOne(jobHash, cat ?? "other");
                     }
                     bool more;
+                    double t0 = sw.Elapsed.TotalMilliseconds;
                     try { more = job.MoveNext(); }
                     catch (Exception e) { ZLog.LogWarning($"WebMap: model export of #{jobHash} failed: {e.Message}"); more = false; }
+                    double step = sw.Elapsed.TotalMilliseconds - t0;
+                    if (step > runStepMs) { runStepMs = step; runStepHash = jobHash; }
                     if (more) { if (job.Current == PrefabExporter.Wait) break; continue; }
                     job = null;
                     runBusy = run.Elapsed.TotalSeconds;
                     lock (queue) queued.Remove(jobHash);
                 }
                 if (Exported != before && Exported % 50 == 0 && indexDirty) { SaveIndex(); Rebuild(); }
+                runFrameMs = Math.Max(runFrameMs, sw.Elapsed.TotalMilliseconds);
                 yield return null;
             }
         }

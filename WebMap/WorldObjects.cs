@@ -39,6 +39,8 @@ namespace WebMap
         private static readonly Dictionary<int, Rock> rocks = new Dictionary<int, Rock>();
         private static readonly List<int> healthKeys = new List<int>();
 
+        // objs until the chunk is first asked for, then its bytes alone: a walked world is most
+        // of a million objects, and holding both kept every served one twice
         private sealed class Chunk { public int rev; public Obj[] objs; public byte[] bytes; }
 
         private static readonly Dictionary<int, Cat> catCache = new Dictionary<int, Cat>();
@@ -271,7 +273,11 @@ namespace WebMap
             rev = c.rev;
             byte[] cached = c.bytes;
             if (cached != null) return cached;
-            return c.bytes = Encode(c.objs);
+            lock (c)
+            {
+                if (c.bytes == null) { c.bytes = Encode(c.objs); c.objs = null; }
+                return c.bytes;
+            }
         }
 
         private static byte[] Encode(Obj[] objs)
