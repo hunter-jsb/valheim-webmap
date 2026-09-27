@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Back to one face. The brand, a page's title and the map's capitals are the site's own sans
+  in tracked capitals again; no font is served with the pages any more.
 * The players page reads as a roster: one row per player with the four figures people
   compare, and a click opens the player's page beside it while the roster steps to the
   left as a column (on a phone, one or the other, with a way back). Sort and Show are
