@@ -33,9 +33,13 @@
   --r-sm:.35rem;--r:.5rem;--r-lg:.7rem;--pill:999px;
   --shadow:0 2px 8px rgba(0,0,0,.55);--shadow-lg:0 20px 60px rgba(0,0,0,.6);
   --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --display:"Cinzel",Georgia,"Times New Roman",serif;   /* the brand, a page's title, the map's capitals: carved, not shouted */
   --mono:"Cascadia Code",Consolas,monospace;
   --nav:52px;--side:320px;--ctl:36px;   /* --ctl: a button floating over the map */
 }
+
+/* the one face of our own, served with the pages: one variable file covers every weight */
+@font-face{font-family:"Cinzel";src:url(fonts/cinzel.woff2) format("woff2");font-weight:400 900;font-display:swap}
 
 /* ---------- base ---------- */
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -51,7 +55,7 @@ button,input,textarea{font:inherit;color:inherit}
 ::-webkit-scrollbar-track{background:transparent}
 
 /* ---------- type ---------- */
-.title{font-size:1.1rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gold)}
+.title{font-family:var(--display);font-size:1.2rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--gold)}
 /* the small tracking label over a block: a section's name, a figure's caption */
 .eyebrow{font-size:.66rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .eyebrow small{display:block;font-weight:400;text-transform:none;letter-spacing:0;font-size:.66rem;opacity:.75;margin-top:.15rem}
@@ -132,7 +136,7 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
 /* ---------- nav ---------- */
 .nav{height:var(--nav);flex:0 0 auto;display:flex;align-items:center;gap:.75rem;padding:0 .9rem;
   background:var(--bg-2);border-bottom:1px solid var(--line);position:relative;z-index:30}
-.brand{font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);
+.brand{font-family:var(--display);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);
   white-space:nowrap;font-size:.95rem}
 .navlinks{margin-left:auto;display:flex;gap:1.1rem;font-size:.88rem;align-items:center;align-self:stretch;
   overflow-x:auto;scrollbar-width:none}

@@ -20,6 +20,9 @@
   `settings.tsv` beside the map data and lays it over the BepInEx config, which the host
   rewrites on restart. `GET`/`POST /settings` behind the shared token and an `X-Admin` the
   Worker sets after checking the member's roles again.
+* One face of the site's own: Cinzel, served with the pages, for the brand, a page's title
+  and the map's capitals -- continents, islands, ranges. Everything else keeps the system
+  sans. The scene repaints once the face has loaded.
 * The plan page draws the place names too, as a reference layer of its own.
 * Every write from the site -- a name, a pin, a setting -- answers with the line it logged
   (superseded below: the mod itself posts that line to Discord now).
