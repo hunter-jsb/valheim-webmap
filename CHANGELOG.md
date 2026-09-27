@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.13.0
 
 * The land has names. Once per world the mod reads the generator's own geography --
   landmasses, lakes, bays and mountain ranges from a sampled grid of biome and height,
