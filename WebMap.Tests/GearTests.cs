@@ -52,6 +52,18 @@ namespace WebMap.Tests
         }
 
         [Fact]
+        public void TheDietReadsTheFoodBehindTheBars()
+        {
+            Assert.Equal(Gear.Diet.None, Gear.DietOf(0, 0, 0));
+            Assert.Equal(Gear.Diet.Eitr, Gear.DietOf(90, 40, 60));     // one eitr food is a choice, however hearty the rest
+            Assert.Equal(Gear.Diet.Hearty, Gear.DietOf(150, 60, 0));
+            Assert.Equal(Gear.Diet.Quick, Gear.DietOf(40, 120, 0));
+            Stats.Fed(A, Gear.Diet.Hearty, 150f, 60f, 0f, 2f);
+            Assert.Equal(2, Of("diet").Int("hearty"));
+            Assert.Equal(150, Of("food").Int("hp"));
+        }
+
+        [Fact]
         public void TheWornSetIsTheLatestSeen()
         {
             Stats.Wore(A, Gear.Hand.Sword, Gear.Hand.Shield, false, Gear.Armor.Heavy,

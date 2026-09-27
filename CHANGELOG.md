@@ -68,15 +68,27 @@
   that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
   top when the creature was not yet alerted -- partial, since a hit on a creature the
   hitter's own game runs never reaches the server.
-* Players have a class. From what the mod sees in their hands and on their back, shown only
-  as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
-  with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
-  harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
-  the roster row and the player's page with its reason, a Gear group shows what they were
-  last seen wearing, and the spotlight turns through it. The class is read three ways and
-  summed -- what is worn, what is carried, held and landed, and what has been done as shares
-  of the roster's best -- so it shows from the first sample, faint until the hands or the
-  hits have said their piece; the worn set carries the two back slots for it.
+* Players have a class in three parts. The first word is a compound: what is fought with
+  gives the prefix (battle for a two-hander, blade, shield, bow, knife, spell) and the body
+  gives the root (mage, knight, warrior, rogue, brute), read from the clothes and the food
+  -- the server never sees the foods, only the health, stamina and eitr they add, so the
+  mod tallies a diet (`hearty`, `quick`, `eitr`, `balanced`, `none`) beside the armour and
+  reports the latest food-borne figures. The two make Battlemage, Spellsword, Spellguard,
+  Nightblade, Arcane Archer; Templar, Champion, Paladin, Marksman, Executioner; Warlock,
+  Reaver, Fighter, Warden, Ranger; Enchanter, Berserker, Duelist, Skirmisher, Archer,
+  Assassin; Shaman, Bruiser, Guardian, Hunter, Cutthroat; and the weapon itself colours a
+  few: Arbalist, Vanguard, Huscarl, Hoplite, Raider. Before any gear is seen, twenty deaths
+  at a worse pace than half the roster say Berserker. The second word is the trade, from
+  the deeds: the roster's top builder is the Architect, a builder who also mines an
+  Engineer, who also fells a Carpenter, who also farms a Homesteader; the roster's Slayer;
+  Builders, Miners, Lumberjacks, Farmers; a roamer an Explorer or, a third of it at sea, a
+  Seafarer; an Angler; a Wayfarer of the portals. Any part may be missing. The title sits
+  on the roster row (under the name when the list is narrow) and on the player's page with
+  its reason spelled out part by part, a Gear group shows what they were last seen wearing,
+  and the spotlight turns through it. Time in hand is the working evidence: the server
+  sees blows landed only on creatures another player owns, and skills never leave the
+  character file. Faint until ten minutes have had something in hand; the worn set carries
+  the two back slots so a mage building all night stays a mage.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
