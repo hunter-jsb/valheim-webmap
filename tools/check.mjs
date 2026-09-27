@@ -54,15 +54,15 @@ async function map() {
   const drawn = await p.until(`document.querySelectorAll("#markers .marker").length`);
   check("map: draws its markers", drawn, `${await p.ev(`document.querySelectorAll("#markers .marker").length`)} markers`);
 
-  // a mid zoom: the walked world fitted, then twice as close
+  // a mid zoom: the walked world fitted, then two steps in, by the map's own buttons
   const ready = await p.until(`FEATURES && FEATURES.length && LAYERS.ready("fog")`);
-  if (ready) await p.ev(`fitExplored(true); zoomAt(stage.clientWidth/2, stage.clientHeight/2, 2); true`);
-  const named = ready && await p.until(`NAMEVIEW && NAMEVIEW.scale === scale && NAMEBOXES.length`, 10000);
-  check("map: sets the names at a mid zoom", named, `${await p.ev("NAMEBOXES.length")} names at zoom ${await p.ev("scale.toFixed(2)")}`);
+  if (ready) for (const b of ["#zoomFit", "#zoomIn", "#zoomIn"]) await p.click(b);
+  const named = ready && await p.until(`NAMEVIEW && NAMEVIEW.scale === V.scale && NAMEBOXES.length`, 10000);
+  check("map: sets the names at a mid zoom", named, `${await p.ev("NAMEBOXES.length")} names at zoom ${await p.ev("V.scale.toFixed(2)")}`);
 
   // a name clear of every marker and control, tapped where it was drawn
   const at = named ? await p.ev(`(() => {
-    const r = stage.getBoundingClientRect(), dx = NAMEVIEW.tx - tx, dy = NAMEVIEW.ty - ty;
+    const r = stage.getBoundingClientRect(), dx = NAMEVIEW.tx - V.tx, dy = NAMEVIEW.ty - V.ty;
     for (const b of NAMEBOXES) {
       const x = r.left + (b.x0 + b.x1)/2 - dx, y = r.top + (b.y0 + b.y1)/2 - dy;
       const el = document.elementFromPoint(x, y);
@@ -78,7 +78,7 @@ async function map() {
   const group = await p.ev(`(NAME_GROUPS.flatMap(g => g[1]).find(r => r[2].includes(${JSON.stringify(kind)})) || [])[0]`);
   const opened = await p.click("#lcard") && await p.click("#namesCaret") && await p.until(`getComputedStyle(namesMenu).display !== "none"`, 3000);
   const off = opened && !!group && await p.click(`#namesMenu .frow[data-group="${group}"]`)
-    && await p.until(`NAMEVIEW.scale === scale && !NAMEBOXES.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
+    && await p.until(`NAMEVIEW.scale === V.scale && !NAMEBOXES.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
   check("map: the names flyout opens on its caret and its switch takes a kind off", off, `${kind} in "${group}"${opened ? "" : ", flyout never opened"}`);
   await p.done("map");
 }

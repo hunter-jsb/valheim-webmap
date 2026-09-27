@@ -16,8 +16,7 @@ await send("Page.navigate", { url: BASE + "/" }); await new Promise(r => setTime
 // the world fitted, then the thick of the builds at a base's zoom
 const views = {
   world: "fitExplored(true);",
-  base: "{ const c = PIECES.reduce((a, p) => [a[0] + p.px/PIECES.length, a[1] + p.py/PIECES.length], [0, 0]);"
-      + " scale = 8; tx = stage.clientWidth/2 - c[0]*scale; ty = stage.clientHeight/2 - c[1]*scale; apply(); }",
+  base: "{ const c = PIECES.reduce((a, p) => [a[0] + p.px/PIECES.length, a[1] + p.py/PIECES.length], [0, 0]); V.centre(c[0], c[1], 8); }",
 };
 const ms = (setup, step) => ev(`(async () => {
   ${setup}
@@ -28,8 +27,8 @@ const ms = (setup, step) => ev(`(async () => {
 })()`);
 console.log(await ev("({pieces: PIECES && PIECES.length, markers: document.querySelectorAll('#markers .marker').length})"));
 for (const [name, setup] of Object.entries(views)) {
-  const pan = await ms(setup, "tx += (n % 2 ? 7 : -7); ty += 3; apply()");
-  const zoom = await ms(setup, "zoomAt(stage.clientWidth/2, stage.clientHeight/2, n < 30 ? 1.03 : 1/1.03)");
+  const pan = await ms(setup, "V.tx += (n % 2 ? 7 : -7); V.ty += 3; V.request()");
+  const zoom = await ms(setup, "V.zoomBy(n < 30 ? 1.03 : 1/1.03)");
   console.log(name, { pan, zoom });
 }
 if (errors.length) console.log("errors", errors);
