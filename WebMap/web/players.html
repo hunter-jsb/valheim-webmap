@@ -88,7 +88,12 @@
   .radar.big .pt{fill:var(--gold)}
   .radar.big .lb{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;fill:var(--muted)}
   .radar.big .lv{font-size:9px;fill:var(--ink-2);font-variant-numeric:tabular-nums}
-  .figs{display:grid;gap:.6rem .5rem;grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}
+  .groups{display:grid;gap:.75rem}
+  .group{padding-top:.6rem;border-top:1px solid var(--line)}
+  .group:first-child{padding-top:0;border-top:0}
+  .group .eyebrow{margin-bottom:.45rem}
+  .group .line{margin-top:.45rem}
+  .figs{display:grid;gap:.5rem .5rem;grid-template-columns:repeat(4,minmax(0,1fr))}
   .figs .v{font-size:1.15rem;margin-top:0}
   .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
   .fig.nil .v{color:var(--nil);font-weight:600}
@@ -127,7 +132,8 @@
     .dhead .back{display:inline-flex}
     .row .mini{gap:.3rem}
     .top{grid-template-columns:1fr;justify-items:center}
-    .top .figs{width:100%}
+    .top .groups{width:100%}
+    .figs{grid-template-columns:repeat(3,minmax(0,1fr))}
   }
   @keyframes slidein{from{opacity:0;transform:translateX(24px)}}
 </style>
@@ -408,23 +414,31 @@ function renderDetail(){
       + `${num(runs.rescued) ? ` &#183; ${num(runs.rescued)} rescued by others` : ""}`
       + `${num(runs.open) ? ` &#183; <a href="index.html#layers=grave" class="bad">${num(runs.open)} out there</a>` : ""}`
       + `${num(runm.best) ? ` &#183; longest run ${km(runm.best)} km` : ""}</div>` : "";
-  const html = `<div class="top"><div class="figs">`
-    + fig(num(p.deaths), "deaths", nil(num(p.deaths)))
-    + fig(km(p.dist_m), "km", num(p.dist_m) ? "" : "nil")
-    + fig(per(p.deaths, p.dist_m).replace("1 per ", ""), "km per death", num(p.deaths) && num(p.dist_m) ? "" : "nil", "one death every so many km walked")
-    + fig(calls, "close calls", calls ? "warn" : "nil", calls ? "lowest survived: " + Math.round(lowest*100) + "% health" : "")
-    + fig(num(p.kills), "kills", nil(num(p.kills)))
-    + fig(num(p.trees), "trees felled", nil(num(p.trees)))
-    + fig(num(p.rocks), "rocks broken", nil(num(p.rocks)))
-    + fig(num(p.hops), "hops", nil(num(p.hops)))
-    + fig(num(p.pieces), "pieces", nil(num(p.pieces)))
-    + fig(num(p.portals), "portals", nil(num(p.portals)))
-    + fig(num(p.ships), "ships", nil(num(p.ships)))
-    + fig(num(p.pins), "pins", nil(num(p.pins)))
-    + fig(num(p.chat), "chat", nil(num(p.chat)))
-    + fig(num(p.joins), "joins", nil(num(p.joins)))
-    + fig(graves, graves ? "gear still out" : "graves", graves ? "warn" : "nil")
-    + `</div>` + radar(p, 232, true) + `</div>` + biomeRows(p) + streakLine + runLine;
+  const group = (name, figs, more) => `<section class="group"><h3 class="eyebrow">${name}</h3><div class="figs">${figs}</div>${more || ""}</section>`;
+  const html = `<div class="top"><div class="groups">`
+    + group("Survival",
+        fig(num(p.deaths), "deaths", nil(num(p.deaths)))
+        + fig(per(p.deaths, p.dist_m).replace("1 per ", ""), "km per death", num(p.deaths) && num(p.dist_m) ? "" : "nil", "one death every so many km walked")
+        + fig(calls, "close calls", calls ? "warn" : "nil", calls ? "lowest survived: " + Math.round(lowest*100) + "% health" : "")
+        + fig(graves, graves ? "gear still out" : "graves", graves ? "warn" : "nil"),
+        streakLine + runLine)
+    + group("Journeys",
+        fig(km(p.dist_m), "km", num(p.dist_m) ? "" : "nil")
+        + fig(num(p.hops), "hops", nil(num(p.hops)))
+        + (BEST.sea > 0 ? fig(km(sea(p)), "km at sea", sea(p) ? "" : "nil") : ""))
+    + group("Deeds",
+        fig(num(p.kills), "kills", nil(num(p.kills)))
+        + fig(num(p.trees), "trees felled", nil(num(p.trees)))
+        + fig(num(p.rocks), "rocks broken", nil(num(p.rocks))))
+    + group("Building",
+        fig(num(p.pieces), "pieces", nil(num(p.pieces)))
+        + fig(num(p.portals), "portals", nil(num(p.portals)))
+        + fig(num(p.ships), "ships", nil(num(p.ships)))
+        + fig(num(p.pins), "pins", nil(num(p.pins))))
+    + group("Presence",
+        fig(num(p.joins), "joins", nil(num(p.joins)))
+        + fig(num(p.chat), "chat lines", nil(num(p.chat))))
+    + `</div>` + radar(p, 232, true) + `</div>` + biomeRows(p);
   if(html !== DLAST){ body.innerHTML = html; DLAST = html; }
   if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
 }

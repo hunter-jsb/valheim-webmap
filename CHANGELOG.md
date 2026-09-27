@@ -10,7 +10,8 @@
   page says where they are in the world's own names, with a link to the spot. Each player
   has a pentagon -- Explorer (km, portal hops and km at sea together), Builder (pieces),
   Survivor (km per death), Slayer (kills), Harvester (trees and rocks together), each side
-  a share of the roster's best, square-rooted -- small on the row and labelled on the page. Picking a player slides the page open.
+  a share of the roster's best, square-rooted -- small on the row and labelled on the page. Picking a player slides the page open, and its figures read
+  in five groups: Survival, Journeys, Deeds, Building, Presence.
 
 ## 2.14.0
 
