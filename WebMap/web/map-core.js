@@ -852,12 +852,14 @@ try{
 }catch(e){}
 const authHeaders = () => session ? {authorization: "Bearer " + session} : {};
 const user = () => me;
+let asked = null, signInHere = false;     // the nav's one question a page, and whether this deployment signs in
 async function whoami(){
   let r;
   try{ r = await fetch(cfg.api + "/auth/me", {headers: authHeaders(), cache: "no-store"}); }catch(e){ return null; }
   if(r.status === 200){ me = await r.json(); }
   else if(r.status === 401){ me = null; if(session){ session = null; try{ localStorage.removeItem("xnv.session"); }catch(e){} } }
   else return null;                        // no sign-in here
+  signInHere = true;
   renderWho();
   return me;
 }
@@ -893,7 +895,8 @@ function nav(current, el){
     + cfg.links.map(l => `<a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")
     + '</span><span class="who"></span></div>';
   if(side){ el.querySelector(".sidebtn").addEventListener("click", () => toggleSide()); applySide(); }
-  whoami();
+  // drawn again once /config names the world: the answer already had is drawn, not asked again
+  if(!asked) asked = whoami(); else if(signInHere) renderWho();
   setTitle(current);
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", credits, {once: true});
   else credits();
