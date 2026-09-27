@@ -18,7 +18,8 @@ namespace WebMap
         public enum Hand { None, Bow, Crossbow, Staff, Shield, Knife, Sword, Axe, Mace, Spear, Polearm, Hammer, Hoe, Cultivator, Pickaxe, Torch, Fishing, Tool, TwoHanded }
         public enum Armor { None, Light, Medium, Heavy, Mage }
         public enum Hit { Melee, Ranged, Magic, Backstab }
-        public static readonly string[] HandNames = Lower(typeof(Hand)), ArmorNames = Lower(typeof(Armor)), HitNames = Lower(typeof(Hit));
+        public enum Diet { None, Hearty, Quick, Eitr, Balanced }
+        public static readonly string[] HandNames = Lower(typeof(Hand)), ArmorNames = Lower(typeof(Armor)), HitNames = Lower(typeof(Hit)), DietNames = Lower(typeof(Diet));
         public static readonly string[] Slots = { "right", "left", "chest", "legs", "helmet", "shoulder", "rightBack", "leftBack" };
         private static string[] Lower(Type e) => Array.ConvertAll(Enum.GetNames(e), n => n.ToLowerInvariant());
 
@@ -103,6 +104,23 @@ namespace WebMap
         }
         private static string Name(int hash) => hash != 0 ? Of(hash).name : null;
 
+        // A player's food never reaches the server; the health, stamina and eitr it adds do.
+        // max_health is synced, and stamina and eitr refill to their food-borne maxima whenever
+        // the player stands still, so a slowly fading peak of each stands in for the maximum.
+        private const float BaseHp = 25f, BaseStamina = 75f, PeakFadePerSecond = 0.5f;
+        private struct Peak { public float st, eitr; }
+        private static readonly Dictionary<string, Peak> peaks = new Dictionary<string, Peak>();
+
+        // One eitr food is a choice; otherwise health against stamina, half again as much to lean.
+        public static Diet DietOf(float hp, float st, float eitr)
+        {
+            if (hp + st + eitr < 30f) return Diet.None;
+            if (eitr >= 40f) return Diet.Eitr;
+            if (hp >= st * 1.5f) return Diet.Hearty;
+            if (st >= hp * 1.5f) return Diet.Quick;
+            return Diet.Balanced;
+        }
+
         // Once per online player per snapshot; nothing while dead or in bed.
         public static void Sample(string player, ZDO z, float seconds)
         {
@@ -120,6 +138,13 @@ namespace WebMap
                     Name(z.GetInt(ZDOVars.s_rightBackItem)), Name(z.GetInt(ZDOVars.s_leftBackItem)),
                 };
                 Stats.Wore(player, ri.hand, li.hand, ri.twoHanded || li.twoHanded, ci.armor, worn, seconds);
+                float hp = Math.Max(0f, z.GetFloat(ZDOVars.s_maxHealth, BaseHp) - BaseHp);
+                peaks.TryGetValue(player, out Peak pk);
+                pk.st = Math.Max(z.GetFloat(ZDOVars.s_stamina, 0f), pk.st - PeakFadePerSecond * seconds);
+                pk.eitr = Math.Max(z.GetFloat(ZDOVars.s_eitr, 0f), pk.eitr - PeakFadePerSecond * seconds);
+                peaks[player] = pk;
+                float st = Math.Max(0f, pk.st - BaseStamina);
+                Stats.Fed(player, DietOf(hp, st, pk.eitr), hp, st, pk.eitr, seconds);
             }
             catch (Exception e)
             {

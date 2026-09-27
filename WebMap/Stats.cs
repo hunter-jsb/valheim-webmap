@@ -47,6 +47,7 @@ namespace WebMap
             public double[] hand = new double[Gear.HandNames.Length], armor = new double[Gear.ArmorNames.Length];
             public string[] worn = new string[Gear.Slots.Length];
             public int[] hits = new int[Gear.HitNames.Length];
+            public double[] diet = new double[Gear.DietNames.Length]; public float foodHp, foodSt, foodEitr;   // seconds per diet, and the latest food-borne figures
             public string look; public int yaw;          // RigExporter's look JSON as last seen, for a page to draw them offline
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
@@ -217,6 +218,17 @@ namespace WebMap
                 dirty = true; jsonStale = true;
             }
         }
+        public static void Fed(string name, Gear.Diet diet, float hp, float st, float eitr, float seconds)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            lock (gate)
+            {
+                var p = Get(name);
+                p.diet[(int)diet] += seconds;
+                p.foodHp = hp; p.foodSt = st; p.foodEitr = eitr;
+                dirty = true; jsonStale = true;
+            }
+        }
 
         // Game thread, as /state's players are built. A look changes only with the gear, so
         // the same one a second later marks nothing for a rebuild or a save.
@@ -372,6 +384,8 @@ namespace WebMap
                     sb.Append(FormattableString.Invariant($",\"run_m\":{{\"total\":{Math.Round(p.runM)},\"best\":{Math.Round(p.runBestM)}}}"));
                     sb.Append(",\"gear\":{\"hand\":"); Seconds(sb, p.hand, Gear.HandNames);
                     sb.Append(",\"armor\":"); Seconds(sb, p.armor, Gear.ArmorNames);
+                    sb.Append(",\"diet\":"); Seconds(sb, p.diet, Gear.DietNames);
+                    sb.Append(FormattableString.Invariant($",\"food\":{{\"hp\":{Math.Round(p.foodHp)},\"st\":{Math.Round(p.foodSt)},\"eitr\":{Math.Round(p.foodEitr)}}}"));
                     sb.Append(",\"worn\":{");
                     bool wf = true;
                     for (int i = 0; i < p.worn.Length; i++)
@@ -463,12 +477,19 @@ namespace WebMap
                                 if (f.Length >= 5) int.TryParse(f[4], out p.dBiome[c]);
                             }
                         }
-                        else if (f.Length >= 4 && (f[0] == "h" || f[0] == "a"))   // seconds with a hand family, or in a chest class
+                        else if (f.Length >= 4 && (f[0] == "h" || f[0] == "a" || f[0] == "e"))   // seconds with a hand family, in a chest class, or eating a diet
                         {
                             var p = Get(f[1]);
-                            double[] into = f[0] == "h" ? p.hand : p.armor;
-                            int k = Array.IndexOf(f[0] == "h" ? Gear.HandNames : Gear.ArmorNames, f[2]);
+                            double[] into = f[0] == "h" ? p.hand : f[0] == "a" ? p.armor : p.diet;
+                            int k = Array.IndexOf(f[0] == "h" ? Gear.HandNames : f[0] == "a" ? Gear.ArmorNames : Gear.DietNames, f[2]);
                             if (k >= 0) double.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out into[k]);
+                        }
+                        else if (f.Length >= 5 && f[0] == "n")        // the food-borne figures as last seen
+                        {
+                            var p = Get(f[1]);
+                            float.TryParse(f[2], NumberStyles.Float, CultureInfo.InvariantCulture, out p.foodHp);
+                            float.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out p.foodSt);
+                            float.TryParse(f[4], NumberStyles.Float, CultureInfo.InvariantCulture, out p.foodEitr);
                         }
                         else if (f.Length >= 2 && f[0] == "w")        // the set last worn, empty where nothing was
                         {
@@ -543,6 +564,9 @@ namespace WebMap
                             if (p.hand[i] > 0) sb.Append(FormattableString.Invariant($"h\t{p.name}\t{Gear.HandNames[i]}\t{p.hand[i]:0.#}\n"));
                         for (int i = 0; i < p.armor.Length; i++)
                             if (p.armor[i] > 0) sb.Append(FormattableString.Invariant($"a\t{p.name}\t{Gear.ArmorNames[i]}\t{p.armor[i]:0.#}\n"));
+                        for (int i = 0; i < p.diet.Length; i++)
+                            if (p.diet[i] > 0) sb.Append(FormattableString.Invariant($"e\t{p.name}\t{Gear.DietNames[i]}\t{p.diet[i]:0.#}\n"));
+                        if (p.foodHp + p.foodSt + p.foodEitr > 0) sb.Append(FormattableString.Invariant($"n\t{p.name}\t{p.foodHp:0.#}\t{p.foodSt:0.#}\t{p.foodEitr:0.#}\n"));
                         if (Array.Exists(p.worn, w => w != null))
                             sb.Append("w\t").Append(p.name).Append('\t').Append(string.Join("\t", Array.ConvertAll(p.worn, w => w ?? ""))).Append('\n');
                         if (Array.Exists(p.hits, n => n > 0))

@@ -313,6 +313,13 @@ so once a second, while alive and out of bed, the server adds a second to:
   (bronze, iron, wolf, padded, carapace, flametal: 5%), `mage` whatever speeds eitr
   (eitr-weave), `none` bare.
 
+`diet` is seconds by what the food behind the bars leans to: `hearty` (health half
+again the stamina), `quick` (the other way), `eitr` (forty or more of it, one eitr food),
+`balanced`, `none` (under thirty of anything). The server never sees the foods, only the
+max health they set and the stamina and eitr they refill to when the player stands
+still, so a slowly fading peak of each stands in for the maximum; `food` is the latest
+`hp`, `st` and `eitr` above the base 25 and 75.
+
 `worn` is the latest set: `right`, `left` (a sheathed weapon still counts), `chest`,
 `legs`, `helmet`, `shoulder`, and the two back slots `rightBack` and `leftBack`, by prefab name. **`hits`** are colour, not a record: a hit
 on a creature counts only when it passes through the server on its way to another
