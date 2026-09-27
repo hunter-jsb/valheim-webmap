@@ -6,10 +6,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const src = readFileSync(new URL("../../WebMap/web/map-core.js", import.meta.url), "utf8");
+const stored = {};
 const browser = {
   window: {},                                            // no site-config.js: the mod's own defaults
-  document: {readyState: "complete", addEventListener(){}, querySelector: () => null, querySelectorAll: () => []},
-  localStorage: {getItem: () => null, setItem(){}, removeItem(){}},
+  document: {readyState: "complete", addEventListener(){}, querySelector: () => null, querySelectorAll: () => [], body: {classList: {toggle(){}}}},
+  localStorage: {getItem: k => stored[k] ?? null, setItem(k, v){ stored[k] = v; }, removeItem(k){ delete stored[k]; }},
+  dispatchEvent(){},
   matchMedia: () => ({matches: false, addEventListener(){}}),
   location: {hash: "", pathname: "/", search: "", href: "http://localhost/"},
   history: {replaceState(){}},
@@ -120,4 +122,12 @@ test("a boat is drawn as its hull, and one the viewer has never heard of is stil
   assert.deepEqual(MapCore.vehicleStyle({kind: "boat", name: "Drakkar"}), {icon: "karve", label: "Drakkar", size: 18});
   assert.equal(MapCore.vehicleStyle({kind: "cart", name: "Wagon"}).icon, "cart");
   assert.equal(MapCore.vehicleStyle({kind: "boat"}).label, "Boat");
+});
+
+// A tab closed mid-tour left every page of the site with its sidebar folded.
+test("the tour folds the sidebar without making it the site's choice", () => {
+  MapCore.toggleSide(false, false);
+  assert.equal(stored["xnv.side"], undefined);
+  MapCore.toggleSide(false);
+  assert.equal(stored["xnv.side"], "closed");
 });

@@ -812,7 +812,8 @@ function credits(){
 }
 // The sidebar, folded or not, is one choice for the whole site, kept in this
 // browser; a phone ignores it and starts with its drawer shut. A toggle fires
-// resize so a stage that fills the rest re-measures itself.
+// resize so a stage that fills the rest re-measures itself. The tour folds it without
+// remembering: a tab closed mid-tour must not leave every page folded.
 const PHONE = typeof matchMedia === "function" ? matchMedia("(max-width:760px)") : {matches: false};
 let sideOpen = true;
 function applySide(){
@@ -820,10 +821,10 @@ function applySide(){
   catch(e){ sideOpen = !PHONE.matches; }
   document.body.classList.toggle("side-open", sideOpen);
 }
-function toggleSide(on){
+function toggleSide(on, remember = true){
   sideOpen = on === undefined ? !sideOpen : !!on;
   document.body.classList.toggle("side-open", sideOpen);
-  if(!PHONE.matches){ try{ localStorage.setItem("xnv.side", sideOpen ? "open" : "closed"); }catch(e){} }
+  if(remember && !PHONE.matches){ try{ localStorage.setItem("xnv.side", sideOpen ? "open" : "closed"); }catch(e){} }
   dispatchEvent(new Event("resize"));
 }
 if(typeof document !== "undefined"){

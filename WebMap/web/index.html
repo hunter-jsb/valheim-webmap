@@ -1297,11 +1297,12 @@ const tourBtn = document.getElementById("tourBtn"), tourCap = document.getElemen
 const sleepT = ms => new Promise(r => setTimeout(r, ms));
 function flyTo(px, py, scale, ms){
   return new Promise(res => {
-    const W = stage.clientWidth, H = stage.clientHeight, s0 = V.scale, c0 = V.at(W/2, H/2), t0 = performance.now(), run = TOUR.run;
+    const s0 = V.scale, c0 = V.at(stage.clientWidth/2, stage.clientHeight/2), t0 = performance.now(), run = TOUR.run;
     const step = () => {
       const t = Math.min(1, (performance.now() - t0)/ms), e = t < .5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
       const s = Math.exp(Math.log(s0) + (Math.log(scale) - Math.log(s0))*e), cx = c0.px + (px - c0.px)*e, cy = c0.py + (py - c0.py)*e;
-      V.scale = s; V.tx = W/2 - cx*s; V.ty = H/2 - cy*s; V.request();
+      // the stage measured each frame: a window resized in flight still lands on the spot
+      V.scale = s; V.tx = stage.clientWidth/2 - cx*s; V.ty = stage.clientHeight/2 - cy*s; V.request();
       if(t < 1 && TOUR.on && TOUR.run === run) requestAnimationFrame(step); else res();   // a stopped tour lets its flight go
     };
     requestAnimationFrame(step);
@@ -1408,7 +1409,9 @@ async function tourStop(s, run){
   const undo = [];
   if(s.layer && HIDDEN.has(s.layer)){ showLayer(s.layer); undo.push(() => { HIDDEN.add(s.layer); applyHidden(); drawRaster(); }); }
   if(s.detail && !showDetail(s.detail)){ setDetail(s.detail, true); undo.push(() => setDetail(s.detail, false)); }
-  try{ await tourLegs(s, alive); }finally{ undo.forEach(f => f()); }
+  // a stopped run's layers were put back by stopTour; undoing them again would switch off
+  // what the viewer, or a tour started since, has switched on
+  try{ await tourLegs(s, alive); }finally{ if(alive()) undo.forEach(f => f()); }
 }
 async function tourLegs(s, alive){
   const q = toPx(s.x, s.z), W = stage.clientWidth, H = stage.clientHeight;
@@ -1433,8 +1436,8 @@ async function tourLegs(s, alive){
     await enter3D(s.x, s.z, Math.random()*360); if(!alive()) return;
     if(V3D){ V3D.setOrbitDist(s.dist); V3D.setMode("orbit"); v3dEl.classList.add("orbit"); V3D.setSpin(s.far ? 2.5 : 6); }
     await sleepT(s.far ? 22000 : 15000);
+    if(!alive()) return;             // stopTour stilled it; a tour started since may be circling now
     if(V3D) V3D.setSpin(0);
-    if(!alive()) return;
     leave3D(true);
   }
   await sleepT(1500);
@@ -1452,7 +1455,7 @@ function startTour(){
   TOUR.on = true;
   TOUR.keep = {details: new Set(DETAILS), off: new Set(OFF), hidden: new Set(HIDDEN), side: document.body.classList.contains("side-open")};
   document.body.classList.add("tour"); tourBtn.classList.add("on"); tourBtn.innerHTML = "&#9632;"; tourBtn.title = "Stop the tour";
-  closeCard(); armPeg(false); layersEl.classList.remove("open"); MapCore.toggleSide(false);
+  closeCard(); armPeg(false); layersEl.classList.remove("open"); MapCore.toggleSide(false, false);
   runTour();
 }
 function stopTour(){
@@ -1463,7 +1466,7 @@ function stopTour(){
   if(V3D){ V3D.setMode("street"); v3dEl.classList.remove("orbit"); }
   const k = TOUR.keep;
   if(k){ DETAILS.clear(); k.details.forEach(x => DETAILS.add(x)); OFF.clear(); k.off.forEach(x => OFF.add(x)); HIDDEN.clear(); k.hidden.forEach(x => HIDDEN.add(x));
-         markDetails(); applyHidden(); drawRaster(); MapCore.toggleSide(k.side); }
+         markDetails(); applyHidden(); drawRaster(); MapCore.toggleSide(k.side, false); }
   tourCap.classList.remove("show"); setTimeout(() => { if(!TOUR.on) tourCap.hidden = true; }, 700);
   document.body.classList.remove("tour"); tourBtn.classList.remove("on"); tourBtn.innerHTML = "&#9654;"; tourBtn.title = "Cinematic: a tour of the world's places, in 3D where the ground is walked. Any touch ends it.";
 }

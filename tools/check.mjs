@@ -51,7 +51,7 @@ async function open(path) {
     if (OUT) writeFileSync(`${OUT}/${name}.png`, Buffer.from((await send("Page.captureScreenshot", { format: "png" })).data, "base64"));
     ws.close(); await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
   };
-  return { ev, until, tap, click, drag, done };
+  return { ev, until, tap, click, drag, done, send };
 }
 
 async function map() {
@@ -174,6 +174,30 @@ async function view3d() {
   await p.done("3d");
 }
 
+// The tour's own faults: a flight whose window is resized under it, and a tour stopped
+// mid-stop and started again, whose old stop wakes into the new tour.
+async function tour() {
+  const c = await (await fetch(BASE + "/config")).json();
+  const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
+  const p = await open("/");
+  await p.until(`FEATURES && FEATURES.length && LAYERS_READY && PIECES_ALL`);
+  await p.send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
+  await p.ev(`void (TOUR.on = true, flyTo(1000, 1000, 4, 2000).then(() => { const q = V.at(stage.clientWidth/2, stage.clientHeight/2); window.__off = Math.hypot(q.px - 1000, q.py - 1000)*4; }))`);
+  await sleep(700);
+  await p.send("Emulation.setDeviceMetricsOverride", { width: 1000, height: 700, deviceScaleFactor: 1, mobile: false });
+  const off = await p.until(`window.__off !== undefined`, 10000) && await p.ev(`window.__off`);
+  check("tour: a flight resized under it lands on its spot", off !== false && off < 2, `${off.toFixed ? off.toFixed(0) : off} px off`);
+  await p.ev(`void (TOUR.on = false, HIDDEN.add("portal"), applyHidden(), startTour(), TOUR.run++,
+    window.__old = tourStop({kind: "", title: "", line: "", x: ${x}, z: ${z}, zoom: 30, dist: 100, layer: "portal"}, TOUR.run).then(() => window.__woke = true))`);
+  const circling = await p.until(`IN3D && V3D && V3D.spin > 0`, 60000);
+  await p.ev(`void (stopTour(), HIDDEN.delete("portal"), applyHidden(), TOUR.on = true, TOUR.run++, enter3D(${x}, ${z}, 0).then(() => { V3D.setMode("orbit"); V3D.setSpin(6); }))`);
+  const woke = circling && await p.until(`window.__woke`, 30000);
+  const after = await p.ev(`({spin: V3D && V3D.spin, portals: !HIDDEN.has("portal")})`) || {};
+  check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals, JSON.stringify(after));
+  await p.ev(`stopTour()`);
+  await p.done("tour");
+}
+
 async function plan() {
   const p = await open("/plan.html");
   const ok = await p.until(`RASTER.ready("base") && RASTER.ready("fog") && PIECES_ALL && PIECES_ALL.length`);
@@ -181,7 +205,7 @@ async function plan() {
   await p.done("plan");
 }
 
-for (const page of [map, view3d, world, portals, players, plan]) {
+for (const page of [map, view3d, tour, world, portals, players, plan]) {
   try { await page(); } catch (e) { check(`${page.name}: runs`, false, e.message); }
 }
 process.exit(failed ? 1 : 0);
