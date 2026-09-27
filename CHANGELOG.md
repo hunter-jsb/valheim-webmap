@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+* Players have a class. From what the mod sees in their hands and on their back, shown only
+  as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
+  with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
+  harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
+  the roster row and the player's page with its reason, a Gear group shows what they were
+  last seen wearing, and the spotlight turns through it.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
