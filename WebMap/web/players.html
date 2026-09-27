@@ -65,6 +65,7 @@
   .row .seen{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
   .cls{display:inline-block;padding:.1rem .45rem;border-radius:var(--pill);border:1px solid var(--line);background:var(--hair);font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);white-space:nowrap;flex:0 0 auto}
   .dhead .cls{font-size:.68rem;padding:.15rem .55rem}
+  .cls.early{color:var(--muted);border-style:dashed}
   .figs .fig.txt .v{font-size:.82rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row.ok .seen{color:var(--ok)}
   .row .mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin-top:.4rem}
@@ -193,7 +194,7 @@
         <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
         <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
         <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them, or, when your own game was running the fight, with you standing there; a creature that despawns is nobody's kill.</li>
-        <li><b>Class</b> — from what you hold and wear, sampled once a second and shown only as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives with light armour a rogue, other weapons a fighter, the hammer a builder, the pickaxe a harvester. Under ten minutes holding anything, nobody is anything yet.</li>
+        <li><b>Class</b> — from what you hold and wear, sampled once a second and shown only as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives with light armour a rogue, other weapons a fighter, the hammer a builder, the pickaxe a harvester. A class shows from the first minute with something in hand, dashed and faint until ten.</li>
         <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees and rocks together.</li>
         <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
         <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
@@ -315,7 +316,8 @@ const FAMILY_WORD = {bow: "a bow", crossbow: "a crossbow", staff: "a staff", shi
 function classify(p){
   const g = p.gear, hand = g && g.hand ? g.hand : null; if(!hand) return null;
   const held = Object.entries(hand).filter(([k]) => k !== "none" && k !== "twohanded"), total = held.reduce((t, [, v]) => t + num(v), 0);
-  if(total < 600) return null;
+  if(total < 60) return null;
+  const early = total < 600;      // a first reading: shown, but faint until ten minutes have something in hand
   const sh = (...fams) => fams.reduce((t, f) => t + num(hand[f]), 0)/total;
   const arm = g.armor || {}, armTotal = Object.values(arm).reduce((t, v) => t + num(v), 0) || 1, ash = k => num(arm[k])/armTotal;
   const hits = g.hits || {}, stabs = num(hits.backstab)/Math.max(1, num(hits.melee) + num(hits.ranged) + num(hits.magic));
@@ -328,11 +330,11 @@ function classify(p){
     ["Builder", sh("hammer", "hoe", "cultivator")],
     ["Harvester", sh("pickaxe") + sh("axe")*0.5],
   ].sort((a, b) => b[1] - a[1]);
-  const [name, score] = scores[0]; if(score < 0.2) return {name: "Wanderer", why: "nothing in hand often enough to say"};
+  const [name, score] = scores[0]; if(score < 0.2) return {name: "Wanderer", why: "nothing in hand often enough to say", early};
   // the reason names the class's own item: a tank's shield, not the sword beside it
   const OWN = {Archer: ["bow", "crossbow"], Mage: ["staff"], Tank: ["shield"], Rogue: ["knife"], Fighter: ["sword", "mace", "spear", "polearm", "axe"], Builder: ["hammer", "hoe", "cultivator"], Harvester: ["pickaxe", "axe"]};
   const own = held.filter(([k]) => OWN[name].includes(k)).sort((a, b) => num(b[1]) - num(a[1]))[0] || held.slice().sort((a, b) => num(b[1]) - num(a[1]))[0];
-  return {name, why: `${FAMILY_WORD[own[0]] || own[0]} in hand ${Math.round(100*num(own[1])/total)}% of the time`, top: held.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3).map(([k, v]) => ({fam: k, share: num(v)/total}))};
+  return {name, early, why: `${FAMILY_WORD[own[0]] || own[0]} in hand ${Math.round(100*num(own[1])/total)}% of the time${early ? ", early days" : ""}`, top: held.slice().sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3).map(([k, v]) => ({fam: k, share: num(v)/total}))};
 }
 const itemWord = n => String(n || "").replace(/^(Armor|Helmet|Cape)/, "").replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
 function gearGroup(p){
@@ -345,7 +347,7 @@ const mini = (v, k, cls) => `<span class="m${cls ? " " + cls : ""}"><span class=
 function row(p){
   const on = !!p.online, d = num(p.deaths), m = num(p.dist_m);
   return `<button class="row${on ? " ok" : ""}${PICK === p.name ? " pick" : ""}" type="button" data-name="${esc(p.name || "")}">`
-    + `<span class="rh"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>${(c => c ? `<span class="cls" title="${esc(c.why)}">${c.name}</span>` : "")(classify(p))}`
+    + `<span class="rh"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>${(c => c ? `<span class="cls${c.early ? " early" : ""}" title="${esc(c.why)}">${c.name}</span>` : "")(classify(p))}`
     + `<span class="seen">${on ? "online now" : seen(num(p.last_seen))}</span></span>`
     + `<span class="mini">` + mini(d, "deaths", d ? "" : "nil") + mini(km(m), "km", m ? "" : "nil")
     + mini(per(d, m).replace("1 per ", ""), "per death", d && m ? "" : "nil")
@@ -402,7 +404,7 @@ function renderDetail(){
   const where = on && WHERE && WHERE.name === p.name ? ` <i>· ${esc(WHERE.text)}</i>` : "";
   head.className = "dhead" + (on ? " ok" : "");
   head.innerHTML = `<button class="btn quiet back" id="back">&larr; Players</button>`
-    + `<h2><span class="dot${on ? " ok" : ""}"></span>${esc(p.name)}${cls ? `<span class="cls" title="${esc(cls.why)}">${cls.name}</span>` : ""}</h2>`
+    + `<h2><span class="dot${on ? " ok" : ""}"></span>${esc(p.name)}${cls ? `<span class="cls${cls.early ? " early" : ""}" title="${esc(cls.why)}">${cls.name}</span>` : ""}</h2>`
     + `<span class="state">${on ? "online now" : seen(num(p.last_seen))}${where}${cls ? ` <i>· ${esc(cls.why)}</i>` : ""}</span>`
     + `<span class="links">`
     + (here ? `<a class="btn quiet" href="index.html#at=${Math.round(here.x)},${Math.round(here.z)},20" title="Where they stand now">On the map</a>` : "")
