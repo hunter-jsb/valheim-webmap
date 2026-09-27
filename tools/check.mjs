@@ -252,11 +252,11 @@ async function tour() {
   check("tour: across two cycles the 3D view's geometries and textures level off", !!(c1 && c2) && c2.g <= c1.g*1.3 + 300 && c2.t <= c1.t*1.3 + 60 && c2.n <= 1600,
         per.map((r, i) => `cycle ${i + 1}: at most ${r.g} geometries, ${r.t} textures, ${r.n} chunks`).join("; "));
   await p.ev(`stopTour()`); await sleep(900);
-  const left = await p.ev(`Object.assign(${was}, {spin: V3D.spin, dist: V3D.orbitDist, mode: V3D.mode, eye: V3D.eye, ahead: V3D.ahead.length, jobs: V3D.jobs.length, moves: V3D.moves.length,
+  const left = await p.ev(`Object.assign(${was}, {spin: V3D.spin, dist: V3D.orbitDist, mode: V3D.mode, eye: V3D.eye, ahead: V3D.ahead.length, jobs: V3D.jobs.length, moves: V3D.moves.length, held: V3D.held,
     in3d: IN3D, tour: document.body.classList.contains("tour"), cap: tourCap.hidden, fig: tourFig.hidden, card: pcard.hidden})`) || {};
   const back = ["hidden", "details", "off", "side"].every(k => left[k] === before[k]);
-  check("tour: stopping it puts back every layer, the sidebar and the 3D view, and lets what it was building go",
-        back && left.spin === 0 && left.dist === 140 && left.mode === "street" && left.eye === 1.8 && !left.ahead && !left.jobs && !left.moves && !left.in3d && !left.tour && left.cap && left.fig && left.card,
+  check("tour: stopping it puts back every layer, the sidebar, the 3D view's camera and clock, and lets what it was building go",
+        back && left.spin === 0 && left.dist === 140 && left.mode === "street" && left.eye === 1.8 && !left.ahead && !left.jobs && !left.moves && left.held === null && !left.in3d && !left.tour && left.cap && left.fig && left.card,
         JSON.stringify(left));
   await p.done("tour");
 }

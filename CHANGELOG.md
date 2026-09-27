@@ -14,7 +14,8 @@
   from far off, a land at a slant of its own, a flight across a settlement; or at eye height, in
   a base's yard with a slow pan, walking through the settlement or along the shore, out to sea
   from a dock, down from a summit, round the gates of a hub, a stand chosen to see out rather
-  than into a wall or a rock. The map lands at a zoom of the stop's kind, drifts across the
+  than into a wall or a rock -- each beat lit at a time of its own (a land from afar or a coast
+  at the low sun, the rest by day or toward dusk) and the live clock given back after. The map lands at a zoom of the stop's kind, drifts across the
   biggest builds at plan zoom and sometimes pulls slowly back. A caption carries a strip of
   figures matched to the place, and every third or fourth stop is one of the world's figures
   over a far drift of the map. The 3D view builds the next place while the current one plays --

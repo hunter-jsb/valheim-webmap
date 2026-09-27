@@ -1691,7 +1691,8 @@ function standClear(v, x, z, pan, eye, aim, reach = {things: 10, ground: 50}){
     let d = 5; for(; d <= reach.ground; d += 5){ const h = v.heightAt(px + dx*d, pz + dz*d); if(h !== null && h > y) break; }
     return Math.min(d/reach.ground, v.clearance(px, pz, a, eye, reach.things, false)/reach.things); };
   const score = (px, pz) => { const h = v.heightAt(px, pz); if(h === null || h < v.waterLevel + 0.3 || (walked && !walked(px, pz))) return -1;
-    const p = panAt(px, pz); return Math.min(...[0, .25, .5, .75, 1].map(t => open(px, pz, p[0] + (p[1] - p[0])*t))); };
+    // the frame reaches past the turn's ends by most of half the field of view
+    const p = panAt(px, pz); return Math.min(...[0, 1/6, 2/6, 3/6, 4/6, 5/6, 1].map(t => open(px, pz, p[0] - 20 + (p[1] - p[0] + 40)*t))); };
   let best = {x, z, s: score(x, z)};
   for(const r of [3, 6, 10, 15, 21]) for(let a = 0; a < 360 && best.s < 1; a += 45){
     const px = x + Math.sin(a*D2R)*r, pz = z + Math.cos(a*D2R)*r, s = score(px, pz); if(s > best.s) best = {x: px, z: pz, s}; }
@@ -1758,7 +1759,7 @@ const SHOTS = {
       let span = 360 - gap + 24; from -= 12; if(span < 60){ from -= (60 - span)/2; span = 60; }
       return [from, from + Math.min(span, 160)]; };
     const pan = aim(at.x, at.z);
-    return streetShot(at.x, at.z, pan[0], {eye: EYE_M, pan, aim, reach: {things: 3, ground: 20}, ms: 17000}); },
+    return streetShot(at.x, at.z, pan[0], {eye: EYE_M, pan, aim, reach: {things: 6, ground: 25}, ms: 17000}); },
   // out to sea from the shore, turning slowly along it
   seaward: s => { const p = s.shore; if(!p) return null; return streetShot(p.x, p.z, p.sea - 35, {eye: EYE_M, pan: [p.sea - 35, p.sea + 35], ms: 16000}); },
   // along the water's edge at a walking pace
@@ -1970,6 +1971,8 @@ async function cut3D(s, alive, next){
   // a fetch that failed is asked again as the view updates, which the map alone would not make it do
   for(let t0 = performance.now(), i = 0; !v.ready(sh.views[0]) && performance.now() - t0 < 6000; i++){ await sleepT(200); if(!alive()) return false; if(i % 5 === 4) v.update(); }
   if(!v.ready(sh.views[0])) return false;
+  // the light the beat is seen in: a land from afar or a coast flown at the low sun, the rest by day or toward dusk
+  v.setClock(s.far || s.group === "coast" ? pick([0.24, 0.74]) : pick([0.36, 0.5, 0.5, 0.62, 0.7]), 0);
   await enter3D(sh.x, sh.z, sh.look ?? Math.random()*360, sh.prep);
   if(!alive()) return false;
   v3dEl.classList.toggle("orbit", v.mode === "orbit");
@@ -1978,7 +1981,7 @@ async function cut3D(s, alive, next){
   sh.play(v);
   await beat(sh.ms);
   if(!alive()) return true;             // stopTour stilled it; a tour started since may be moving it now
-  v.still();
+  v.still(); v.setClock(null, 0);
   leave3D(true);
   return true;
 }
@@ -2029,7 +2032,7 @@ function startTour(){
 function stopTour(){
   if(!TOUR.on) return;
   TOUR.on = false; TOUR.run++;
-  if(V3D){ V3D.still(); V3D.setOrbitDist(140); }
+  if(V3D){ V3D.still(); V3D.setOrbitDist(140); V3D.setClock(null, 0); }
   if(IN3D) leave3D(true);
   if(V3D){
     V3D.setMode("street"); v3dEl.classList.remove("orbit");

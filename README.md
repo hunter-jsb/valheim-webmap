@@ -81,7 +81,8 @@ man's height to an overview, dollied in from far off, a land from kilometres up 
 flown across a settlement, along a ridge or a shore -- or stood in at eye height: in a base's
 yard turning slowly, walking through the settlement or along the water, looking out to sea
 from a dock, down from a summit, or round the gates of a hub, always where the eye sees out
-rather than into a wall. The caption names the place with a strip of figures matched to it --
+rather than into a wall; a land from afar or a coast is seen at the low sun, the rest by day
+or toward dusk, and the view goes back to the server's clock after. The caption names the place with a strip of figures matched to it --
 a hub's gates and its farthest pair, a build's pieces and its top builder's share, whose
 deaths at a bad spot, a land's area and walked share, a location's kind and biome, the meals
 at a kitchen -- and every third or fourth stop is one of the world's figures over a slow drift
