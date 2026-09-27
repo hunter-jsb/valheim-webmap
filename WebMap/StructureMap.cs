@@ -200,6 +200,7 @@ namespace WebMap
                                 bool portal = Portals.IsPortal(pref);
                                 if (portal) Portals.Observe(zdo, p);
                                 Pieces.Observe(pref, zdo, p);      // the same piece, as a footprint
+                                Kitchen.Found(zdo, pref, p);       // a station, for the kitchen's poll
                                 Stats.ObservePiece(creator, portal, false);
                                 var mat = MaterialOf(pref);
                                 cells.TryGetValue(idx, out Cell cell);

@@ -67,9 +67,9 @@ namespace WebMap
         }
     }
 
-    // Hits and broken rock areas, as the server forwards them. RouteRPC gets every
-    // routed RPC not addressed to the server itself, already parsed, so passing on
-    // the rest costs one compare.
+    // Hits, broken rock areas and what goes on a cooking station, as the server forwards
+    // them. RouteRPC gets every routed RPC not addressed to the server itself, already
+    // parsed, so passing on the rest costs a compare of the method hash.
     [HarmonyPatch(typeof(ZRoutedRpc), "RouteRPC")]
     internal class DeedsRoutePatch
     {
@@ -77,6 +77,8 @@ namespace WebMap
         private static readonly int HitHash = "Hit".GetStableHashCode();                  // MineRock's hit
         private static readonly int AreaHash = "RPC_SetAreaHealth".GetStableHashCode();   // MineRock5, sent as an area breaks
         private static readonly int HideHash = "Hide".GetStableHashCode();                // MineRock, likewise
+        private static readonly int AddItemHash = "RPC_AddItem".GetStableHashCode();      // a station's owner asked to take an item
+        private static readonly int SlotHash = "RPC_SetSlotVisual".GetStableHashCode();   // the owner to everybody, as a slot fills or empties
         // a mined rock is wide, and its pivot can stand well off the face being worked
         private const float AreaM = 32f;
         private static bool warned;
@@ -85,7 +87,7 @@ namespace WebMap
         {
             if (rpcData == null) return;
             int h = rpcData.m_methodHash;
-            if (h != DamageHash && h != HitHash && h != AreaHash && h != HideHash) return;
+            if (h != DamageHash && h != HitHash && h != AreaHash && h != HideHash && h != AddItemHash && h != SlotHash) return;
             ZPackage p = rpcData.m_parameters;
             if (p == null) return;
             int pos = p.GetPos();          // the game forwards this package after us
@@ -93,7 +95,14 @@ namespace WebMap
             {
                 p.SetPos(0);
                 float now = Time.realtimeSinceStartup;
-                if (h == DamageHash || h == HitHash)
+                if (h == AddItemHash || h == SlotHash)
+                {
+                    ZNetPeer peer = ZNet.instance != null ? ZNet.instance.GetPeer(rpcData.m_senderPeerID) : null;
+                    string name = peer != null ? peer.m_playerName : null;
+                    if (h == AddItemHash) Kitchen.Asked(rpcData.m_targetZDO, name, now);
+                    else { int slot = p.ReadInt(); Kitchen.Shown(rpcData.m_targetZDO, name, slot, p.ReadString(), now); }
+                }
+                else if (h == DamageHash || h == HitHash)
                 {
                     var hit = new HitData();
                     hit.Deserialize(ref p);
@@ -114,7 +123,7 @@ namespace WebMap
             }
             catch (Exception e)
             {
-                if (!warned) { warned = true; ZLog.LogWarning("WebMap: deeds: reading a hit failed: " + e.Message); }
+                if (!warned) { warned = true; ZLog.LogWarning("WebMap: deeds: reading a forwarded RPC failed: " + e.Message); }
             }
             finally { p.SetPos(pos); }
         }

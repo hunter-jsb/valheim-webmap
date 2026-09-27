@@ -144,6 +144,14 @@ async function players() {
   const stood = !!who && await p.until(`VK.rig && VK.rig.children.length && !VK.el.hidden && VK.el.isConnected && VK.el.querySelector("canvas").clientWidth > 0`, 60000);
   check("players: a player with a look stands above the pentagon", !body || stood,
         body ? `${who}, ${await p.ev("VK.rig ? VK.rig.children.length : 0")} meshes, ${await p.ev(`VK.el.textContent`)}` : "no body in the library to draw");
+  // the live tallies may hold no kitchen yet: a cook handed to the page shows its group and its trade
+  const cook = loaded ? await p.ev(`(() => {
+    const q = {name: "A cook", online: false, last_seen: 1, deaths: 0, dist_m: 0, pieces: 0,
+      kitchen: {cooked: 143, burnt: 6, brewed: 12, honey: 3, smelted: 20, dishes: {CookedMeat: 90, Bread: 30, MeadHealthMinor: 12}}};
+    DATA.push(q); render(); pick(q.name);
+    const g = [...document.querySelectorAll("#dbody .group")].find(s => s.querySelector("h3").textContent === "Kitchen"), c = document.querySelector("#dhead .cls");
+    return {figs: g ? g.querySelectorAll(".fig").length : 0, line: g && g.querySelector(".line") ? g.querySelector(".line").textContent : "", cls: c ? c.textContent : "", why: c ? c.title : ""}; })()`) : null;
+  check("players: a cook's Kitchen group and trade", !!cook && cook.figs === 5 && /Cooked Meat/.test(cook.line) && cook.cls === "Cook", cook ? `${cook.cls || "no class"}: ${cook.why}` : "");
   await p.done("players");
 }
 

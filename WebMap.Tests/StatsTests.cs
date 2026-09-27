@@ -124,11 +124,18 @@ namespace WebMap.Tests
             Gear.Struck(A, false, Skills.SkillType.Knives, 6f, true);
             Stats.Fed(A, Gear.Diet.Hearty, 150f, 60f, 0f, 1f);
             Stats.Looked(A, Look, 118);
+            Stats.Made(A, Kitchen.Made.Cooked, "CookedMeat", 2, "piece_cookingstation", 10.5f, -3f);
+            Stats.Made(A, Kitchen.Made.Burnt, null, 1, "piece_cookingstation", 10.5f, -3f);
+            Stats.Made(A, Kitchen.Made.Brewed, "MeadHealthMinor", 6, "fermenter", 4f, 4f);
+            Stats.Made(A, Kitchen.Made.Honey, null, 3, "piece_beehive", 0f, 9f);
+            Stats.Made(null, Kitchen.Made.Smelted, "Copper", 1, "smelter", 20f, 0f);   // nobody by: the world's alone
             string deaths = Stats.DeathsJson();
             var before = Doc();
             Assert.Equal(338, before.GetProperty("players")[0].GetProperty("biomes").EnumerateArray().First(b => b.Str("biome") == "Meadows").Num("m"));
             Assert.Equal(1, before.GetProperty("players")[0].GetProperty("gear").GetProperty("hand").Int("twohanded"));
             Assert.Equal(Look, before.GetProperty("players")[0].GetProperty("look").GetRawText());
+            Assert.Equal(6, before.GetProperty("players")[0].GetProperty("kitchen").GetProperty("dishes").Int("MeadHealthMinor"));
+            Assert.Equal(4, before.GetProperty("kitchen").GetProperty("stations").GetArrayLength());
 
             Stats.Save();
             Stats.Load(Dir);
@@ -136,6 +143,7 @@ namespace WebMap.Tests
             var after = Doc();
             Assert.Equal(Tallies(before), Tallies(after));
             Assert.Equal(before.GetProperty("bosses").GetRawText(), after.GetProperty("bosses").GetRawText());
+            Assert.Equal(before.GetProperty("kitchen").GetRawText(), after.GetProperty("kitchen").GetRawText());
             Assert.Equal(deaths, Stats.DeathsJson());
         }
         // a player's tallies; being online and what stands in the world are the next sweep's to say

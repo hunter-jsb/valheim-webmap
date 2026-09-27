@@ -49,6 +49,8 @@ namespace WebMap
             public int[] hits = new int[Gear.HitNames.Length];
             public double[] diet = new double[Gear.DietNames.Length]; public float foodHp, foodSt, foodEitr;   // seconds per diet, and the latest food-borne figures
             public string look; public int yaw;          // RigExporter's look JSON as last seen, for a page to draw them offline
+            public int[] made = new int[Kitchen.MadeNames.Length];   // what Kitchen credits them with
+            public Dictionary<string, int> dishes = new Dictionary<string, int>(StringComparer.Ordinal);   // cooked, brewed or smelted, by product
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
         private class Spot { public float x, z; public double distAt; public long t; public bool seen; public int sweep; }
@@ -85,6 +87,12 @@ namespace WebMap
         private static readonly Dictionary<long, Standing> sweepById = new Dictionary<long, Standing>();
         private static readonly Dictionary<string, int> sweepGraves = new Dictionary<string, int>();
         private static readonly List<(string name, float x, float z)> sweepGraveAt = new List<(string, float, float)>();
+
+        // The world's kitchen, credited or not, and each station's share by prefab and place.
+        private class Kit { public string kind; public float x, z; public int[] made = new int[Kitchen.MadeNames.Length]; }
+        private static readonly int[] madeAll = new int[Kitchen.MadeNames.Length];
+        private static readonly Dictionary<string, Kit> kits = new Dictionary<string, Kit>(StringComparer.Ordinal);
+        private const int MaxKits = 256, MaxDishes = 64, KitsShown = 40;
 
         private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -200,6 +208,49 @@ namespace WebMap
                 Touch(p);
             }
         }
+
+        // Kitchen's credits: nobody's when the maker is unknown, and the world's all the same. A
+        // negative n takes a dish back -- done, then left on the fire to burn. Not a sighting,
+        // so last_seen stays: the placer may have logged off before their dish was done.
+        public static void Made(string who, Kitchen.Made what, string item, int n, string station, float x, float z)
+        {
+            int k = (int)what;
+            lock (gate)
+            {
+                madeAll[k] = Math.Max(0, madeAll[k] + n);
+                var s = KitAt(station ?? "", x, z);
+                s.made[k] = Math.Max(0, s.made[k] + n);
+                if (!string.IsNullOrEmpty(who))
+                {
+                    var p = Get(who);
+                    p.made[k] = Math.Max(0, p.made[k] + n);
+                    if (!string.IsNullOrEmpty(item) && what != Kitchen.Made.Burnt && what != Kitchen.Made.Honey)
+                    {
+                        item = Clean(item);
+                        p.dishes.TryGetValue(item, out int c);
+                        if (c + n <= 0) p.dishes.Remove(item);
+                        else if (c > 0 || p.dishes.Count < MaxDishes) p.dishes[item] = c + n;
+                    }
+                }
+                dirty = true; jsonStale = true;
+            }
+        }
+
+        private static Kit KitAt(string kind, float x, float z)   // caller holds gate
+        {
+            string key = FormattableString.Invariant($"{kind}@{x:0.#},{z:0.#}");
+            if (kits.TryGetValue(key, out Kit s)) return s;
+            if (kits.Count >= MaxKits)                            // the quietest makes room
+            {
+                string least = null; long ln = long.MaxValue;
+                foreach (var kv in kits) { long t = 0; foreach (int v in kv.Value.made) t += v; if (t < ln) { ln = t; least = kv.Key; } }
+                kits.Remove(least);
+            }
+            s = new Kit { kind = Clean(kind), x = x, z = z };
+            kits[key] = s;
+            return s;
+        }
+        private static int Busy(Kit s) => s.made[(int)Kitchen.Made.Cooked] + s.made[(int)Kitchen.Made.Brewed] + s.made[(int)Kitchen.Made.Smelted] + s.made[(int)Kitchen.Made.Honey];
 
         // Game thread, once per player per snapshot. Each hand adds the seconds to
         // its family, a family in both hands once; both hands empty is none.
@@ -401,6 +452,13 @@ namespace WebMap
                     for (int i = 0; i < p.hits.Length; i++)
                         sb.Append(i > 0 ? ",\"" : "\"").Append(Gear.HitNames[i]).Append("\":").Append(p.hits[i]);
                     sb.Append("}}");
+                    sb.Append(",\"kitchen\":{"); Made(sb, p.made);
+                    sb.Append(",\"dishes\":{");
+                    var dishes = new List<KeyValuePair<string, int>>(p.dishes);
+                    dishes.Sort((a, b) => b.Value != a.Value ? b.Value.CompareTo(a.Value) : string.CompareOrdinal(a.Key, b.Key));
+                    for (int i = 0; i < dishes.Count; i++)
+                        sb.Append(i > 0 ? ",\"" : "\"").Append(Esc(dishes[i].Key)).Append("\":").Append(dishes[i].Value);
+                    sb.Append("}}");
                     if (p.look != null) sb.Append(",\"look\":").Append(p.look).Append(",\"yaw\":").Append(p.yaw);
                     sb.Append('}');
                 }
@@ -410,7 +468,17 @@ namespace WebMap
                     if (i > 0) sb.Append(',');
                     sb.Append(FormattableString.Invariant($"{{\"key\":\"{Esc(bosses[i].key)}\",\"t\":{bosses[i].t}}}"));
                 }
-                sb.Append("]}");
+                sb.Append("],\"kitchen\":{"); Made(sb, madeAll);
+                sb.Append(",\"stations\":[");
+                var busiest = new List<Kit>(kits.Values);
+                busiest.Sort((a, b) => Busy(b).CompareTo(Busy(a)));
+                for (int i = 0; i < busiest.Count && i < KitsShown; i++)
+                {
+                    var s = busiest[i];
+                    if (i > 0) sb.Append(',');
+                    sb.Append(FormattableString.Invariant($"{{\"kind\":\"{Esc(s.kind)}\",\"x\":{s.x:0.#},\"z\":{s.z:0.#},\"cooked\":{s.made[(int)Kitchen.Made.Cooked]},\"brewed\":{s.made[(int)Kitchen.Made.Brewed]},\"smelted\":{s.made[(int)Kitchen.Made.Smelted]},\"honey\":{s.made[(int)Kitchen.Made.Honey]}}}"));
+                }
+                sb.Append("]}}");
                 json = sb.ToString();
                 jsonStale = false;
                 return json;
@@ -425,6 +493,12 @@ namespace WebMap
         }
 
         private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+        // "cooked":n,... "smelted":n, inside an object the caller opened
+        private static void Made(StringBuilder sb, int[] made)
+        {
+            for (int i = 0; i < made.Length; i++) sb.Append(i > 0 ? ",\"" : "\"").Append(Kitchen.MadeNames[i]).Append("\":").Append(made[i]);
+        }
 
         // whole seconds by name, the empty ones left out
         private static void Seconds(StringBuilder sb, double[] secs, string[] names)
@@ -448,7 +522,7 @@ namespace WebMap
             lock (gate)
             {
                 path = Path.Combine(worldDataPath, "stats.tsv");
-                byName.Clear(); nameOfId.Clear(); deaths.Clear(); bosses.Clear();
+                byName.Clear(); nameOfId.Clear(); deaths.Clear(); bosses.Clear(); kits.Clear(); Array.Clear(madeAll, 0, madeAll.Length);
                 since = Now();
                 try
                 {
@@ -515,6 +589,22 @@ namespace WebMap
                         {
                             var p = Get(f[1]);
                             int.TryParse(f[2], out p.yaw); p.look = f[3];
+                        }
+                        else if (f.Length >= 2 + Kitchen.MadeNames.Length && f[0] == "c")   // what the kitchen credited them with
+                        {
+                            var p = Get(f[1]);
+                            for (int i = 0; i < p.made.Length; i++) int.TryParse(f[i + 2], out p.made[i]);
+                        }
+                        else if (f.Length >= 4 && f[0] == "f" && int.TryParse(f[3], out int dn) && dn > 0)   // a dish, mead or bar, and how many
+                            Get(f[1]).dishes[f[2]] = dn;
+                        else if (f.Length >= 1 + Kitchen.MadeNames.Length && f[0] == "k")   // the world's kitchen
+                            for (int i = 0; i < madeAll.Length; i++) int.TryParse(f[i + 1], out madeAll[i]);
+                        else if (f.Length >= 4 + Kitchen.MadeNames.Length && f[0] == "s")   // a station's share: prefab, x, z, then the five
+                        {
+                            float.TryParse(f[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float x);
+                            float.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z);
+                            var s = KitAt(f[1], x, z);
+                            for (int i = 0; i < s.made.Length; i++) int.TryParse(f[i + 4], out s.made[i]);
                         }
                         else if (f.Length >= 7 && f[0] == "g")        // a death not yet reached
                         {
@@ -583,7 +673,13 @@ namespace WebMap
                             sb.Append("x\t").Append(p.name).Append('\t').Append(string.Join("\t", p.hits)).Append('\n');
                         if (p.look != null)                           // its JSON escapes tabs and newlines
                             sb.Append("l\t").Append(p.name).Append('\t').Append(p.yaw).Append('\t').Append(p.look).Append('\n');
+                        if (Array.Exists(p.made, n => n > 0))
+                            sb.Append("c\t").Append(p.name).Append('\t').Append(string.Join("\t", p.made)).Append('\n');
+                        foreach (var kv in p.dishes) sb.Append("f\t").Append(p.name).Append('\t').Append(kv.Key).Append('\t').Append(kv.Value).Append('\n');
                     }
+                    if (Array.Exists(madeAll, n => n > 0)) sb.Append("k\t").Append(string.Join("\t", madeAll)).Append('\n');
+                    foreach (var s in kits.Values)
+                        sb.Append(FormattableString.Invariant($"s\t{s.kind}\t{s.x:0.#}\t{s.z:0.#}\t")).Append(string.Join("\t", s.made)).Append('\n');
                     foreach (var b in bosses) sb.Append(FormattableString.Invariant($"b\t{b.key}\t{b.t}\n"));
                     foreach (var d in deaths)
                         sb.Append(FormattableString.Invariant($"d\t{d.name}\t{d.x:0.#}\t{d.z:0.#}\t{d.t}\n"));
