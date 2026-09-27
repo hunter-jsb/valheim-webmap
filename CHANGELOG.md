@@ -43,6 +43,10 @@
   `stats.tsv` keeps them. Each card links to that player's deaths on the map
   (`#details=deaths&who=<name>`), to the spot of the last one, and to the graves layer;
   the place card says how many died at a place.
+* One view for every page. `MapCore.view` holds the window onto the map -- pan on a
+  drag, wheel and pinch zoom, fits, one paint a frame, the middle kept when the sidebar
+  folds, a tap told from a drag -- and the map, the atlas and the plan use it instead of
+  three copies of the same code. The pages also share `plural` and `clamp` from the core.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 * Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin

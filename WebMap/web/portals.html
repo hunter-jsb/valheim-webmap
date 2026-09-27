@@ -159,14 +159,14 @@ const SITE_R = 80;    // portals this close stand at one place
 const PIN_R  = 120;   // a house pin this close gives that place its name
 const ZMAX   = 6;     // two sites are 80 m apart at the closest: past this there is nothing left to separate
 const esc = MapCore.esc, GEOM = MapCore.geom;
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const clamp = MapCore.clamp;
 let WORLD = "", PINS = [], NAMED = [], LAST = "", LAST_HEAD = "", LAST_NET = "";
 let FOCUS = null, EDITING = null, HUBS = [];           // the hub picked in the chips; a hub whose name is being typed
 const FILTER = new Map();                              // a big hub's search text, by hub id
 const HUB_R = 150;                                     // a hub's name, or a gate's memory, counts this close
 const hubId = s => `hub@${Math.round(s.x)},${Math.round(s.z)}`;
 
-function plural(n, w){ return n + " " + w + (n === 1 ? "" : "s"); }
+const plural = MapCore.plural;
 
 // Valheim's +z is north, +x east, and a lone distance is from the world centre --
 // which is where everyone spawns, so it is the shared frame of reference.
@@ -242,8 +242,12 @@ const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
 const net = document.getElementById("net");
 const LAY = MapCore.layers(API, () => draw());
-let scale = 1, tx = 0, ty = 0, fit = 1, scratch = null, sctx = null;
+let scratch = null, sctx = null;
 let NODES = [], SPOKES = [], SPOKE = new Map(), BBOX = null, HOVER = new Set(), FITTED = false;
+// the window onto the chart; a touch is the only hover a phone has, so a press sets it
+const V = MapCore.view(stage, {paint, max: ZMAX, min: .4, guard: ".mapctl", capture: false,
+  down: e => { setHover(keysOf(e.target)); }, resize: () => { if(NODES.length) measure(); }});
+function draw(){ V.request(); }
 
 function sizeCanvas(){
   const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -253,18 +257,12 @@ function sizeCanvas(){
   if(scratch.width !== W || scratch.height !== H){ scratch.width = W; scratch.height = H; }
   return dpr;
 }
-let pending = false;
-function draw(){
-  if(pending) return;
-  pending = true;
-  requestAnimationFrame(() => { pending = false; paint(); });
-}
 // The server's chart -- each pixel its biome's flat colour, water one blue -- with
 // the fog over it, so the network sits on matte ground. Until the server has a
 // chart, the map's own render is filtered grey and cool instead.
 function paint(){
   const pix = sizeCanvas(), W = stage.clientWidth, H = stage.clientHeight;
-  const v = {scale, tx, ty, w: W, h: H, pix};
+  const v = {scale: V.scale, tx: V.tx, ty: V.ty, w: W, h: H, pix};
   if(LAY.ready("chart")){
     MapCore.drawRasters(ctx, v, {base: LAY.imgs.chart, fog: LAY.imgs.fog}, {bg: "#05070a"});
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -405,7 +403,7 @@ function edge(n, u, sgn){
   return {x: n.sx + d.x*t, y: n.sy + d.y*t};
 }
 function scaleBar(){
-  const mpp = GEOM.pixel/scale;                 // metres per screen pixel
+  const mpp = GEOM.pixel/V.scale;               // metres per screen pixel
   let m = 10;
   while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
   while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
@@ -423,79 +421,21 @@ function measure(){
 }
 
 // ---------- the view ----------
-function computeFit(){ fit = Math.min(stage.clientWidth/GEOM.size, stage.clientHeight/GEOM.size)*0.98; }
-function zoomAt(cx, cy, f){
-  const ns = clamp(scale*f, fit*0.5, ZMAX);
-  tx = cx - (cx - tx)*(ns/scale);
-  ty = cy - (cy - ty)*(ns/scale);
-  scale = ns; draw();
-}
-// every portal on screen, with room around the edge for the labels
-function fitAll(){
-  computeFit();
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if(!BBOX){ scale = fit; tx = (W - GEOM.size*scale)/2; ty = (H - GEOM.size*scale)/2; return seenW = stage.clientWidth; seenH = stage.clientHeight; draw(); }
-  const m = Math.min(84, W*0.12, H*0.12);
-  const bw = Math.max(BBOX.x1-BBOX.x0, 6), bh = Math.max(BBOX.y1-BBOX.y0, 6);
-  scale = clamp(Math.min((W-2*m)/bw, (H-2*m)/bh), fit*0.4, ZMAX);
-  tx = W/2 - (BBOX.x0 + bw/2)*scale;
-  ty = H/2 - (BBOX.y0 + bh/2)*scale;
+// a box of sites on screen, with room around the edge for the labels
+function fitPx(b){
+  V.computeFit();
+  const W = stage.clientWidth, H = stage.clientHeight, m = Math.min(84, W*0.12, H*0.12);
+  const bw = Math.max(b.x1-b.x0, 6), bh = Math.max(b.y1-b.y0, 6);
+  V.scale = clamp(Math.min((W-2*m)/bw, (H-2*m)/bh), V.fit*0.4, ZMAX);
+  V.tx = W/2 - (b.x0 + bw/2)*V.scale; V.ty = H/2 - (b.y0 + bh/2)*V.scale;
   draw();
 }
-const pts = new Map();
-let last = null, pinch = null, moved = 0;
-function pinchState(){
-  const [a, b] = [...pts.values()];
-  return {dist: Math.hypot(a.x-b.x, a.y-b.y), cx: (a.x+b.x)/2, cy: (a.y+b.y)/2};
-}
-stage.addEventListener("pointerdown", e => {
-  if(e.target.closest(".mapctl")) return;
-  setHover(keysOf(e.target));                   // a touch is the only hover a phone has
-  pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
-  if(pts.size === 1){ last = {x: e.clientX, y: e.clientY}; moved = 0; stage.classList.add("dragging"); }
-  else if(pts.size === 2) pinch = pinchState();
-});
-addEventListener("pointermove", e => {
-  if(!pts.has(e.pointerId)) return;
-  pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
-  if(pts.size === 2 && pinch){
-    const p = pinchState(), r = stage.getBoundingClientRect();
-    if(pinch.dist > 0) zoomAt(p.cx - r.left, p.cy - r.top, p.dist/pinch.dist);
-    pinch = p; return;
-  }
-  if(pts.size === 1 && last){
-    moved += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
-    tx += e.clientX - last.x; ty += e.clientY - last.y;
-    last = {x: e.clientX, y: e.clientY};
-    draw();
-  }
-});
-function endPtr(e){
-  pts.delete(e.pointerId);
-  if(pts.size < 2) pinch = null;
-  if(pts.size === 0){ last = null; stage.classList.remove("dragging"); }
-  else { const p = [...pts.values()][0]; last = {x: p.x, y: p.y}; }
-}
-addEventListener("pointerup", endPtr);
-addEventListener("pointercancel", endPtr);
+function fitAll(){ if(BBOX) fitPx(BBOX); else V.fitWorld(); }
 // a drag that began on a node is a pan, not a click through to the map
-net.addEventListener("click", e => { if(moved > 6) e.preventDefault(); });
-stage.addEventListener("wheel", e => {
-  e.preventDefault();
-  const r = stage.getBoundingClientRect();
-  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY*0.0015));
-}, {passive: false});
-stage.addEventListener("pointermove", e => { if(!pts.size) setHover(keysOf(e.target)); });
+net.addEventListener("click", e => { if(V.moved > 6) e.preventDefault(); });
+stage.addEventListener("pointermove", e => { if(!e.buttons) setHover(keysOf(e.target)); });
 stage.addEventListener("pointerleave", () => setHover([]));
 document.getElementById("fitBtn").onclick = fitAll;
-// a folded sidebar widens the stage: what was in the middle stays in the middle
-let seenW = 0, seenH = 0;
-addEventListener("resize", () => {
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if(seenW && seenH){ tx += (W - seenW)/2; ty += (H - seenH)/2; }
-  seenW = W; seenH = H;
-  if(NODES.length) measure(); computeFit(); draw();
-});
 
 const keysOf = el => { const t = el && el.closest && el.closest("[data-s]"); return t ? t.dataset.s.split(" ").filter(Boolean) : []; };
 // one spoke lit, and both the places it joins
@@ -619,12 +559,7 @@ function applyFocus(){
 }
 function fitHub(hub){
   const pts = [hub].concat(SPOKES.filter(s => s.a === hub || s.b === hub).map(s => s.a === hub ? s.b : s.a));
-  const b = pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9});
-  const W = stage.clientWidth, H = stage.clientHeight, m = Math.min(84, W*0.12, H*0.12);
-  const bw = Math.max(b.x1-b.x0, 6), bh = Math.max(b.y1-b.y0, 6);
-  scale = clamp(Math.min((W-2*m)/bw, (H-2*m)/bh), fit*0.4, ZMAX);
-  tx = W/2 - (b.x0 + bw/2)*scale; ty = H/2 - (b.y0 + bh/2)*scale;
-  draw();
+  fitPx(pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}));
 }
 
 let LIST = [];
@@ -787,7 +722,7 @@ async function load(){
 }
 
 (async () => {
-  computeFit(); fitAll();                 // the whole world until the portals say otherwise
+  V.fitWorld();                           // the whole world until the portals say otherwise
   LAY.loadBase();
   try{ WORLD = (await MapCore.fetchConfig(API)).world || ""; }catch(e){}
   await load();

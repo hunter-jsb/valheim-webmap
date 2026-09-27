@@ -300,13 +300,24 @@
 </div>
 
 <script>
-const SIZE = 2048;
+// ---------- the view and the scene ----------
 const stage = document.getElementById("stage");
 const inner = document.getElementById("mapCanvas");
 const rctx = inner.getContext("2d");
-let scale = 1, tx = 0, ty = 0, fit = 1;
-
 const PLAN_ZOOM = MapCore.PLAN_ZOOM, MAX_ZOOM = MapCore.MAX_ZOOM;
+// the window onto the map: drag to pan, wheel or pinch to zoom, a tap opens what is there
+const V = MapCore.view(stage, {
+  paint, max: MAX_ZOOM,
+  guard: ".mapctl, .layers, #mini, #namer",
+  down: () => { if(!namer.hidden && !placing()) closeCard(); },
+  tap: (x, y, e, target) => {
+    // markers are rebuilt every tick, so the pin under the finger is kept by id
+    const pin = target && target.closest && target.closest(".marker.pin");
+    if(placing()) movePin(CARD, x, y);
+    else if(pin) openPin(pin.dataset.id, x, y);
+    else tapName(x, y);
+  },
+});
 
 // The scene: the rasters, then the builds over the fog -- a build in unexplored
 // ground has already been dropped, so nothing has to hide it -- then the details.
@@ -323,36 +334,30 @@ function renderScene(g, v){
   NAMEBOXES = showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog), {hide: hiddenKinds()}) : [];
   NAMEVIEW = v;
 }
-const SCENE = MapCore.viewCache(renderScene, () => apply());
+const SCENE = MapCore.viewCache(renderScene, () => V.request());
 // the scene changed: the next frame renders it afresh
-function drawRaster(){ SCENE.invalidate(); apply(); }
+function drawRaster(){ SCENE.invalidate(); V.request(); }
 function paint(){
   const W = stage.clientWidth, H = stage.clientHeight;
   if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
-  SCENE.draw(rctx, {scale, tx, ty, w:W, h:H}, "#000");
+  SCENE.draw(rctx, {scale: V.scale, tx: V.tx, ty: V.ty, w: W, h: H}, "#000");
   // the portal lines see the same window, in texture coordinates
   document.getElementById("portalLinks").setAttribute("viewBox",
-    `${(-tx/scale).toFixed(3)} ${(-ty/scale).toFixed(3)} ${(W/scale).toFixed(3)} ${(H/scale).toFixed(3)}`);
+    `${(-V.tx/V.scale).toFixed(3)} ${(-V.ty/V.scale).toFixed(3)} ${(W/V.scale).toFixed(3)} ${(H/V.scale).toFixed(3)}`);
   positionMarkers();
-  seenW = W; seenH = H;
 }
-// the view changed: one paint per frame however many events asked for it
-let frame = 0;
-function apply(){
-  if(frame) return;
-  frame = requestAnimationFrame(() => { frame = 0; paint(); });
-}
+// ---------- markers: players, pins, boats, portals, graves, traders ----------
 function positionMarkers(){
   document.querySelectorAll("#markers .marker").forEach(el => {
-    el.style.left = (tx + (+el.dataset.px) * scale) + "px";
-    el.style.top  = (ty + (+el.dataset.py) * scale) + "px";
+    el.style.left = (V.tx + (+el.dataset.px) * V.scale) + "px";
+    el.style.top  = (V.ty + (+el.dataset.py) * V.scale) + "px";
   });
   // Portals cluster at a base, and four names on one spot read as none. When a
   // portal's label would sit on one already shown, it keeps its icon and loses
   // its name; zooming in spreads them out again, and the atlas lists them all.
   const kept = [];
   document.querySelectorAll("#markers .marker.portal").forEach(el => {
-    const x = tx + (+el.dataset.px) * scale, y = ty + (+el.dataset.py) * scale;
+    const x = V.tx + (+el.dataset.px) * V.scale, y = V.ty + (+el.dataset.py) * V.scale;
     const crowded = kept.some(k => Math.abs(k.x - x) < 44 && Math.abs(k.y - y) < 26);
     el.classList.toggle("crowd", crowded);
     if(!crowded) kept.push({x, y});
@@ -431,6 +436,7 @@ function graveAge(sec){
   return h >= 1 ? h.toFixed(0)+"h" : Math.max(1,Math.round(sec/60))+"m";
 }
 
+// ---------- the layers card: legend, presets, details, names, ground ----------
 // Which layers this viewer has switched off. Classes on the stage do the hiding,
 // so markers rebuilt on every tick need no extra bookkeeping.
 // portals sit on top of the builds they are in, graves are someone's bad day: both off until asked for
@@ -525,7 +531,7 @@ groundsEl.innerHTML = GROUNDS.map(([k, n]) =>
 function drawThumb(cv, ground){
   const N = 64, pix = Math.min(devicePixelRatio || 1, 2);
   if(cv.width !== N*pix){ cv.width = cv.height = N*pix; }
-  const b = EXPLORED_BOX || {x:0, y:0, w:SIZE, h:SIZE};
+  const b = EXPLORED_BOX || {x:0, y:0, w:MapCore.geom.size, h:MapCore.geom.size};
   const k = N/(Math.max(b.w, b.h)*1.15);
   MapCore.drawRasters(cv.getContext("2d"), {scale:k, tx:N/2 - (b.x + b.w/2)*k, ty:N/2 - (b.y + b.h/2)*k, w:N, h:N, pix},
     LAYERS.imgs, {bg:"#000", ground});
@@ -569,37 +575,17 @@ document.querySelector(".legend").addEventListener("click", e=>{
 });
 applyHidden();
 
-function clamp(v,a,b){ return Math.min(b,Math.max(a,v)); }
-
-function computeFit(){
-  fit = Math.min(stage.clientWidth/SIZE, stage.clientHeight/SIZE) * 0.98;
-}
-function fitView(){          // whole world
-  computeFit();
-  const w = stage.clientWidth, h = stage.clientHeight;
-  scale = fit;
-  tx = (w - SIZE*scale)/2;
-  ty = (h - SIZE*scale)/2;
-  apply();
-}
-function fitBox(bx,by,bw,bh){
-  computeFit();
-  const w = stage.clientWidth, h = stage.clientHeight, pad = 1.6;
-  scale = clamp(Math.min(w/(bw*pad), h/(bh*pad)), fit, MAX_ZOOM);
-  tx = w/2 - (bx + bw/2) * scale;
-  ty = h/2 - (by + bh/2) * scale;
-  apply();
-}
+// ---------- fitting and the map buttons ----------
 // Zoom to what's actually been explored — a new world is almost entirely fog.
 function fitExplored(doFit = true){
-  const N = 256, c = document.createElement("canvas");
+  const N = 256, c = document.createElement("canvas"), SIZE = MapCore.geom.size;
   c.width = c.height = N;
   const g = c.getContext("2d", {willReadFrequently:true});
   let d;
   try{
     g.drawImage(LAYERS.imgs.fog, 0, 0, N, N);
     d = g.getImageData(0, 0, N, N).data;
-  }catch(e){ return fitView(); }
+  }catch(e){ return V.fitWorld(); }
   let x0=N, y0=N, x1=-1, y1=-1, seen=0;
   for(let y=0; y<N; y++) for(let x=0; x<N; x++){
     if(d[(y*N+x)*4] > 40){
@@ -613,91 +599,19 @@ function fitExplored(doFit = true){
   EXPLORED_BOX = x1 < 0 ? null : {x:x0*k, y:y0*k, w:(x1-x0+1)*k, h:(y1-y0+1)*k};
   drawThumbs();
   if(!doFit) return;
-  if(x1 < 0) return fitView();
-  fitBox(EXPLORED_BOX.x, EXPLORED_BOX.y, EXPLORED_BOX.w, EXPLORED_BOX.h);
-}
-
-function zoomAt(cx, cy, factor){
-  const ns = clamp(scale*factor, fit*0.5, MAX_ZOOM);
-  tx = cx - (cx - tx) * (ns/scale);
-  ty = cy - (cy - ty) * (ns/scale);
-  scale = ns; apply();
-}
-
-stage.addEventListener("wheel", e => {
-  e.preventDefault();
-  const r = stage.getBoundingClientRect();
-  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
-}, {passive:false});
-
-// drag to pan + pinch to zoom
-const pts = new Map();
-let last = null, pinch = null;
-let down = null;      // where a single pointer came down, for telling a tap from a drag
-stage.addEventListener("pointerdown", e => {
-  // Don't start a drag on the controls: capturing the pointer here retargets
-  // the pointerup to the stage, so the button never receives its click.
-  if (e.target.closest && e.target.closest(".mapctl, .layers, #mini, #namer")) return;
-  if(!namer.hidden && !placing()) closeCard();
-  stage.setPointerCapture(e.pointerId);
-  pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  // markers are rebuilt every tick, so the pin under the finger is kept by id
-  const pin = e.target.closest && e.target.closest(".marker.pin");
-  down = pts.size === 1 ? {x:e.clientX, y:e.clientY, id:e.pointerId, pin: pin ? pin.dataset.id : null} : null;
-  if(pts.size === 1){ last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); }
-  else if(pts.size === 2){ pinch = pinchState(); }
-});
-stage.addEventListener("pointermove", e => {
-  if(!pts.has(e.pointerId)) return;
-  pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  if(pts.size === 2 && pinch){
-    const p = pinchState(), r = stage.getBoundingClientRect();
-    if(pinch.dist > 0){
-      zoomAt(p.cx - r.left, p.cy - r.top, p.dist / pinch.dist);
-    }
-    pinch = p;
-  } else if(pts.size === 1 && last){
-    tx += e.clientX - last.x; ty += e.clientY - last.y;
-    last = {x:e.clientX, y:e.clientY}; apply();
-  }
-});
-function endPtr(e){
-  if(e.type === "pointerup" && down && down.id === e.pointerId && pts.size === 1
-     && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5){
-    const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    if(placing()) movePin(CARD, x, y);
-    else if(down.pin) openPin(down.pin, x, y);
-    else tapName(x, y);
-  }
-  down = null;
-  pts.delete(e.pointerId);
-  if(pts.size < 2) pinch = null;
-  if(pts.size === 0){ last = null; stage.classList.remove("dragging"); }
-  else { const p = [...pts.values()][0]; last = {x:p.x, y:p.y}; }
-}
-stage.addEventListener("pointerup", endPtr);
-stage.addEventListener("pointercancel", endPtr);
-function pinchState(){
-  const [a,b] = [...pts.values()];
-  return {dist: Math.hypot(a.x-b.x, a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2};
+  if(x1 < 0) return V.fitWorld();
+  V.fitBox(EXPLORED_BOX.x, EXPLORED_BOX.y, EXPLORED_BOX.w, EXPLORED_BOX.h);
 }
 
 document.getElementById("mini").onclick = () => MapCore.toggleSide(true);   // the phone's drawer
-document.getElementById("zoomIn").onclick  = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1.35);
-document.getElementById("zoomOut").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1/1.35);
+document.getElementById("zoomIn").onclick  = () => V.zoomBy(1.35);
+document.getElementById("zoomOut").onclick = () => V.zoomBy(1/1.35);
 document.getElementById("zoomFit").onclick = fitExplored;
 document.getElementById("fsBtn").onclick = () => {
   if(document.fullscreenElement) document.exitFullscreen();
   else (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
 };
 document.addEventListener("fullscreenchange", () => setTimeout(fitExplored, 60));
-// a folded sidebar widens the stage: what was in the middle stays in the middle
-let seenW = 0, seenH = 0;
-addEventListener("resize", () => {
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if(seenW && seenH){ tx += (W - seenW)/2; ty += (H - seenH)/2; }
-  computeFit(); apply();
-});
 
 // ---------- help modal ----------
 const helpEl = document.getElementById("help");
@@ -729,7 +643,7 @@ let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the sce
 let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
 let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
 let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-26a";   // shown in the footer, so a stale page is obvious
+const BUILD = "2026-09-26b";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
@@ -963,9 +877,9 @@ document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.cl
 // a tap, as against a drag: on a name it opens that place; anywhere else, what is there
 function tapName(x, y){
   let f = null;
-  if(NAMEVIEW && NAMEVIEW.scale === scale && NAMEBOXES.length)
-    f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - tx), y + (NAMEVIEW.ty - ty));
-  const t = MapCore.toWorld((x - tx)/scale, (y - ty)/scale), w = f ? {x: f.x, z: f.z} : t;
+  if(NAMEVIEW && NAMEVIEW.scale === V.scale && NAMEBOXES.length)
+    f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - V.tx), y + (NAMEVIEW.ty - V.ty));
+  const q = V.at(x, y), t = MapCore.toWorld(q.px, q.py), w = f ? {x: f.x, z: f.z} : t;
   openCard(x, y, w.x, w.z, f, t);
 }
 
@@ -1049,7 +963,7 @@ async function savePin(c, text, type){
 async function movePin(c, x, y){
   if(c.busy) return;
   c.busy = true;
-  const w = MapCore.toWorld((x - tx)/scale, (y - ty)/scale);
+  const q = V.at(x, y), w = MapCore.toWorld(q.px, q.py);
   const r = await writePin({op: "edit", id: c.pin.id, x: +w.x.toFixed(2), z: +w.z.toFixed(2)});
   c.busy = false;
   if(r && CARD === c) openPin(c.pin.id, x, y, "moved");
@@ -1086,13 +1000,7 @@ function hashParams(){
 }
 // as if the row had been clicked in the legend, so it sticks for this browser
 function showLayer(k){ if(HIDDEN.delete(k)){ applyHidden(); drawRaster(); } }
-function centerOn(px, py, z){
-  computeFit();
-  scale = clamp(z, fit*0.5, MAX_ZOOM);
-  tx = stage.clientWidth/2 - px*scale;
-  ty = stage.clientHeight/2 - py*scale;
-  apply();
-}
+function centerOn(px, py, z){ V.centre(px, py, z); }
 function applyHash(){
   const p = hashParams();
   (p.layers||"").split(",").map(s=>s.trim()).filter(Boolean).forEach(showLayer);
@@ -1110,7 +1018,7 @@ function applyHash(){
     HIGHLIGHT.clear(); HIGHLIGHT.add(a.id); if(b) HIGHLIGHT.add(b.id);
     // a pair only reads with both ends on screen; the floor keeps two portals
     // standing side by side from slamming the view to maximum zoom
-    if(b) fitBox(Math.min(a.px,b.px), Math.min(a.py,b.py),
+    if(b) V.fitBox(Math.min(a.px,b.px), Math.min(a.py,b.py),
                  Math.max(Math.abs(a.px-b.px),8), Math.max(Math.abs(a.py-b.py),8));
     else centerOn(a.px, a.py, 20);
     renderTiles();
@@ -1126,7 +1034,7 @@ function applyHash(){
 }
 addEventListener("hashchange", applyHash);
 
-computeFit(); fitView();
+V.fitWorld();
 // the ground is the whole world and must never show without its fog mask
 LAYERS.whenReady(["base", "fog"], () => {
   LAYERS_READY = true;

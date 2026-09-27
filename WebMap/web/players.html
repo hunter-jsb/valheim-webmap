@@ -111,8 +111,7 @@ const API = MapCore.cfg.api;
 MapCore.fetchConfig(API).catch(() => {});
 let SORT = "seen", LAST = "", LOADED = false, DATA = [], SINCE = 0;
 
-function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function plural(n, w){ return n + " " + w + (n === 1 ? "" : "s"); }
+const esc = MapCore.esc, plural = MapCore.plural;
 function num(v){ return Number.isFinite(+v) ? +v : 0; }
 
 // Coarse on purpose: this says how stale a tally is, never how long anyone played.

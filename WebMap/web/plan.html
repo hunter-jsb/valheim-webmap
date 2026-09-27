@@ -178,14 +178,20 @@ const toPx = (x,z) => { const p = MapCore.toPx(x,z); return [p.px, p.py]; };
 const toWorld = (px,py) => { const w = MapCore.toWorld(px,py); return [w.x, w.z]; };
 const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
 const MAX_ZOOM = MapCore.MAX_ZOOM;
-let scale = 1, tx = 0, ty = 0, fit = 1;
 
 const stage = document.getElementById("stage");
 const cv = document.getElementById("cv");
+// the window onto the map; the tools drive the pointer themselves, so the view keeps to the maths and the wheel
+const V = MapCore.view(stage, {pointer: false, max: MAX_ZOOM, paint: () => {
+  const dpr = sizeCanvas();
+  lastW = stage.clientWidth; lastH = stage.clientHeight;
+  render(ctx, lastW, lastH, view(), {pix: dpr});
+  scaleBar();
+}});
 const ctx = cv.getContext("2d");
-const view = () => ({scale, tx, ty});
-const w2s = (x,z) => { const p = toPx(x,z); return [tx + p[0]*scale, ty + p[1]*scale]; };
-const s2w = (sx,sy) => toWorld((sx - tx)/scale, (sy - ty)/scale);
+const view = () => ({scale: V.scale, tx: V.tx, ty: V.ty});
+const w2s = (x,z) => { const p = toPx(x,z); return [V.tx + p[0]*V.scale, V.ty + p[1]*V.scale]; };
+const s2w = (sx,sy) => { const q = V.at(sx, sy); return toWorld(q.px, q.py); };
 
 // ---------- the document ----------
 // One JSON object is the whole plan: the same bytes go to localStorage, into the
@@ -202,7 +208,7 @@ const undoStack = [];
 const r1 = v => Math.round(v*10)/10;
 function snapshot(){
   const c = s2w(cv.clientWidth/2, cv.clientHeight/2);
-  doc.view = {x:r1(c[0]), z:r1(c[1]), zoom:Math.round(scale*1000)/1000};
+  doc.view = {x:r1(c[0]), z:r1(c[1]), zoom:Math.round(V.scale*1000)/1000};
   return doc;
 }
 function pushUndo(){
@@ -415,33 +421,10 @@ function sizeCanvas(){
   }
   return dpr;
 }
-let pending = false, lastW = 0, lastH = 0;
-function draw(){
-  if(pending) return;
-  pending = true;
-  requestAnimationFrame(() => {
-    pending = false;
-    const dpr = sizeCanvas();
-    lastW = stage.clientWidth; lastH = stage.clientHeight;
-    render(ctx, lastW, lastH, view(), {pix:dpr});
-    scaleBar();
-  });
-}
-function computeFit(){ fit = Math.min(stage.clientWidth/GEOM.size, stage.clientHeight/GEOM.size)*0.98; }
-function zoomAt(cx, cy, factor){
-  const ns = clamp(scale*factor, fit*0.5, MAX_ZOOM);
-  tx = cx - (cx - tx)*(ns/scale);
-  ty = cy - (cy - ty)*(ns/scale);
-  scale = ns; draw(); saveSoon();
-}
-function centreOn(x, z, zoom){
-  computeFit();
-  scale = clamp(zoom || scale, fit*0.5, MAX_ZOOM);
-  const p = toPx(x, z);
-  tx = stage.clientWidth/2 - p[0]*scale;
-  ty = stage.clientHeight/2 - p[1]*scale;
-  draw();
-}
+let lastW = 0, lastH = 0;
+function draw(){ V.request(); }
+function zoomAt(cx, cy, factor){ V.zoomAt(cx, cy, factor); saveSoon(); }
+function centreOn(x, z, zoom){ const p = toPx(x, z); V.centre(p[0], p[1], zoom); }
 function fitWorld(){ centreOn(0, 0, Math.min(stage.clientWidth, stage.clientHeight)/GEOM.size*0.98); }
 // A fresh world is almost all fog, so "fit" means fit what anyone has actually walked.
 function fitExplored(){
@@ -456,17 +439,14 @@ function fitExplored(){
     if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y;
   }
   if(x1 < 0) return fitWorld();
-  computeFit();
-  const k = GEOM.size/N, bw = (x1-x0+1)*k, bh = (y1-y0+1)*k, pad = 1.15;
-  scale = clamp(Math.min(stage.clientWidth/(bw*pad), stage.clientHeight/(bh*pad)), fit*0.5, MAX_ZOOM);
-  tx = stage.clientWidth/2 - (x0*k + bw/2)*scale;
-  ty = stage.clientHeight/2 - (y0*k + bh/2)*scale;
+  const k = GEOM.size/N;
+  V.fitBox(x0*k, y0*k, (x1-x0+1)*k, (y1-y0+1)*k, 1.15, 0);
   draw(); saveSoon();
 }
 let gotFog = false;
 function fogReady(){ if(!gotFog){ gotFog = true; if(!viewFromDoc) fitExplored(); } }
 function scaleBar(){
-  const mpp = GEOM.pixel/scale;                 // metres per screen pixel
+  const mpp = GEOM.pixel/V.scale;               // metres per screen pixel
   let m = 10;
   while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
   while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
@@ -590,7 +570,7 @@ stage.addEventListener("pointermove", e => {
     pinch = p; return;
   }
   if(panning && last){
-    tx += e.clientX - last.x; ty += e.clientY - last.y;
+    V.tx += e.clientX - last.x; V.ty += e.clientY - last.y;
     last = {x:e.clientX, y:e.clientY}; draw(); saveSoon(); return;
   }
   if(measure && measure.live){ measure.b = w; measureOut(); draw(); return; }
@@ -632,11 +612,6 @@ function pinchState(){
   const [a, b] = [...pts.values()];
   return {dist:Math.hypot(a.x-b.x, a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2};
 }
-stage.addEventListener("wheel", e => {
-  e.preventDefault();
-  const [sx, sy] = rel(e);
-  zoomAt(sx, sy, Math.exp(-e.deltaY*0.0015));
-}, {passive:false});
 
 function commit(it){
   pushUndo();
@@ -685,13 +660,6 @@ document.getElementById("newBtn").onclick = () => {
 document.getElementById("zoomIn").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1.35);
 document.getElementById("zoomOut").onclick = () => zoomAt(stage.clientWidth/2, stage.clientHeight/2, 1/1.35);
 document.getElementById("zoomFit").onclick = fitExplored;
-function keepCentre(){
-  if(!lastW || !lastH) return draw();
-  const c = s2w(lastW/2, lastH/2);
-  computeFit();
-  centreOn(c[0], c[1], clamp(scale, fit*0.5, MAX_ZOOM));
-}
-addEventListener("resize", keepCentre);
 
 // ---------- title, notes, layers ----------
 const titleIn = document.getElementById("titleIn"), notesIn = document.getElementById("notesIn");
@@ -814,7 +782,7 @@ async function exportPNG(){
   g.fill();
   g.fillStyle = "#c9a15a"; g.textAlign = "left"; g.textBaseline = "middle";
   g.fillText(title, 22, 30);
-  const mpp = GEOM.pixel/scale;
+  const mpp = GEOM.pixel/V.scale;
   const foot = `${GEOM.world} · ${Math.round(W*mpp)} m across · xandaris valheim`;
   g.font = `500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
   g.fillStyle = "rgba(231,226,212,.7)"; g.textAlign = "right"; g.textBaseline = "bottom";
@@ -889,7 +857,7 @@ async function tick(){
 // ---------- boot ----------
 async function boot(){
   document.getElementById("buildstamp").textContent = "build " + BUILD;
-  computeFit();
+  V.computeFit();
   if(!viewFromDoc) fitWorld();
   RASTER.loadBase();
   try{ await MapCore.fetchConfig(API); }catch(e){}

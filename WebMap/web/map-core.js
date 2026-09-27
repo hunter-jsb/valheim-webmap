@@ -467,6 +467,106 @@ function river(g, v, f, st, ok, boxes, sx){
 }
 const hitName = (boxes, x, y) => { const b = (boxes || []).find(b => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1); return b ? b.f : null; };
 
+// ---------- the view ----------
+// One window onto the texture for every page: the scale in screen px per
+// texture px, and where the texture's origin sits on screen. It pans on a drag,
+// zooms on the wheel and a pinch, fits the world or a box, paints once a frame
+// however many events asked, and keeps its middle when the sidebar folds. A tap
+// is a pointer that came up within five pixels of where it went down. A page
+// that draws with the pointer takes the maths and the wheel and drives the drag
+// itself (pointer: false).
+// o: {paint(v), max, min (the floor as a share of the fit, .5), pointer, guard (a selector
+//     no drag starts on), capture (false: links inside the stage keep their clicks, and a
+//     drag is followed on the window instead), down(e) (false refuses the drag),
+//     tap(x, y, e, target), resize()}
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+function view(stage, o){
+  o = o || {};
+  const max = o.max || MAX_ZOOM, floor = o.min == null ? .5 : o.min;
+  const v = {scale: 1, tx: 0, ty: 0, fit: 1, moved: 0};
+  let frame = 0, seenW = 0, seenH = 0;
+  const paint = () => { if(o.paint) o.paint(v); seenW = stage.clientWidth; seenH = stage.clientHeight; };
+  v.request = () => { if(frame) return; frame = requestAnimationFrame(() => { frame = 0; paint(); }); };
+  v.computeFit = () => (v.fit = Math.min(stage.clientWidth/geom.size, stage.clientHeight/geom.size)*0.98);
+  v.fitWorld = () => {
+    v.computeFit(); v.scale = v.fit;
+    v.tx = (stage.clientWidth - geom.size*v.scale)/2; v.ty = (stage.clientHeight - geom.size*v.scale)/2;
+    v.request();
+  };
+  // a box in texture px, with pad times its size on screen; lo is the zoom floor (the fit)
+  v.fitBox = (bx, by, bw, bh, pad, lo) => {
+    v.computeFit();
+    const W = stage.clientWidth, H = stage.clientHeight; pad = pad || 1.6;
+    v.scale = clamp(Math.min(W/(bw*pad), H/(bh*pad)), lo == null ? v.fit : lo, max);
+    v.tx = W/2 - (bx + bw/2)*v.scale; v.ty = H/2 - (by + bh/2)*v.scale;
+    v.request();
+  };
+  v.centre = (px, py, z) => {
+    v.computeFit(); v.scale = clamp(z || v.scale, v.fit*floor, max);
+    v.tx = stage.clientWidth/2 - px*v.scale; v.ty = stage.clientHeight/2 - py*v.scale;
+    v.request();
+  };
+  v.zoomAt = (cx, cy, f) => {
+    const ns = clamp(v.scale*f, v.fit*floor, max);
+    v.tx = cx - (cx - v.tx)*(ns/v.scale); v.ty = cy - (cy - v.ty)*(ns/v.scale);
+    v.scale = ns; v.request();
+  };
+  v.zoomBy = f => v.zoomAt(stage.clientWidth/2, stage.clientHeight/2, f);
+  v.at = (sx, sy) => ({px: (sx - v.tx)/v.scale, py: (sy - v.ty)/v.scale});     // screen -> texture px
+  v.rel = e => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  stage.addEventListener("wheel", e => { e.preventDefault(); const [x, y] = v.rel(e); v.zoomAt(x, y, Math.exp(-e.deltaY*0.0015)); }, {passive: false});
+  // a folded sidebar widens the stage: what was in the middle stays in the middle
+  addEventListener("resize", () => {
+    const W = stage.clientWidth, H = stage.clientHeight;
+    if(seenW && seenH){ v.tx += (W - seenW)/2; v.ty += (H - seenH)/2; }
+    v.computeFit(); if(o.resize) o.resize(); v.request();
+  });
+  if(o.pointer !== false){
+    const pts = new Map(); let last = null, pinch = null, down = null;
+    const pinchState = () => { const [a, b] = [...pts.values()]; return {dist: Math.hypot(a.x-b.x, a.y-b.y), cx: (a.x+b.x)/2, cy: (a.y+b.y)/2}; };
+    // Capturing the pointer keeps a drag alive off the stage; it also retargets the
+    // pointerup, so a control under the finger must be left alone or it never clicks,
+    // and a page whose stage is full of links follows the drag on the window instead.
+    const cap = o.capture !== false, on = cap ? stage : window;
+    stage.addEventListener("pointerdown", e => {
+      if(o.guard && e.target.closest && e.target.closest(o.guard)) return;
+      if(o.down && o.down(e) === false) return;
+      if(cap) try{ stage.setPointerCapture(e.pointerId); }catch(err){}
+      pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+      down = pts.size === 1 ? {x: e.clientX, y: e.clientY, id: e.pointerId, target: e.target} : null;
+      v.moved = 0;
+      if(pts.size === 1){ last = {x: e.clientX, y: e.clientY}; stage.classList.add("dragging"); }
+      else if(pts.size === 2) pinch = pinchState();
+    });
+    on.addEventListener("pointermove", e => {
+      if(!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+      if(pts.size === 2 && pinch){
+        const p = pinchState(), r = stage.getBoundingClientRect();
+        if(pinch.dist > 0) v.zoomAt(p.cx - r.left, p.cy - r.top, p.dist/pinch.dist);
+        pinch = p;
+      } else if(pts.size === 1 && last){
+        v.moved += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
+        v.tx += e.clientX - last.x; v.ty += e.clientY - last.y;
+        last = {x: e.clientX, y: e.clientY}; v.request();
+      }
+    });
+    const end = e => {
+      if(e.type === "pointerup" && o.tap && down && down.id === e.pointerId && pts.size === 1
+         && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5){
+        const [x, y] = v.rel(e); o.tap(x, y, e, down.target);
+      }
+      down = null; pts.delete(e.pointerId);
+      if(pts.size < 2) pinch = null;
+      if(pts.size === 0){ last = null; stage.classList.remove("dragging"); }
+      else { const p = [...pts.values()][0]; last = {x: p.x, y: p.y}; }
+    };
+    on.addEventListener("pointerup", end);
+    on.addEventListener("pointercancel", end);
+  }
+  return v;
+}
+
 // ---------- view cache ----------
 // The scene, rendered once at a zoom over a window wider than the screen: a pan
 // slides it and a zoom stretches it, and the scene renders again only when the
@@ -599,6 +699,7 @@ function parsePins(lines){
     return Object.assign({id: f[1], type: f[2], owner: f[3], site: f[0] === "web", text: f.slice(6).join(",").trim(), x, z}, toPx(x, z));
   }).filter(Boolean);
 }
+const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 function ago(iso){
   const d = (Date.now() - new Date(iso).getTime())/1000;
   if(!isFinite(d)) return "";
@@ -723,5 +824,5 @@ return {cfg, brand, setTitle, credits, toggleSide,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
         drawRasters, kindOf, ORDER, shade, parsePieces, explored, filterExplored, drawPieces, drawFires, drawDeaths, drawNames, hitName, viewCache, post,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
-        parsePins, ago, esc, nav, user, authHeaders, whoami, signIn, signOut};
+        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut};
 })();
