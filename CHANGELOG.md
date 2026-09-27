@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.15.0
 
 * The tour grows to about twenty stops a cycle, drawn through every kind of place before any
   repeats, and remembers what the last cycle showed so the next differs: every boat and cart,

@@ -45,10 +45,11 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 ## Using the map
 
 The viewer at `http://your_ip:port` is five pages — the live map (with the world in 3D
-as a mode of it), the world's own page (its records, its lands, its bosses), a portal atlas drawn on a biome chart (a hub opens close up: the base's
+as a mode of it, and a cinematic tour through both), the world's own page (its records, its lands, its bosses), a portal atlas drawn on a biome chart (a hub opens close up: the base's
 floor plan with each gate where it stands, and going through a gate lands you at its far
 side with the gate you arrive at lit), a planning board for drawing and sharing routes,
-and per-player tallies, from deaths and deeds to what each has cooked, brewed and smelted
+and per-player tallies, from deaths and deeds to what each has cooked, brewed and smelted,
+with a class read from their gear, their food and their deeds
 (a player's own page draws them as the 3D view does, turning slowly:
 live while they are online, as last seen once they have gone) —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
