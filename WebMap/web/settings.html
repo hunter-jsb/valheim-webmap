@@ -12,7 +12,8 @@
 <style>
   body{min-height:100%}
   .wrap{max-width:820px;margin:0 auto;padding:1.4rem .9rem 3rem}
-  .rows{display:grid;gap:.6rem;margin-top:1rem}
+  .rows{display:grid;gap:.6rem;margin-top:.4rem}
+  .rows .section{margin-top:.9rem}
   /* one setting: its name and what it does, the value, and who set it */
   .set{display:grid;grid-template-columns:minmax(0,1fr) 12rem;gap:.5rem 1rem;align-items:start}
   .set .k{font-family:var(--mono);font-size:.82rem;color:var(--bright);font-weight:600}
@@ -59,8 +60,27 @@ function row(s){
     <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">Save</button>${s.given ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
   </div>`;
 }
+// the settings read in groups, as an admin thinks of them, not in the file's order
+const GROUPS = [
+  ["The map", ["explore_radius", "update_fog_texture_interval", "save_fog_texture_interval", "texture_size", "pixel_size", "render_size", "default_zoom"]],
+  ["Players", ["player_update_interval", "always_map", "always_visible", "show_vehicles", "max_pins_per_user"]],
+  ["Chat & Discord", ["max_messages", "announce_name", "discord_webhook", "discord_bot_token", "discord_guild", "discord_log_channel", "discord_chat_channel", "chat_relay"]],
+  ["The 3D view", ["export_models", "extract_textures", "extract_meshes", "export_ms_per_frame", "texture_max_size", "object_categories"]],
+  ["The mod", ["debug"]],
+];
 function render(){
-  document.getElementById("rows").innerHTML = SETTINGS.settings.map(row).join("");
+  const by = new Map(SETTINGS.settings.map(s => [s.key, s]));
+  const placed = new Set();
+  let html = "";
+  for(const [title, keys] of GROUPS){
+    const rows = keys.map(k => by.get(k)).filter(Boolean);
+    if(!rows.length) continue;
+    rows.forEach(s => placed.add(s.key));
+    html += `<h2 class="eyebrow section">${esc(title)}</h2>` + rows.map(row).join("");
+  }
+  const rest = SETTINGS.settings.filter(s => !placed.has(s.key));   // a newer mod's settings this page has not sorted yet
+  if(rest.length) html += `<h2 class="eyebrow section">More</h2>` + rest.map(row).join("");
+  document.getElementById("rows").innerHTML = html;
   document.getElementById("restart").hidden = !SETTINGS.restart;
   upgradePickers();
 }
