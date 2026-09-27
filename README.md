@@ -117,6 +117,11 @@ no ring wants is let go (at most 1,600 chunks of ground and 120 of objects). In 
 overview, `W A S D` or the arrows carry the circled spot over the land, `E` or `Space`
 raise it and `Q` or `Shift` alone lower it; `Shift` with a key goes faster.
 
+The light follows the clock: the sun crosses the north 45 degrees up at noon and lies low and
+warm at either end of the day, so a slope turned from it falls into shade, and the air hazes
+what is far toward the sky's own colour, thickest along level sight lines and thin looking
+down from high. The overview stops down as it climbs, so the land sits below a brighter sky.
+
 ### The model library
 
 The first time the sweep meets a prefab, the mod exports it as a glTF model on the game

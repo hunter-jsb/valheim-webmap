@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Lighting } from './sky.js';
+import { HAZE, Lighting } from './sky.js';
 import { lookKey, RigBuilder } from './rig.js';
 
 const CHUNK = 256;                       // a chunk's edge in metres
@@ -44,9 +44,9 @@ export class View3D {
     this.maxAniso = this.renderer.capabilities.getMaxAnisotropy();
 
     // sky dome, sun, moon, fog colour and an environment map, all from the game's time of day
-    this.lighting = new Lighting(this.scene, this.renderer);
+    this.lighting = new Lighting(this.scene, this.renderer, { sea: water });
     this.lighting.setShadows(!phone);      // shadows cost a phone most of its frame rate
-    this.frac = 0.5;
+    this.frac = 0.5; this.held = null;     // the live clock, and a time the tour holds over it
 
     // the ground's colour comes from the server's own rasters, sampled in world space:
     // the biome chart and the explored mask, both 2048 px over the world at 12 m a pixel
@@ -227,10 +227,10 @@ export class View3D {
     for (let i = 0; i < heights.length; i++) heights[i] = raw[i] / 10;
     entry.heights = heights; entry.n = n; entry.step = CHUNK / (n - 1);
     this.buildTerrain(entry);
-    // the neighbours' edge normals read this chunk's heights: at the same detail, rebuild theirs to match
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    // the neighbours' edge normals read this chunk's heights: theirs are taken again to match
+    for (const [dx, dz] of AROUND) {
       const nb = this.chunks.get((cx + dx) + ',' + (cz + dz));
-      if (nb && nb.mesh && nb.step === entry.step && entry.step <= 2) this.buildTerrain(nb);
+      if (nb && nb.mesh) this.edgeNormals(nb, nb.mesh.geometry.attributes.normal);
     }
     if (entry.step <= 2) this.settle();
     this.status();
@@ -243,26 +243,17 @@ export class View3D {
     const count = n * n + 4 * n;
     const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3);
     const x0 = entry.cx * CHUNK, z0 = entry.cz * CHUNK;
-    const at = (i, j) => {
-      if (i >= 0 && j >= 0 && i < n && j < n) return h[j * n + i];
-      const o = this.heightAt(x0 + i * s, z0 + j * s);
-      return o === null ? h[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))] : o;
-    };
     for (let j = 0, k = 0; j < n; j++)
       for (let i = 0; i < n; i++, k++) {
         pos[k * 3] = i * s; pos[k * 3 + 1] = h[j * n + i]; pos[k * 3 + 2] = -j * s;
-        // normal from the height field (across the seam where a neighbour is loaded): (-dy/dx, 1, dy/dz)
-        const fx = (at(i + 1, j) - at(i - 1, j)) / (2 * s), fz = (at(i, j + 1) - at(i, j - 1)) / (2 * s);
-        const len = Math.hypot(fx, 1, fz);
-        nrm[k * 3] = -fx / len; nrm[k * 3 + 1] = 1 / len; nrm[k * 3 + 2] = fz / len;
+        if (i > 0 && j > 0 && i < n - 1 && j < n - 1) setNormal(nrm, k, (h[j * n + i + 1] - h[j * n + i - 1]) / (2 * s), (h[(j + 1) * n + i] - h[(j - 1) * n + i]) / (2 * s));
       }
     // the skirt: south, north, west, east edges, each vertex copied a little lower
-    const edges = [(t) => t, (t) => (n - 1) * n + t, (t) => t * n, (t) => t * n + n - 1];
+    const edges = EDGES(n);
     for (let e = 0, k = n * n; e < 4; e++)
       for (let t = 0; t < n; t++, k++) {
         const v = edges[e](t);
         pos[k * 3] = pos[v * 3]; pos[k * 3 + 1] = pos[v * 3 + 1] - skirt; pos[k * 3 + 2] = pos[v * 3 + 2];
-        nrm[k * 3] = nrm[v * 3]; nrm[k * 3 + 1] = nrm[v * 3 + 1]; nrm[k * 3 + 2] = nrm[v * 3 + 2];
       }
     const idx = new Uint32Array((n - 1) * (n - 1) * 6 + 4 * (n - 1) * 12);
     let o = 0;
@@ -282,6 +273,7 @@ export class View3D {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    this.edgeNormals(entry, geo.attributes.normal);
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeBoundingSphere();
     if (entry.mesh) { this.scene.remove(entry.mesh); entry.mesh.geometry.dispose(); }
@@ -291,6 +283,30 @@ export class View3D {
     mesh.userData.ground = true;
     entry.mesh = mesh;
     this.scene.add(mesh);
+  }
+
+  // A chunk's edge normals (the skirt's with them), from the heights on both sides: the slope
+  // spans the coarsest step among the chunks meeting there, so a seam and a ring boundary light
+  // alike from either side; one-sided where the far side is not loaded yet.
+  edgeNormals(entry, attr) {
+    const n = entry.n, s = entry.step, h = entry.heights, x0 = entry.cx * CHUNK, z0 = entry.cz * CHUNK, nrm = attr.array;
+    const stepAt = (dx, dz) => { const c = this.chunks.get((entry.cx + dx) + ',' + (entry.cz + dz)); return c && c.heights ? c.step : 0; };
+    const H = (i, j) => (i >= 0 && j >= 0 && i < n && j < n ? h[j * n + i] : this.heightAt(x0 + i * s, z0 + j * s));
+    const slope = (a, m, b, d) => (a !== null && b !== null ? (b - a) / (2 * d) : b !== null ? (b - m) / d : a !== null ? (m - a) / d : 0);
+    const edges = EDGES(n);
+    for (let e = 0; e < 4; e++) {
+      const sx = e === 2 ? -1 : e === 3 ? 1 : 0, sz = e === 0 ? -1 : e === 1 ? 1 : 0, across = stepAt(sx, sz);
+      for (let t = 0; t < n; t++) {
+        const v = edges[e](t), i = v % n, j = (v - i) / n;
+        // at a corner the diagonal chunk and the other side's meet it too
+        const cx = i === 0 ? -1 : i === n - 1 ? 1 : 0, cz = j === 0 ? -1 : j === n - 1 ? 1 : 0;
+        const d = Math.max(s, across, cx && cz ? Math.max(stepAt(cx, 0), stepAt(0, cz), stepAt(cx, cz)) : 0) / s;
+        setNormal(nrm, v, slope(H(i - d, j), h[v], H(i + d, j), d * s), slope(H(i, j - d), h[v], H(i, j + d), d * s));
+        const k = n * n + e * n + t;
+        nrm[k * 3] = nrm[v * 3]; nrm[k * 3 + 1] = nrm[v * 3 + 1]; nrm[k * 3 + 2] = nrm[v * 3 + 2];
+      }
+    }
+    attr.needsUpdate = true;
   }
 
   // Which 256 m chunks have walked ground, from the explored mask the way the mod marks
@@ -332,6 +348,7 @@ export class View3D {
     const u = this.ground, ground = kind === 'ground';
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, u);
+      this.lighting.hazeShader(shader, true);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vGroundPos; varying vec3 vGroundNrm;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vGroundNrm = normal;');
@@ -364,14 +381,14 @@ if (uFogOn > 0.5) {
   float wx = vGroundPos.x, wz = -vGroundPos.z;
   float explored = texture2D(uFog, vec2(wx * uWorld + 0.5 + uFogShift, wz * uWorld + 0.5 + uFogShift)).r;
   gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.0), 0.8 * (1.0 - smoothstep(0.35, 0.65, explored)));
-}` : `#include <dithering_fragment>
+}${HAZE}` : `#include <dithering_fragment>
 if (uFogOn > 0.5) {
   float wx = vGroundPos.x, wz = -vGroundPos.z;
   float explored = texture2D(uFog, vec2(wx * uWorld + 0.5 + uFogShift, wz * uWorld + 0.5 + uFogShift)).r;
   float bank = texture2D(uDetail, vec2(wx, wz) / 900.0).r;
   vec3 mist = mix(vec3(0.50, 0.55, 0.58), vec3(0.70, 0.73, 0.75), bank);
   gl_FragColor.rgb = mix(gl_FragColor.rgb, mist, 0.85 * (1.0 - smoothstep(0.35, 0.65, explored)));
-}`);
+}${HAZE}`);
     };
     mat.customProgramCacheKey = () => 'ground-' + kind;
     return mat;
@@ -438,7 +455,7 @@ if (uFogOn > 0.5) {
         if (!o.matrixWorld.equals(IDENTITY)) geo.applyMatrix4(o.matrixWorld);
         if (!geo.attributes.normal) geo.computeVertexNormals();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of mats) { m.side = THREE.DoubleSide; if (m.map) m.map.anisotropy = Math.min(4, this.maxAniso); m.metalness = 0; m.roughness = Math.max(0.7, m.roughness); }
+        for (const m of mats) { m.side = THREE.DoubleSide; if (m.map) m.map.anisotropy = Math.min(4, this.maxAniso); m.metalness = 0; m.roughness = Math.max(0.7, m.roughness); this.lighting.haze(m); }
         parts.push({ geometry: geo, material: o.material });
       });
       return parts.length ? parts : null;
@@ -599,7 +616,7 @@ if (uFogOn > 0.5) {
     const key = 'canopy:' + (info.kt || '') + ':' + (info.kc || []).join(',');
     if (this.matCache.has(key)) return this.matCache.get(key);
     const tint = info.kc && info.kc.length === 3 ? new THREE.Color(info.kc[0], info.kc[1], info.kc[2]) : new THREE.Color(0.35, 0.55, 0.25);
-    const mat = new THREE.MeshStandardMaterial({ color: info.kt ? 0xffffff : tint, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, alphaTest: 0.5 });
+    const mat = this.lighting.haze(new THREE.MeshStandardMaterial({ color: info.kt ? 0xffffff : tint, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, alphaTest: 0.5 }));
     mat.map = this.leafMask();   // stand-in until the real leaf texture arrives (or for good)
     mat.alphaMap = this.crownMask();
     if (info.kt) {
@@ -650,7 +667,7 @@ if (uFogOn > 0.5) {
   }
 
   plain(hex) {
-    if (!this.matCache.has(hex)) this.matCache.set(hex, new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.9, metalness: 0.02 }));
+    if (!this.matCache.has(hex)) this.matCache.set(hex, this.lighting.haze(new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.9, metalness: 0.02 })));
     return this.matCache.get(hex);
   }
 
@@ -693,6 +710,7 @@ if (uFogOn > 0.5) {
       m.castShadow = !this.phone; m.position.y = 0.9; body.add(m);
     }
     if (e.body) e.group.remove(e.body);
+    body.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => this.lighting.haze(m)); });
     e.body = body;
     body.rotation.y = facing(e.yaw);
     e.group.add(body);
@@ -742,13 +760,13 @@ if (uFogOn > 0.5) {
   setSpin(degPerSec) { this.spin = degPerSec || 0; }
   setOrbitDist(d) { this.orbitDist = d; if (this.mode === 'orbit') { this.aimOrbit(); this.applyFog(); this.update(); } }
 
-  // The haze closes in at the edge of what is loaded, kilometres out when the overview is
-  // pulled back; the sea is one plane, grown to the horizon.
+  // The fog closes in at the edge of what is loaded, kilometres out when the overview is
+  // pulled back; the haze short of it is the air's (sky.js). The sea is one plane, grown to the horizon.
   applyFog() {
     const f = this.scene.fog, r = this.reach();
     if (this.mode === 'street') { f.near = 160; f.far = 520; this.camera.near = 0.3; this.camera.far = 3000; }
     else {
-      f.near = Math.max(700, r.d * 1.5); f.far = Math.max(2600, r.far * 1.1);
+      f.near = Math.max(700, r.far * 0.6); f.far = Math.max(2600, r.far * 1.1);
       this.camera.near = Math.min(20, Math.max(0.3, r.d * 0.002)); this.camera.far = Math.max(8000, r.far * 1.6 + r.d);
     }
     this.water.scale.setScalar(Math.max(1, (f.far * 2.2) / 6000));
@@ -945,8 +963,16 @@ if (uFogOn > 0.5) {
     this.camera.updateProjectionMatrix();
   }
 
+  // The live clock: the server's, or the time picked in the tray.
   setTime(frac) {
-    if (Math.abs(frac - this.frac) > 0.002 || this.lighting.frac === undefined) { this.frac = frac; this.lighting.setTime(frac); }
+    this.frac = frac;
+    if (this.held === null && !this.lighting.ease && Math.abs(frac - this.lighting.frac) > 0.002) this.lighting.setTime(frac);
+  }
+  // A time of day for a beat of the tour (0 midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset),
+  // eased to over ms and held over the live clock; null eases back to the live clock.
+  setClock(frac, ms = 2500) {
+    this.held = frac ?? null;
+    this.lighting.easeTo(this.held ?? this.frac, ms);
   }
   setShadows(on) {
     this.lighting.setShadows(on);
@@ -1064,6 +1090,14 @@ const IDENTITY = new THREE.Matrix4();
 const facing = (yaw) => Math.PI - (yaw || 0) * Math.PI / 180;
 
 const _ahead = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+// a chunk grid's south, north, west and east edges, t along each
+const EDGES = (n) => [(t) => t, (t) => (n - 1) * n + t, (t) => t * n, (t) => t * n + n - 1];
+// the ground's normal from its slopes, (-dh/dx, 1, dh/dz) with z north (the scene's -Z)
+function setNormal(nrm, k, fx, fz) {
+  const len = Math.hypot(fx, 1, fz);
+  nrm[k * 3] = -fx / len; nrm[k * 3 + 1] = 1 / len; nrm[k * 3 + 2] = fz / len;
+}
 
 // OBJ1, little-endian: 'OBJ1', u32 count, u32 prefabs, i32[prefabs] hashes, then per object
 // u16 prefab index, u8 flags (1 = player-built), u8 pad, f32 x y z, qx qy qz qw, sx sy sz.
