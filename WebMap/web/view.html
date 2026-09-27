@@ -154,7 +154,10 @@ view.onStatus = s => {
   const lib = s.library;
   $('status').textContent = `${MapCore.plural(s.ground, 'chunk')} of ground · ${s.objects.toLocaleString()} objects`
     + (lib ? ` · ${lib.readable} models` + (lib.queued ? `, ${lib.queued} exporting` : '') : '');
-  $('veil').textContent = s.unwalked ? 'Nobody has walked here yet, so there is nothing to show.'
+  // a mod from before the 3D view answers /state without its revisions
+  const before = STATE && STATE.rev && STATE.rev.objects === undefined;
+  $('veil').textContent = before ? 'The server’s map mod has no 3D view yet: it comes with the mod’s next restart.'
+    : s.unwalked ? 'Nobody has walked here yet, so there is nothing to show.'
     : s.ground ? '' : 'Reading the ground…';
 };
 
