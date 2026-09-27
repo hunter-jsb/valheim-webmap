@@ -130,6 +130,18 @@ yields is the smallest safe step.
 message on a `RelationsManager` permission check against the sender's platform user id,
 which a server does not have, so chat sent from a server is dropped in silence.
 
+### The style system
+
+`site.css` is the whole look: the tokens on `:root` (surfaces darkest to lightest, ink,
+accents, the map's own hues for portals, traders and graves, the halos over the world,
+radii, shadows, fonts, the bar and sidebar widths), the base, and the components every
+page shares -- `.title .eyebrow .sub .note .section .foot`, `.card .well .glass .stat .dot`,
+`.btn .chip .field .btnrow`, `.stage .mapctl .legend`, the nav and the sidebar shell. A
+page's own `<style>` holds only what that page alone draws, and names no colour of its
+own: every colour is a token, so a restyle is an edit to `:root` and the pages follow.
+The two exceptions are data, not chrome: the forest swatch's greens and the biome
+inks the map sets names in (`NAME_STYLE` in `map-core.js`).
+
 ### Checking the viewer against a live server
 
 `tools/sameorigin.py WebMap/web http://your_ip:port 8765` serves the viewer the way the

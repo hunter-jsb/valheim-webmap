@@ -19,6 +19,16 @@
   /* accents */
   --gold:#c9a15a;--gold-ink:#0d0f0e;--gold-dim:#241d10;
   --ok:#6faf68;--off:#a85757;--unknown:#8a8577;--portal:#6fd8e6;
+  --ok-line:#2f4b2e;   /* the edge of a card that is live */
+  --nil:#565b53;       /* a figure that is nothing */
+  /* the map's own hues: what a portal, a trader, a grave wears; the atlas's ground */
+  --portal-ink:#9fe8f2;--portal-dim:#97c4d0;--portal-line:#3a5a65;
+  --portal-well:rgba(14,21,24,.9);--portal-on:rgba(111,216,230,.14);
+  --trader:#f0cf7a;--grave:#d9c7a6;--chart:#05070a;--void:#000;
+  /* over the world: a label's backing, a text's halo, an icon's shadow */
+  --halo:rgba(10,12,10,.8);--halo-text:0 1px 3px #000,0 0 6px #000;
+  --shadow-ink:drop-shadow(0 1px 2px rgba(0,0,0,.55));
+  --modal:rgba(4,6,4,.72);--hair:rgba(255,255,255,.035);--scroll:#2f362f;
   /* shape */
   --r-sm:.35rem;--r:.5rem;--r-lg:.7rem;--pill:999px;
   --shadow:0 2px 8px rgba(0,0,0,.55);--shadow-lg:0 20px 60px rgba(0,0,0,.6);
@@ -35,9 +45,9 @@ a{color:var(--gold);text-decoration:none}
 a:hover{text-decoration:underline}
 button,input,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-*{scrollbar-width:thin;scrollbar-color:#2f362f transparent}
+*{scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}
 ::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-thumb{background:#2f362f;border-radius:4px}
+::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:4px}
 ::-webkit-scrollbar-track{background:transparent}
 
 /* ---------- type ---------- */
@@ -58,10 +68,10 @@ button,input,textarea{font:inherit;color:inherit}
 
 /* ---------- surfaces ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:.75rem .85rem;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}   /* a hair of light along the top edge */
+  box-shadow:inset 0 1px 0 var(--hair)}   /* a hair of light along the top edge */
 a.card{display:block;color:var(--ink)}
 .card.link:hover{border-color:var(--gold);text-decoration:none}
-.card.on{border-color:#2f4b2e}
+.card.on{border-color:var(--ok-line)}
 .well{background:var(--well);border:1px solid var(--line);border-radius:var(--r)}
 .glass{background:var(--glass);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(4px)}
 /* a figure with its caption under it */
@@ -88,7 +98,7 @@ a.card{display:block;color:var(--ink)}
 .btn.quiet{background:transparent;color:var(--muted)}
 /* floating over the map: a size of its own, glassed, lifted off the ground */
 .btn.map{width:var(--ctl);height:var(--ctl);padding:0;background:var(--glass);font-size:1rem;box-shadow:var(--shadow)}
-.chip{padding:.2rem .6rem;border-radius:var(--pill);border:1px solid var(--line);background:rgba(255,255,255,.03);
+.chip{padding:.2rem .6rem;border-radius:var(--pill);border:1px solid var(--line);background:var(--hair);
   color:var(--muted);font-size:.68rem;line-height:1.4;white-space:nowrap;cursor:pointer;user-select:none}
 .chip:hover{color:var(--ink);border-color:var(--gold)}
 .chip.on{color:var(--gold-ink);background:var(--gold);border-color:var(--gold);font-weight:600}
@@ -148,7 +158,7 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
   .brand{font-size:.8rem}
   .navlinks{gap:.9rem;padding-right:2.2rem}
   .nav::after{content:"";position:absolute;right:0;top:0;bottom:0;width:2.2rem;pointer-events:none;
-    background:linear-gradient(90deg,rgba(18,21,15,0),#12150f 70%)}
+    background:linear-gradient(90deg,rgba(18,21,15,0),var(--bg-2) 70%)}
 }
 
 /* ---------- app shell ---------- */
@@ -166,7 +176,7 @@ body:not(.side-open) .sidebar{display:none}
 .sideclose{display:none}
 @media (max-width:760px){
   .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:20;width:min(100%,360px);
-    box-shadow:0 0 30px rgba(0,0,0,.6)}
+    box-shadow:var(--shadow-lg)}
   .sideclose{display:flex;position:sticky;top:0;float:right;width:34px;height:34px;align-items:center;
     justify-content:center;margin:-.3rem -.3rem 0 .5rem;border:1px solid var(--line);border-radius:var(--r);
     background:var(--card);color:var(--ink);font-size:1.2rem;line-height:1;cursor:pointer;z-index:1}

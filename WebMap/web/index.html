@@ -22,11 +22,11 @@
 .namer .others{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
 .namer .others .chip{font-size:.68rem}
 /* the pin's own icons, shadowed as on the map so the gold ones hold on a gold chip */
-.namer .nm .ic{width:17px;height:17px;vertical-align:-3px;margin-right:.35rem;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+.namer .nm .ic{width:17px;height:17px;vertical-align:-3px;margin-right:.35rem;overflow:visible;filter:var(--shadow-ink)}
 .namer .nm i{font-weight:400;color:var(--muted)}
 .namer .pick{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
 .namer .pick .chip{display:inline-flex;align-items:center;gap:.3rem}
-.namer .pick svg{width:13px;height:13px;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+.namer .pick svg{width:13px;height:13px;overflow:visible;filter:var(--shadow-ink)}
   html,body{height:100%}
   body{overflow:hidden}
 
@@ -59,7 +59,7 @@
   /* Ground, builds and everything crisp go into this one screen-space canvas,
      redrawn per view change -- map-core.js says why none of it may live under a
      CSS transform. */
-  #mapCanvas{position:absolute;inset:0;width:100%;height:100%;background:#000;visibility:hidden}
+  #mapCanvas{position:absolute;inset:0;width:100%;height:100%;background:var(--void);visibility:hidden}
   #mapCanvas.ready{visibility:visible}
   /* Portal lines stay vector, in screen space with a viewBox that follows the
      view, so they rasterise at 1:1 every frame rather than smearing. */
@@ -69,10 +69,10 @@
   .marker{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;
     align-items:center;gap:3px}
   .marker .dot{width:11px;height:11px;background:var(--ok);border:2px solid var(--stage);
-    box-shadow:0 0 9px rgba(111,175,104,.85)}
-  .marker .nm{font-size:.66rem;color:var(--bright);background:rgba(10,12,10,.8);padding:1px 5px;
+    box-shadow:0 0 9px var(--ok)}
+  .marker .nm{font-size:.66rem;color:var(--bright);background:var(--halo);padding:1px 5px;
     border-radius:var(--r-sm);white-space:nowrap}
-  .marker .ic{display:block;flex:0 0 auto;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+  .marker .ic{display:block;flex:0 0 auto;overflow:visible;filter:var(--shadow-ink)}
   .marker.pin .ic{width:17px;height:17px}
   .marker.pin{pointer-events:auto;cursor:pointer}   /* a tap opens its card */
   .stage.placing{cursor:crosshair}                  /* a pin is being moved: the next tap is where */
@@ -80,15 +80,15 @@
   /* parked kit, not people: visible on a look but never competing with players */
   .marker.veh .ic{opacity:.92}
   .marker.portal .ic,.marker.trader .ic,.marker.grave .ic{width:16px;height:16px}
-  .marker.portal .nm{color:#9fe8f2}
+  .marker.portal .nm{color:var(--portal-ink)}
   .marker.portal.crowd .nm{display:none}
   /* arriving from a link, the eye needs telling where it landed */
   .marker.portal.hl::after{content:"";position:absolute;left:50%;top:8px;width:18px;height:18px;
-    margin:-9px 0 0 -9px;border-radius:50%;border:2px solid #9fe8f2;pointer-events:none;
+    margin:-9px 0 0 -9px;border-radius:50%;border:2px solid var(--portal-ink);pointer-events:none;
     animation:hlring 1s ease-out infinite}
   @keyframes hlring{from{transform:scale(.5);opacity:1}to{transform:scale(3.4);opacity:0}}
-  .marker.trader .nm{color:#f0cf7a}
-  .marker.grave .nm{color:#d9c7a6}
+  .marker.trader .nm{color:var(--trader)}
+  .marker.grave .nm{color:var(--grave)}
   .no-portal .marker.portal,.no-portal #portalLinks{display:none}
   .no-grave .marker.grave{display:none}
   .no-trader .marker.trader{display:none}
@@ -99,11 +99,11 @@
   /* The layers card, as on Google Maps: a thumbnail of the other ground in the
      corner; hovering it (a tap, where nothing hovers) opens the grounds and presets. */
   .layers{position:absolute;left:.7rem;bottom:.7rem;z-index:10;display:flex;align-items:flex-end;gap:.5rem}
-  .lcard{position:relative;width:68px;height:68px;padding:0;border:2px solid rgba(231,226,212,.85);
-    border-radius:var(--r);overflow:hidden;background:#000;cursor:pointer;box-shadow:var(--shadow)}
+  .lcard{position:relative;width:68px;height:68px;padding:0;border:2px solid var(--ink-2);
+    border-radius:var(--r);overflow:hidden;background:var(--void);cursor:pointer;box-shadow:var(--shadow)}
   .lcard canvas{display:block;width:64px;height:64px}
   .lcard .lbl{position:absolute;left:0;right:0;bottom:0;font-size:.62rem;font-weight:600;color:var(--bright);
-    background:rgba(10,12,10,.72);padding:2px 0;text-align:center;letter-spacing:.04em}
+    background:var(--halo);padding:2px 0;text-align:center;letter-spacing:.04em}
   .lcard:hover{border-color:var(--gold)}
   .tray{display:none;flex-direction:column;gap:.55rem;padding:.6rem .75rem;font-size:.72rem;color:var(--muted);
     border-radius:var(--r-lg);box-shadow:var(--shadow)}
@@ -113,7 +113,7 @@
   .grounds{display:flex;gap:.55rem}
   .gcard{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:0;border:0;background:none;
     color:var(--muted);cursor:pointer;font-size:.68rem}
-  .gcard canvas{width:56px;height:56px;border-radius:var(--r-sm);border:2px solid transparent;background:#000}
+  .gcard canvas{width:56px;height:56px;border-radius:var(--r-sm);border:2px solid transparent;background:var(--void)}
   .gcard:hover,.gcard.on{color:var(--ink)}
   .gcard.on canvas{border-color:var(--gold)}
   .presets{display:flex;gap:.35rem;flex-wrap:wrap;min-width:0}   /* wraps on a phone, never spills */
@@ -135,7 +135,7 @@
   .fly.open .flyout{display:block}
 
   /* ---------- help ---------- */
-  .modal{position:fixed;inset:0;z-index:100;background:rgba(4,6,4,.72);
+  .modal{position:fixed;inset:0;z-index:100;background:var(--modal);
     align-items:center;justify-content:center;padding:1.25rem}
   .modal[hidden]{display:none}
   .modal:not([hidden]){display:flex}

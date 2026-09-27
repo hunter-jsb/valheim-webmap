@@ -47,6 +47,10 @@
   drag, wheel and pinch zoom, fits, one paint a frame, the middle kept when the sidebar
   folds, a tap told from a drag -- and the map, the atlas and the plan use it instead of
   three copies of the same code. The pages also share `plural` and `clamp` from the core.
+* Every colour a page names is a token now: the map's hues (portal, trader, grave), the
+  atlas's ground, the halos and shadows over the world, the modal, the scrollbar, a live
+  card's edge, a nil figure. `site.css` documents the system; a restyle is an edit to
+  `:root`.
 * The bar offers a sign-in where the deployment's API has one (`/auth/me`); served by
   the mod alone it shows nothing.
 * Pins from the site. `POST /pins` with `{"op":"add","x","z","type","text"}` places a pin

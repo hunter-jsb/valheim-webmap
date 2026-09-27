@@ -15,13 +15,13 @@
   /* ---------- the lists ---------- */
   .key{color:var(--muted);font-size:.72rem;margin-top:.5rem}
   .key .k{display:inline-block;width:20px;border-top:2px solid var(--portal);vertical-align:middle;margin-right:.15rem}
-  .key .k.dash{border-top:2px dashed #97c4d0;opacity:.75}
+  .key .k.dash{border-top:2px dashed var(--portal-dim);opacity:.75}
   .list{margin-top:.4rem}
   h2{margin-bottom:.55rem}
   .rows{display:grid;gap:.5rem}
   .row{display:flex;gap:.75rem;align-items:flex-start}
   .row .ic,.card h3 .ic{width:19px;height:19px;flex:0 0 auto;margin-top:.15rem;overflow:visible;
-    filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+    filter:var(--shadow-ink)}
   .bd{min-width:0;flex:1}
   .nm{font-size:.9rem;font-weight:600;color:var(--bright);display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem}
   .nm .arr{color:var(--portal);font-weight:400;font-size:1.05rem;line-height:1}
@@ -63,31 +63,31 @@
   /* ---------- the diagram ---------- */
   /* Screen-space canvas, HTML nodes placed by left/top: nothing crisp ever sits
      under a CSS transform, which is the map's own rule. */
-  .stage{background:#05070a}
+  .stage{background:var(--chart)}
   #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
   .net{position:absolute;inset:0;pointer-events:none}
   .node{position:absolute;width:0;height:0;pointer-events:none;color:var(--ink);text-decoration:none}
   .node .ic,.node .lb,.node .panel{pointer-events:auto}
   .node .ic{position:absolute;left:-11px;top:-11px;width:22px;height:22px;overflow:visible;
-    filter:drop-shadow(0 1px 2px rgba(0,0,0,.85))}
+    filter:var(--shadow-ink)}
   .node .lb{position:absolute;display:block;white-space:nowrap;text-align:center;line-height:1.2}
   .node .t{display:block;font-size:.8rem;font-weight:700;color:var(--bright);
-    text-shadow:0 1px 3px #000,0 0 6px #000,0 0 6px #000}
-  .node .d{display:block;font-size:.68rem;color:#a7b6bd;font-variant-numeric:tabular-nums;
-    text-shadow:0 1px 3px #000,0 0 6px #000}
+    text-shadow:var(--halo-text)}
+  .node .d{display:block;font-size:.68rem;color:var(--portal-dim);font-variant-numeric:tabular-nums;
+    text-shadow:var(--halo-text)}
   .node .dl{color:var(--unknown);font-weight:600}
   .node.dial .ic{opacity:.66}
   .node.loose .ic{opacity:.3}
   .node.mini .lb{display:none}          /* no room at this zoom: the icon keeps the place */
   .node.off{display:none}
   .node:hover .t,.node.hl .t{color:var(--portal)}
-  .node:hover .ic,.node.hl .ic{filter:drop-shadow(0 0 6px rgba(111,216,230,.95));opacity:1}
+  .node:hover .ic,.node.hl .ic{filter:drop-shadow(0 0 6px var(--portal));opacity:1}
   /* a hub is a panel, not a dot: its name, its gate count, one gate chip each */
   .node.hub{z-index:2}
   /* the panel's containing block is a zero-width anchor: say max-content or every
      gate wraps onto its own line */
-  .panel{position:absolute;width:max-content;min-width:108px;max-width:200px;background:rgba(14,21,24,.9);
-    border:1px solid #3a5a65;border-radius:var(--r);padding:.4rem .45rem .45rem;box-shadow:0 3px 16px rgba(0,0,0,.65)}
+  .panel{position:absolute;width:max-content;min-width:108px;max-width:200px;background:var(--portal-well);
+    border:1px solid var(--portal-line);border-radius:var(--r);padding:.4rem .45rem .45rem;box-shadow:var(--shadow)}
   .panel .ttl{display:flex;gap:.5rem;align-items:baseline}
   .panel .ttl a{font-size:.84rem;font-weight:700;color:var(--bright);letter-spacing:.01em}
   .panel .ttl a:hover{color:var(--portal);text-decoration:none}
@@ -95,21 +95,21 @@
   .gates{display:flex;flex-wrap:wrap;gap:.22rem;margin-top:.38rem}
   .gate{font-size:.7rem;font-weight:600;line-height:1;padding:.25rem .38rem;border-radius:var(--r-sm);
     border:1px solid transparent;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-  .gate.on{background:rgba(111,216,230,.14);border-color:rgba(111,216,230,.5);color:#bdf1f8}
-  .gate.free{background:#1b211f;border-color:#39423c;color:var(--muted)}
-  .gate:hover,.gate.hl{background:var(--portal);border-color:var(--portal);color:#06282d;text-decoration:none}
+  .gate.on{background:var(--portal-on);border-color:var(--portal-line);color:var(--portal-ink)}
+  .gate.free{background:var(--card-2);border-color:var(--line);color:var(--muted)}
+  .gate:hover,.gate.hl{background:var(--portal);border-color:var(--portal);color:var(--stage);text-decoration:none}
   /* a big hub shows the gates you can act on; the linked ones fold behind a count */
   .panel.big .gate.on{display:none}
   .panel.big.open .gate.on{display:inline-block}
-  .gate.sum{background:transparent;border-color:#3a5a65;color:#8fb5c0;cursor:pointer}
+  .gate.sum{background:transparent;border-color:var(--portal-line);color:var(--portal-dim);cursor:pointer}
   .panel.big.open .gate.sum{color:var(--bright)}
   /* out of the picked hub's reach: still there, but faint */
   .node.dim{opacity:.35}
   .node.dim .panel{opacity:.55}
-  .rose,.sbar{position:absolute;left:.65rem;color:var(--muted);font-size:.68rem;letter-spacing:.06em;text-shadow:0 1px 3px #000}
+  .rose,.sbar{position:absolute;left:.65rem;color:var(--muted);font-size:.68rem;letter-spacing:.06em;text-shadow:var(--halo-text)}
   .rose{top:.5rem;font-weight:600}
   .sbar{bottom:.5rem;display:flex;align-items:flex-end;gap:.35rem}
-  .sline{display:block;height:5px;border:1px solid #8b968f;border-top:0}
+  .sline{display:block;height:5px;border:1px solid var(--muted);border-top:0}
   /* a phone's whole diagram is 3 km across: a panel that stays desktop-wide would
      swallow the places nearest the hub */
   @media (max-width:560px){
