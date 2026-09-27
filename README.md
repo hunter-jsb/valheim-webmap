@@ -246,7 +246,7 @@ defaults are what runs):
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
-| `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken (JSON) |
+| `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken, and `gear`: seconds with each kind of thing in hand and in each weight of chest armour, the set last worn, hits on creatures by kind (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset). A player the map shows carries `yaw` (degrees clockwise from north) and `look`: `model` (the body), `skin` and `hair` (the colours, 0..1), `slots` (the prefab in each slot) and `parts`, the library parts to draw, body first |
 | `/height` | `?cx=&cz=[&step=]`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): (256/step + 1)² little-endian int16, decimetres of world height, `step` metres apart (1, 2, 4, 8 or 16: 257 a side down to 17; default 1, each step cached on its own under the same revision); row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
@@ -297,6 +297,27 @@ hit was seen the owner is credited instead: with a creature whose own record lis
 among the players who hit it, a tree felled within 16 m of them, a rock piece within
 32 m. A creature the owner kills with a single blow can go uncounted, since its record
 may not reach the server before it falls.
+
+**Gear.** A player's ZDO carries what every other game draws them holding and wearing,
+so once a second, while alive and out of bed, the server adds a second to:
+
+* **`hand`** -- the family of what each hand holds, sorted by the item's own skill and
+  type: `bow`, `crossbow`, `staff`, `shield`, `knife`, `sword`, `axe`, `mace`, `spear`,
+  `polearm`, `hammer`, `hoe`, `cultivator` (the scythe too), `pickaxe`, `torch`,
+  `fishing`, `tool` for anything else held (a tankard), `none` with both hands empty or
+  sheathed (fist weapons are the game's own unarmed). A sword and shield is a second of
+  each. `twohanded` counts on top of the family, for a two-handed melee weapon.
+* **`armor`** -- the chest piece's weight, from its movement penalty: `light` none
+  (leather, troll, lox, fenring, Askvin), `medium` up to 3.5% (root), `heavy` more
+  (bronze, iron, wolf, padded, carapace, flametal: 5%), `mage` whatever speeds eitr
+  (eitr-weave), `none` bare.
+
+`worn` is the latest set: `right`, `left` (a sheathed weapon still counts), `chest`,
+`legs`, `helmet`, `shoulder`, and the two back slots `rightBack` and `leftBack`, by prefab name. **`hits`** are colour, not a record: a hit
+on a creature counts only when it passes through the server on its way to another
+player's game, never one on a creature the hitter's own game runs, which alone in an
+area is all of them. Each is `melee`, `ranged` or `magic` (a staff's), and `backstab`
+counts on top when the weapon has a backstab bonus and the creature was not yet alerted.
 
 ### The style system
 

@@ -34,12 +34,25 @@
   the game thread. The index format is unchanged, so nothing already in the library is
   exported again; the locations join it as the sweep meets them. The mod now builds
   against the game's `SoftReferenceableAssets.dll` too.
+* What each player holds and wears, for the site to tell an archer from a builder: `gear`
+  in `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). Once a
+  second, alive and out of bed, the equipment the player's ZDO syncs adds a second to the
+  family in each hand (`bow`, `sword`, `hammer`, `pickaxe` ... `none`, plus `twohanded`
+  for a two-handed melee weapon) and to the chest's weight class (`light`, `medium`,
+  `heavy` by movement penalty, `mage` for eitr-weave), all sorted by the item's own data
+  so new gear sorts itself; `worn` is the latest set by prefab name. Hits on creatures
+  that pass through the server count as `melee`, `ranged` or `magic`, with `backstab` on
+  top when the creature was not yet alerted -- partial, since a hit on a creature the
+  hitter's own game runs never reaches the server.
 * Players have a class. From what the mod sees in their hands and on their back, shown only
   as shares: a bow makes an archer, a staff a mage, a shield with heavy armour a tank, knives
   with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
   harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
   the roster row and the player's page with its reason, a Gear group shows what they were
-  last seen wearing, and the spotlight turns through it.
+  last seen wearing, and the spotlight turns through it. The class is read three ways and
+  summed -- what is worn, what is carried, held and landed, and what has been done as shares
+  of the roster's best -- so it shows from the first sample, faint until the hands or the
+  hits have said their piece; the worn set carries the two back slots for it.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.

@@ -130,7 +130,7 @@ async function players() {
   const name = await p.ev(`(() => { const b = document.querySelector("#list .row"); if(!b) return null; b.click(); return b.dataset.name; })()`);
   const opened = name && await p.until(`app.classList.contains("picked") && document.querySelector("#dhead h2")`);   // the hash carries the pick, a tick later
   const t = opened ? await p.ev(`({shown: getComputedStyle(detail).visibility === "visible", head: document.querySelector("#dhead h2").textContent.trim(), figs: document.querySelectorAll("#dbody .fig").length})`) : null;
-  check("players: a row opens the player's page", loaded && (!name || (opened && t.shown && t.head === name && t.figs > 0)), name ? `${name}, ${t ? t.figs : 0} figures` : "no rows");
+  check("players: a row opens the player's page", loaded && (!name || (opened && t.shown && t.head.startsWith(name) && t.figs > 0)), name ? `${name}, ${t ? t.figs : 0} figures` : "no rows");   // the head carries a class pill after the name
   await p.done("players");
 }
 

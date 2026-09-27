@@ -8,8 +8,9 @@ using UnityEngine;
 namespace WebMap
 {
     // Per-player tallies for the site's players page: what the server sees
-    // anyway, added up -- joins, deaths, chat, distance covered, and what is
-    // standing in the world with their name on it. No time played, by choice.
+    // anyway, added up -- joins, deaths, chat, distance covered, what is standing
+    // in the world with their name on it, and the gear they carry. No time played
+    // as a figure, by choice, though the seconds with each chest class add up to it.
     //
     // Keyed by character name, the one identity every source shares. Builds
     // carry the character's player id instead; it is learned from the player's
@@ -41,6 +42,10 @@ namespace WebMap
             public double runM, runBestM;                // metres walked between a death and reaching it
             public List<Spot> open = new List<Spot>();   // deaths not yet reached
             public int kills, trees, rocks;              // what Deeds credits them with
+            // seconds per hand family and chest class, the latest set worn, and hits by kind (Gear's)
+            public double[] hand = new double[Gear.HandNames.Length], armor = new double[Gear.ArmorNames.Length];
+            public string[] worn = new string[Gear.Slots.Length];
+            public int[] hits = new int[Gear.HitNames.Length];
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
         private class Spot { public float x, z; public double distAt; public long t; public bool seen; public int sweep; }
@@ -193,6 +198,36 @@ namespace WebMap
             }
         }
 
+        // Game thread, once per player per snapshot. Each hand adds the seconds to
+        // its family, a family in both hands once; both hands empty is none.
+        public static void Wore(string name, Gear.Hand right, Gear.Hand left, bool twoHanded, Gear.Armor armor, string[] worn, float seconds)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            lock (gate)
+            {
+                var p = Get(name);
+                if (right != Gear.Hand.None) p.hand[(int)right] += seconds;
+                if (left != Gear.Hand.None && left != right) p.hand[(int)left] += seconds;
+                if (right == Gear.Hand.None && left == Gear.Hand.None) p.hand[(int)Gear.Hand.None] += seconds;
+                if (twoHanded) p.hand[(int)Gear.Hand.TwoHanded] += seconds;
+                p.armor[(int)armor] += seconds;
+                for (int i = 0; i < p.worn.Length; i++) p.worn[i] = i < worn.Length && !string.IsNullOrEmpty(worn[i]) ? Clean(worn[i]) : null;
+                dirty = true; jsonStale = true;
+            }
+        }
+
+        public static void Struck(string name, Gear.Hit kind, bool backstab)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            lock (gate)
+            {
+                var p = Get(name);
+                p.hits[(int)kind]++;
+                if (backstab) p.hits[(int)Gear.Hit.Backstab]++;
+                Touch(p);
+            }
+        }
+
         // Game thread, once per player per snapshot: learn the id, add up the walk.
         public static void Seen(string name, long playerId, Vector3 pos, float health = -1f, float maxHealth = -1f)
         {
@@ -318,7 +353,21 @@ namespace WebMap
                     sb.Append(FormattableString.Invariant($"],\"close_calls\":{p.closeCalls},\"lowest_hp\":{(p.closeCalls > 0 ? p.lowest : 1f):0.###}"));
                     sb.Append(FormattableString.Invariant($",\"streak_m\":{{\"best\":{Math.Round(Math.Max(p.bestStreak, p.sinceDeath))},\"now\":{Math.Round(p.sinceDeath)}}}"));
                     sb.Append(FormattableString.Invariant($",\"runs\":{{\"ok\":{p.runsOk},\"failed\":{p.runsFailed},\"rescued\":{p.runsRescued},\"open\":{p.open.Count}}}"));
-                    sb.Append(FormattableString.Invariant($",\"run_m\":{{\"total\":{Math.Round(p.runM)},\"best\":{Math.Round(p.runBestM)}}}}}"));
+                    sb.Append(FormattableString.Invariant($",\"run_m\":{{\"total\":{Math.Round(p.runM)},\"best\":{Math.Round(p.runBestM)}}}"));
+                    sb.Append(",\"gear\":{\"hand\":"); Seconds(sb, p.hand, Gear.HandNames);
+                    sb.Append(",\"armor\":"); Seconds(sb, p.armor, Gear.ArmorNames);
+                    sb.Append(",\"worn\":{");
+                    bool wf = true;
+                    for (int i = 0; i < p.worn.Length; i++)
+                    {
+                        if (p.worn[i] == null) continue;
+                        if (!wf) sb.Append(','); wf = false;
+                        sb.Append('"').Append(Gear.Slots[i]).Append("\":\"").Append(Esc(p.worn[i])).Append('"');
+                    }
+                    sb.Append("},\"hits\":{");
+                    for (int i = 0; i < p.hits.Length; i++)
+                        sb.Append(i > 0 ? ",\"" : "\"").Append(Gear.HitNames[i]).Append("\":").Append(p.hits[i]);
+                    sb.Append("}}}");
                 }
                 sb.Append("],\"bosses\":[");
                 for (int i = 0; i < bosses.Count; i++)
@@ -334,6 +383,21 @@ namespace WebMap
         }
 
         private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+        // whole seconds by name, the empty ones left out
+        private static void Seconds(StringBuilder sb, double[] secs, string[] names)
+        {
+            sb.Append('{');
+            bool first = true;
+            for (int i = 0; i < secs.Length; i++)
+            {
+                double v = Math.Round(secs[i]);
+                if (v < 1) continue;
+                if (!first) sb.Append(','); first = false;
+                sb.Append('"').Append(names[i]).Append("\":").Append(v.ToString(CultureInfo.InvariantCulture));
+            }
+            sb.Append('}');
+        }
 
         // One tab-separated line per player plus the id map: nothing to parse
         // but Split. Standing counts are not saved; the next sweep recounts them.
@@ -380,6 +444,23 @@ namespace WebMap
                                 double.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out p.mBiome[c]);
                                 if (f.Length >= 5) int.TryParse(f[4], out p.dBiome[c]);
                             }
+                        }
+                        else if (f.Length >= 4 && (f[0] == "h" || f[0] == "a"))   // seconds with a hand family, or in a chest class
+                        {
+                            var p = Get(f[1]);
+                            double[] into = f[0] == "h" ? p.hand : p.armor;
+                            int k = Array.IndexOf(f[0] == "h" ? Gear.HandNames : Gear.ArmorNames, f[2]);
+                            if (k >= 0) double.TryParse(f[3], NumberStyles.Float, CultureInfo.InvariantCulture, out into[k]);
+                        }
+                        else if (f.Length >= 2 && f[0] == "w")        // the set last worn, empty where nothing was
+                        {
+                            var p = Get(f[1]);
+                            for (int i = 0; i < p.worn.Length && i + 2 < f.Length; i++) p.worn[i] = f[i + 2].Length > 0 ? f[i + 2] : null;
+                        }
+                        else if (f.Length >= 2 + Gear.HitNames.Length && f[0] == "x")   // hits by kind
+                        {
+                            var p = Get(f[1]);
+                            for (int i = 0; i < p.hits.Length; i++) int.TryParse(f[i + 2], out p.hits[i]);
                         }
                         else if (f.Length >= 7 && f[0] == "g")        // a death not yet reached
                         {
@@ -435,6 +516,14 @@ namespace WebMap
                                 sb.Append(FormattableString.Invariant($"m\t{p.name}\t{c}\t{p.mBiome[c]:0.#}\t{p.dBiome[c]}\n"));
                         foreach (var o in p.open)
                             sb.Append(FormattableString.Invariant($"g\t{p.name}\t{o.x:0.#}\t{o.z:0.#}\t{o.distAt:0.#}\t{o.t}\t{(o.seen ? 1 : 0)}\n"));
+                        for (int i = 0; i < p.hand.Length; i++)
+                            if (p.hand[i] > 0) sb.Append(FormattableString.Invariant($"h\t{p.name}\t{Gear.HandNames[i]}\t{p.hand[i]:0.#}\n"));
+                        for (int i = 0; i < p.armor.Length; i++)
+                            if (p.armor[i] > 0) sb.Append(FormattableString.Invariant($"a\t{p.name}\t{Gear.ArmorNames[i]}\t{p.armor[i]:0.#}\n"));
+                        if (Array.Exists(p.worn, w => w != null))
+                            sb.Append("w\t").Append(p.name).Append('\t').Append(string.Join("\t", Array.ConvertAll(p.worn, w => w ?? ""))).Append('\n');
+                        if (Array.Exists(p.hits, n => n > 0))
+                            sb.Append("x\t").Append(p.name).Append('\t').Append(string.Join("\t", p.hits)).Append('\n');
                     }
                     foreach (var b in bosses) sb.Append(FormattableString.Invariant($"b\t{b.key}\t{b.t}\n"));
                     foreach (var d in deaths)
