@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using UnityEngine;
@@ -118,9 +119,10 @@ namespace WebMap.Tests
             At(5000, 0); At(5000, 50);                          // a streak begun
             Stats.BeginSweep(); Stats.ObserveGrave(A, 4000f, 80f); Stats.PublishSweep();
             Stats.ObserveKeys(new[] { "defeated_eikthyr" });
+            Stats.Deed(A, Deeds.Kind.Kill); Stats.Deed(A, Deeds.Kind.Tree); Stats.Deed(A, Deeds.Kind.Rock); Stats.Deed(A, Deeds.Kind.Rock);
             string deaths = Stats.DeathsJson();
             var before = Doc();
-            Assert.Equal(338, before.GetProperty("players")[0].GetProperty("biomes")[0].Num("m"));
+            Assert.Equal(338, before.GetProperty("players")[0].GetProperty("biomes").EnumerateArray().First(b => b.Str("biome") == "Meadows").Num("m"));
 
             Stats.Save();
             Stats.Load(Dir);
@@ -134,6 +136,23 @@ namespace WebMap.Tests
         static readonly string[] Live = { "online", "pieces", "portals", "ships", "graves" };
         static string Tallies(JsonElement doc) => string.Join(",", doc.GetProperty("players")[0].EnumerateObject()
             .Where(p => !Live.Contains(p.Name)).Select(p => p.Name + "=" + p.Value.GetRawText()));
+
+        [Fact]
+        public void AFileFromBeforeDeedsLoadsWithNone()
+        {
+            File.WriteAllText(Path.Combine(Dir, "stats.tsv"), "since\t100\np\t" + A + "\t3\t1\t2\t0\t120.5\t1700000000\t0\t1\t0\t0\t0\t0\t0\t0\t0\n");
+            Stats.Load(Dir);
+            Assert.Equal(3, Me().Int("joins"));
+            Assert.Equal(new[] { 0, 0, 0 }, new[] { "kills", "trees", "rocks" }.Select(k => Me().Int(k)));
+        }
+
+        [Fact]
+        public void AWalkAtSeaIsOcean()
+        {
+            new Grid().Read();                       // all water
+            At(0, 0); At(30, 40);
+            Assert.Contains(Me().GetProperty("biomes").EnumerateArray(), b => b.Str("biome") == "Ocean" && b.Num("m") == 50);
+        }
 
         [Fact]
         public void AWalkInTheMistlandsCounts()

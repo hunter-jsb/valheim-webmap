@@ -15,8 +15,9 @@ guards against; there is one per failure, not one per branch.
 ## What a regression would do on the live server, worst first
 
 1. **The Harmony patches on the game's network path** -- `ZRoutedRpcRoutePatch.Prefix`
-   (every RPC the server forwards), `ZRoutedRpcPatch`, `DeathWatch.Postfix`, the `ZNet`
-   join and leave patches. A slow path lags everyone, a throw drops chat or deaths, and the
+   and `DeedsRoutePatch.Prefix` (every RPC the server forwards), `DeedsGonePatch.Prefix`
+   (every destroy), `ZRoutedRpcPatch`, `DeathWatch.Postfix`, the `ZNet` join and leave
+   patches. A slow path lags everyone, a throw drops chat or deaths, and the
    fake server player the README warns about stops anyone joining. **Nothing covers
    them**; only a running server does (`./testserver.sh`).
 2. **The sweep's game-thread walk** (`StructureMap`): too many ZDOs a frame hitches the
@@ -49,7 +50,10 @@ guards against; there is one per failure, not one per branch.
    heights and the model export need the engine: **a running server** (`./testserver.sh`
    on a copied world, then the map's 3D mode in a headless Chrome, `tools/check.mjs`).
 8. **Stats** (`Seen`, `Death`, `PublishSweep`, `ObserveKeys`, `stats.tsv`): **dotnet test**
-   -- distance against a hop, close calls, the four ends of a corpse run, bosses, the save.
+   -- distance against a hop, close calls, the four ends of a corpse run, bosses, metres at
+   sea, the save and a file from before kills. **Deeds**' crediting (`Hit`, `AreaBroken`,
+   `Gone`): **dotnet test** -- by kind, the window, the last hitter, the owner standing in.
+   Reading hits off the wire and classifying what fell: **nothing**; only a running server.
    Two faults found:
    - Mistlands is biome class 10, one past `Stats.Biomes = 10`, so metres and deaths there
      are dropped. `AWalkInTheMistlandsCounts` is written and skipped; `Biomes = 11` passes it.

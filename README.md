@@ -214,7 +214,7 @@ defaults are what runs):
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
-| `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
+| `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset) |
 | `/height` | `?cx=&cz=[&step=]`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): (256/step + 1)² little-endian int16, decimetres of world height, `step` metres apart (1, 2, 4, 8 or 16: 257 a side down to 17; default 1, each step cached on its own under the same revision); row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
@@ -249,6 +249,22 @@ yields is the smallest safe step.
 **Announcements** use `MessageHud`'s `ShowMessage` rather than chat: `Chat` gates every
 message on a `RelationsManager` permission check against the sender's platform user id,
 which a server does not have, so chat sent from a server is dropped in silence.
+
+**Kills, trees and rocks.** The server runs no creature, tree or rock -- the nearest
+player's game does -- so it counts what passes through it:
+
+* **kills** -- a creature that fell within ten seconds of a player's hit, for the last
+  player seen hitting it. A tamed creature counts for nothing, and one that despawns is
+  nobody's kill.
+* **trees** -- a tree felled; its logs and stump do not count again.
+* **rocks** -- each piece broken off a rock or an ore deposit, and a small rock broken whole.
+
+A hit reaches the server only on its way to another player's game. A player alone in an
+area owns everything around them, and their own hits never leave their game, so when no
+hit was seen the owner is credited instead: with a creature whose own record lists them
+among the players who hit it, a tree felled within 16 m of them, a rock piece within
+32 m. A creature the owner kills with a single blow can go uncounted, since its record
+may not reach the server before it falls.
 
 ### The style system
 

@@ -169,8 +169,8 @@ namespace WebMap
             return c;
         }
 
-        // the world's own vegetation, by the names Valheim gives it
-        private static Cat ClassifyName(string n)
+        // the world's own vegetation, by the names Valheim gives it; Deeds asks it what a rock is
+        internal static Cat ClassifyName(string n)
         {
             if (n.Contains("raspberry") || n.Contains("blueberry") || n.Contains("cloudberry") || n.StartsWith("bush") || n.Contains("shrub")) return Cat.Bush;
             if (n.Contains("silvervein") || n.Contains("mudpile") || n.Contains("_copper") || n.Contains("minerock") || n.Contains("_tin")

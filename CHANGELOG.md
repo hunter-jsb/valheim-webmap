@@ -11,6 +11,17 @@
   has a pentagon -- Explorer (km), Builder (pieces), Survivor (km per death), Traveller
   (hops), Voice (chat), each side a share of the roster's best, square-rooted -- small on
   the row and labelled on the page. Picking a player slides the page open.
+* Kills, trees felled and rocks broken, per player: `kills`, `trees` and `rocks` in
+  `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). The server
+  runs none of it, so it reads what passes through it: a hit sent to another player's
+  creature, tree or rock carries its attacker, and the fall -- a destroy, or a piece
+  breaking off a rock -- follows within ten seconds. A hit on something the hitter's own
+  game runs never reaches the server; then the owner is credited, with a creature whose
+  own record lists them among its attackers, a tree within 16 m of them, a rock piece
+  within 32 m. Tamed creatures, logs and stumps count for nothing, and a creature that
+  despawns is nobody's kill.
+* Metres at sea show at last: the tally had kept them all along as biome class 0, and the
+  players' JSON skipped that class. `biomes` now carries an `Ocean` entry.
 
 ## 2.14.0
 

@@ -40,6 +40,7 @@ namespace WebMap
             public int runsOk, runsFailed, runsRescued;
             public double runM, runBestM;                // metres walked between a death and reaching it
             public List<Spot> open = new List<Spot>();   // deaths not yet reached
+            public int kills, trees, rocks;              // what Deeds credits them with
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
         private class Spot { public float x, z; public double distAt; public long t; public bool seen; public int sweep; }
@@ -181,6 +182,17 @@ namespace WebMap
             lock (gate) { var p = Get(name); p.chat++; Touch(p); }
         }
 
+        public static void Deed(string name, Deeds.Kind kind)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            lock (gate)
+            {
+                var p = Get(name);
+                if (kind == Deeds.Kind.Kill) p.kills++; else if (kind == Deeds.Kind.Tree) p.trees++; else p.rocks++;
+                Touch(p);
+            }
+        }
+
         // Game thread, once per player per snapshot: learn the id, add up the walk.
         public static void Seen(string name, long playerId, Vector3 pos, float health = -1f, float maxHealth = -1f)
         {
@@ -294,10 +306,10 @@ namespace WebMap
                     if (!first) sb.Append(',');
                     first = false;
                     sb.Append(FormattableString.Invariant(
-                        $"{{\"name\":\"{Esc(p.name)}\",\"online\":{(p.online ? "true" : "false")},\"joins\":{p.joins},\"deaths\":{p.deaths},\"chat\":{p.chat},\"dist_m\":{Math.Round(p.dist)},\"hops\":{p.hops},\"pins\":{pins},\"pieces\":{p.pieces},\"portals\":{p.portals},\"ships\":{p.ships},\"graves\":{p.graves},\"last_seen\":{p.lastSeen}"));
+                        $"{{\"name\":\"{Esc(p.name)}\",\"online\":{(p.online ? "true" : "false")},\"joins\":{p.joins},\"deaths\":{p.deaths},\"chat\":{p.chat},\"dist_m\":{Math.Round(p.dist)},\"hops\":{p.hops},\"pins\":{pins},\"pieces\":{p.pieces},\"portals\":{p.portals},\"ships\":{p.ships},\"graves\":{p.graves},\"kills\":{p.kills},\"trees\":{p.trees},\"rocks\":{p.rocks},\"last_seen\":{p.lastSeen}"));
                     sb.Append(",\"biomes\":[");
                     bool bf = true;
-                    for (int c = 1; c < Biomes; c++)
+                    for (int c = 0; c < Biomes; c++)       // 0 is the sea
                     {
                         if (p.mBiome[c] < 1 && p.dBiome[c] == 0) continue;
                         if (!bf) sb.Append(','); bf = false;
@@ -358,6 +370,7 @@ namespace WebMap
                                 double.TryParse(f[15], NumberStyles.Float, CultureInfo.InvariantCulture, out p.runM);
                                 double.TryParse(f[16], NumberStyles.Float, CultureInfo.InvariantCulture, out p.runBestM);
                             }
+                            if (f.Length >= 20) { int.TryParse(f[17], out p.kills); int.TryParse(f[18], out p.trees); int.TryParse(f[19], out p.rocks); }
                         }
                         else if (f.Length >= 4 && f[0] == "m")        // metres and deaths in one biome
                         {
@@ -416,7 +429,7 @@ namespace WebMap
                     foreach (var p in byName.Values)
                     {
                         sb.Append(FormattableString.Invariant($"p\t{p.name}\t{p.joins}\t{p.deaths}\t{p.chat}\t{p.hops}\t{p.dist:0.#}\t{p.lastSeen}"));
-                        sb.Append(FormattableString.Invariant($"\t{p.closeCalls}\t{p.lowest:0.###}\t{p.sinceDeath:0.#}\t{p.bestStreak:0.#}\t{p.runsOk}\t{p.runsFailed}\t{p.runsRescued}\t{p.runM:0.#}\t{p.runBestM:0.#}\n"));
+                        sb.Append(FormattableString.Invariant($"\t{p.closeCalls}\t{p.lowest:0.###}\t{p.sinceDeath:0.#}\t{p.bestStreak:0.#}\t{p.runsOk}\t{p.runsFailed}\t{p.runsRescued}\t{p.runM:0.#}\t{p.runBestM:0.#}\t{p.kills}\t{p.trees}\t{p.rocks}\n"));
                         for (int c = 0; c < Biomes; c++)
                             if (p.mBiome[c] >= 1 || p.dBiome[c] > 0)
                                 sb.Append(FormattableString.Invariant($"m\t{p.name}\t{c}\t{p.mBiome[c]:0.#}\t{p.dBiome[c]}\n"));
