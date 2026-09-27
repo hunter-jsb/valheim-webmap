@@ -631,8 +631,7 @@ namespace WebMap
                 // a second with a few people on -- and hashing each one's body to
                 // de-duplicate it was a per-RPC tax on the game thread. Only a chat
                 // shout needs de-duplicating, since it arrives once per recipient.
-                int h = rpcData.m_methodHash;
-                if (h != SayHash && h != ChatHash) return;
+                if (!IsChat(rpcData.m_methodHash)) return;
                 try
                 {
                     if (IsDuplicate(rpcData)) return;
@@ -644,6 +643,8 @@ namespace WebMap
                     ZLog.LogWarning("WebMap: failed observing a routed rpc: " + ex);
                 }
             }
+
+            internal static bool IsChat(int method) => method == SayHash || method == ChatHash;
 
             internal static bool IsDuplicate(RoutedRPCData d)
             {
@@ -671,8 +672,9 @@ namespace WebMap
             private static void Postfix(ref ZRoutedRpc __instance, ref RoutedRPCData data)
             {
                 // An RPC addressed to everybody runs both branches of RPC_RoutedRPC --
-                // this one and the RouteRPC prefix -- so it arrives here twice.
-                if (data != null && ZRoutedRpcRoutePatch.IsDuplicate(data)) return;
+                // this one and the RouteRPC prefix -- so it arrives here twice. Only chat
+                // is de-duplicated: every hit's damage number comes this way too.
+                if (data != null && ZRoutedRpcRoutePatch.IsChat(data.m_methodHash) && ZRoutedRpcRoutePatch.IsDuplicate(data)) return;
                 Observe(ref __instance, ref data);
             }
 

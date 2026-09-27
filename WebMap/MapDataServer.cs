@@ -647,7 +647,8 @@ namespace WebMap
                     // One document per tick for a viewer: every small block the page
                     // polls, and a revision per large layer so it fetches a layer only
                     // when the picture changed. Each block is a string another thread
-                    // already built; this is concatenation.
+                    // already built; this is concatenation. The tallies are not among
+                    // them: no page reads them here, and /stats/players has them.
                     {
                         string pinsJson = PinsJson();
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
@@ -659,8 +660,7 @@ namespace WebMap
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
                             + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
-                            + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats()
-                            + ",\"stats\":" + Stats.Json(PinsByName()) + "}";
+                            + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats() + "}";
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                         res.ContentType = "application/json";
                         res.StatusCode = 200;
