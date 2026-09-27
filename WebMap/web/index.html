@@ -11,6 +11,10 @@
 <link rel="stylesheet" href="site.css">
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
+<!-- the 3D view's modules, fetched only when someone first steps into 3D -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 <style>
 .namer{position:absolute;z-index:6;width:17rem;padding:.6rem .75rem;box-shadow:var(--shadow-lg)}
 .namer .field{margin:.4rem 0 0}
@@ -134,6 +138,35 @@
   @media (hover:hover){ .fly:hover .flyout{display:block} }
   .fly.open .flyout{display:block}
 
+  /* ---------- 3D ---------- */
+  /* The world where you stand, over the whole stage: the map's controls lie under it
+     and only its own show. Under the phone's drawer (z 20), over the map's furniture. */
+  .v3d{position:absolute;inset:0;z-index:15;background:var(--stage)}
+  .v3d[hidden]{display:none}
+  #v3dCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  .v3d.orbit #v3dCanvas{cursor:default}
+  .v3d .veil{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);z-index:2;padding:.6rem .9rem;
+    font-size:.82rem;color:var(--ink);max-width:22rem;text-align:center;pointer-events:none}
+  .v3d .veil:empty{display:none}
+  .v3d .where{position:absolute;left:.7rem;top:.7rem;z-index:2;padding:.35rem .65rem;font-size:.76rem;color:var(--ink-2);
+    font-variant-numeric:tabular-nums;pointer-events:none;max-width:calc(100% - 5.5rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .v3d .where b{color:var(--bright);font-weight:600}
+  .v3d .hint{position:absolute;left:50%;bottom:.9rem;transform:translateX(-50%);z-index:2;padding:.35rem .7rem;font-size:.72rem;
+    color:var(--ink-2);white-space:nowrap;pointer-events:none;transition:opacity .6s ease}
+  .v3d .hint.gone{opacity:0}
+  .v3d .mapctl .btn.map.txt{width:auto;padding:0 .75rem;font-size:.8rem;font-weight:600}
+  .v3d .tray{position:absolute;left:.7rem;bottom:.7rem;z-index:3;max-width:calc(100% - 5rem)}
+  .v3d .tray.open{display:flex}
+  /* the pegman rests pale in the column and turns gold while armed or carried */
+  .peg{color:var(--ink-2)}
+  .peg svg{width:22px;height:22px}
+  .peg.on{color:var(--gold);border-color:var(--gold)}
+  .pegghost{position:fixed;z-index:200;width:30px;height:30px;margin:-26px 0 0 -15px;color:var(--gold);pointer-events:none;
+    filter:var(--shadow-ink);overflow:visible}
+  .stage.dropping,.stage.dropping .marker{cursor:crosshair}
+  .dropnote{position:absolute;z-index:12;transform:translate(-50%,-140%);padding:.3rem .6rem;font-size:.74rem;color:var(--ink);
+    white-space:nowrap;pointer-events:none}
+
   /* ---------- help ---------- */
   .modal{position:fixed;inset:0;z-index:100;background:var(--modal);
     align-items:center;justify-content:center;padding:1.25rem}
@@ -231,6 +264,10 @@
     <div class="layers" id="layers">
       <button class="lcard" id="lcard" title="Switch ground (L)"><canvas id="lthumb"></canvas><span class="lbl">Layers</span></button>
       <div class="tray glass">
+        <div class="trow"><span class="tk eyebrow">View</span><div class="presets" id="viewsw">
+          <button class="chip on" data-view="map" title="The map, from above">Map</button>
+          <button class="chip" data-view="3d" title="Stand in the middle of the map in 3D; or drag the figure onto the map">3D</button>
+        </div></div>
         <div class="trow"><span class="tk eyebrow">Ground</span><div class="grounds" id="grounds"></div></div>
         <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="presets"></div></div>
         <div class="trow"><span class="tk eyebrow">Details</span><div class="presets" id="details">
@@ -245,11 +282,37 @@
       </div>
     </div>
     <div class="mapctl">
+      <button class="btn map peg" id="pegman" title="Drag onto the map to stand there in 3D (or tap, then tap the map)" aria-label="3D"><svg><use href="#ic-pegman"></use></svg></button>
       <button class="btn map" id="zoomIn"  title="Zoom in">+</button>
       <button class="btn map" id="zoomOut" title="Zoom out">−</button>
       <button class="btn map" id="zoomFit" title="Fit">⌂</button>
       <button class="btn map" id="helpBtn" title="Commands &amp; help">?</button>
       <button class="btn map" id="fsBtn"   title="Fullscreen">⛶</button>
+    </div>
+    <div class="v3d" id="v3d" hidden>
+      <canvas id="v3dCanvas" aria-label="The world in 3D"></canvas>
+      <div class="where glass" id="v3dWhere"></div>
+      <div class="veil glass" id="v3dVeil"></div>
+      <div class="hint glass gone" id="v3dHint"></div>
+      <div class="tray glass" id="v3dTray">
+        <div class="trow"><span class="tk eyebrow">Light</span><div class="presets" id="v3dTime">
+          <button class="chip on" data-t="server" title="The server's own time of day">Server clock</button>
+          <button class="chip" data-t="0.28">Morning</button><button class="chip" data-t="0.5">Noon</button>
+          <button class="chip" data-t="0.72">Evening</button><button class="chip" data-t="0.02">Night</button>
+          <button class="chip" id="v3dShadows" title="Shadows cost a phone most of its frame rate">Shadows</button>
+        </div></div>
+        <div class="trow"><span class="tk eyebrow">Show</span><div class="presets" id="v3dCats">
+          <button class="chip on" data-c="piece">Buildings</button><button class="chip on" data-c="tree">Trees</button>
+          <button class="chip on" data-c="bush">Bushes</button><button class="chip on" data-c="rock">Rocks</button>
+          <button class="chip on" data-c="other">Everything else</button>
+        </div></div>
+        <p class="note" id="v3dStatus"></p>
+      </div>
+      <div class="mapctl">
+        <button class="btn map txt" id="v3dExit" title="Back to the map (Esc)">Map</button>
+        <button class="btn map" id="v3dMode" title="Overview: circle the spot from above">&#8645;</button>
+        <button class="btn map" id="v3dOpts" title="Light and what to show">&#9788;</button>
+      </div>
     </div>
   </div>
 </div>
@@ -289,6 +352,14 @@
        turn from roofs into a floor plan; hide <b>floor plan when close</b> to keep the
        roofs. Portal lines join linked pairs, and a grave is gear still lying there.</p>
 
+    <h3>3D</h3>
+    <p>Drag the little figure from the buttons onto walked ground (on a phone: tap it, then
+       tap the map), or pick <b>3D</b> under View in the <b>Layers</b> card, or <b>See in 3D</b>
+       on a place or a pin, and you stand there at eye height. Drag to look around, scroll or
+       pinch to zoom the eye, <b>W A S D</b> or the arrows to walk (<b>Shift</b> runs), click the
+       ground to walk there; &#8645; circles the spot from above. <b>Map</b> or <b>Esc</b> brings
+       you back to the map where you stood. Buildings, trees and rocks are the game's own models.</p>
+
     <h3>Show yourself on the map</h3>
     <p>Press <b>M</b> in game and turn on <b>visible to other players</b>. Without it you
        still show in the online list, but never with a location.</p>
@@ -308,9 +379,10 @@ const PLAN_ZOOM = MapCore.PLAN_ZOOM, MAX_ZOOM = MapCore.MAX_ZOOM;
 // the window onto the map: drag to pan, wheel or pinch to zoom, a tap opens what is there
 const V = MapCore.view(stage, {
   paint, max: MAX_ZOOM,
-  guard: ".mapctl, .layers, #mini, #namer",
+  guard: ".mapctl, .layers, #mini, #namer, .v3d",
   down: () => { if(!namer.hidden && !placing()) closeCard(); },
   tap: (x, y, e, target) => {
+    if(PEG_ARMED) return dropPeg(x, y);        // the armed pegman lands where the finger does
     // markers are rebuilt every tick, so the pin under the finger is kept by id
     const pin = target && target.closest && target.closest(".marker.pin");
     if(placing()) movePin(CARD, x, y);
@@ -620,7 +692,8 @@ document.getElementById("helpBtn").addEventListener("click", e => { e.preventDef
 document.getElementById("helpClose").addEventListener("click", () => showHelp(false));
 helpEl.addEventListener("click", e => { if(e.target === helpEl) showHelp(false); });
 addEventListener("keydown", e => {
-  if(e.key === "Escape"){ showHelp(false); if(placing()){ CARD.mode = "view"; renderCard(); } }
+  if(e.key === "Escape"){ showHelp(false); if(IN3D) leave3D(); else if(PEG_ARMED) armPeg(false); if(placing()){ CARD.mode = "view"; renderCard(); } }
+  else if(IN3D) return;             // the 3D view's own keys walk and turn
   else if((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey) nextGround();
 });
 
@@ -764,6 +837,8 @@ async function tickState(){
     if(DETAILS.has("deaths")) drawRaster();
   }
   LAST_REV = s.rev;
+  LAST_STATE = s;
+  if(IN3D) feed3D(s);
   if(Date.now() - PINS_AT > 3000) PINS = MapCore.parsePins(s.pins);
   if(s.forest) FOREST = s.forest;
   renderTiles();
@@ -846,8 +921,8 @@ function placeCard(c){
   namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, c.y + 14)) + "px";
 }
 function closeCard(){ namer.hidden = true; CARD = null; stage.classList.remove("placing"); }
-// the 3D page stands you on the spot, facing north
-const see3d = (x, z) => `view.html#at=${Math.round(x)},${Math.round(z)}`;
+// the 3D view stands you on the spot, facing north
+const see3d = (x, z) => `#3d=${Math.round(x)},${Math.round(z)}`;
 async function saveName(name){
   const c = CARD; if(!c) return;
   const f = c.here[c.i];
@@ -988,12 +1063,178 @@ async function boot(){
   document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") tickState(); });
 }
 
+// ---------- 3D ----------
+// The world where you stand, as the server holds it: a mode over the stage, entered by
+// the pegman, the View row in the Layers card, a card's See in 3D or #3d=<x>,<z>. The
+// renderer and three.js load on the first entry and never before. Leaving puts the map
+// where the camera stood and the hash back to #at.
+const v3dEl = document.getElementById("v3d"), v3d$ = id => document.getElementById(id);
+const PHONE3D = matchMedia("(max-width:760px), (pointer:coarse)").matches;
+const DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+let V3D = null, V3D_LOADING = null, IN3D = false, LAST_STATE = null, V3D_TIME = "server", V3D_SHADOWS = !PHONE3D;
+function loadView3D(){
+  if(!V3D_LOADING) V3D_LOADING = import("./js/view3d.js").then(({View3D}) => {
+    V3D = new View3D(v3d$("v3dCanvas"), {api: API, phone: PHONE3D});
+    V3D.onMove = moved3D;
+    V3D.onStatus = status3D;
+    V3D.setShadows(V3D_SHADOWS);
+    return V3D;
+  });
+  return V3D_LOADING;
+}
+function markView(){ document.querySelectorAll("#viewsw .chip").forEach(el => el.classList.toggle("on", (el.dataset.view === "3d") === IN3D)); }
+function veil3D(t){ v3d$("v3dVeil").textContent = t || ""; }
+async function enter3D(x, z, look){
+  closeCard(); armPeg(false); layersEl.classList.remove("open");
+  const q = toPx(x, z); V.centre(q.px, q.py, Math.max(V.scale, 6));   // the map behind stands where you do, close enough to see it
+  const first = !IN3D;
+  IN3D = true; v3dEl.hidden = false; markView();
+  if(!V3D) veil3D("Loading the 3D view…");
+  let v;
+  try{ v = await loadView3D(); }catch(e){ veil3D("The 3D view did not load: " + (e.message || e)); return; }
+  if(!IN3D) return;                                  // left again while it loaded
+  if(first && LAST_STATE) feed3D(LAST_STATE);
+  v.goTo(x, z, look || 0);
+  if(first){ v.start(); hint3D(); }
+}
+function leave3D(keepHash){
+  if(!IN3D) return;
+  IN3D = false; v3dEl.hidden = true; markView();
+  v3d$("v3dTray").classList.remove("open");
+  if(!V3D) return;
+  const f = V3D.focus(), q = toPx(f.x, f.z);
+  V3D.stop();
+  V.centre(q.px, q.py);
+  if(keepHash !== true) history.replaceState(null, "", location.pathname + location.search + `#at=${Math.round(f.x)},${Math.round(f.z)},${V.scale.toFixed(2)}`);
+}
+function feed3D(s){
+  if(!V3D) return;
+  V3D.setRevs(s.rev || {});
+  V3D.setPlayers((s.players && s.players.players) || []);
+  V3D.setTime(V3D_TIME === "server" ? (s.time ? s.time.frac : 0.5) : +V3D_TIME);
+}
+// where you are, in the hash as you go (a copy of the link lands on the same spot)
+let placeT = 0;
+function moved3D(x, z, heading){
+  if(!IN3D) return;
+  history.replaceState(null, "", location.pathname + location.search
+    + `#3d=${Math.round(x)},${Math.round(z)}` + (heading != null ? `&look=${Math.round(heading)}` : ""));
+  const at = `${Math.round(x)}, ${Math.round(z)}` + (heading != null ? ` · facing ${DIRS[Math.round(heading/45) % 8]}` : "");
+  v3d$("v3dWhere").innerHTML = (v3d$("v3dWhere").dataset.name ? `<b>${esc(v3d$("v3dWhere").dataset.name)}</b> · ` : "") + at;
+  clearTimeout(placeT);
+  placeT = setTimeout(async () => {
+    let name = "";
+    try{ const j = await MapCore.fetchJSON(API, `/at?x=${x.toFixed(1)}&z=${z.toFixed(1)}`); name = ((j && j.here) || [])[0]?.name || ""; }catch(e){}
+    v3d$("v3dWhere").dataset.name = name;
+    v3d$("v3dWhere").innerHTML = (name ? `<b>${esc(name)}</b> · ` : "") + at;
+  }, 600);
+}
+function status3D(s){
+  const lib = s.library;
+  v3dEl.dataset.ground = s.ground; v3dEl.dataset.objects = s.objects;
+  v3d$("v3dStatus").textContent = `${MapCore.plural(s.ground, "chunk")} of ground \u00b7 ${s.objects.toLocaleString()} objects`
+    + (lib ? ` \u00b7 ${lib.readable} models` + (lib.queued ? `, ${lib.queued} exporting` : "") : "");
+  // a mod from before the 3D view answers /state without its revisions
+  const before = LAST_STATE && LAST_STATE.rev && LAST_STATE.rev.objects === undefined;
+  veil3D(before ? "The server’s map mod has no 3D view yet: it comes with the mod’s next restart."
+    : s.unwalked ? "Nobody has walked here yet, so there is nothing to show."
+    : s.ground ? "" : "Reading the ground…");
+}
+let hintT = 0;
+function hint3D(){
+  const h = v3d$("v3dHint");
+  h.textContent = PHONE3D ? "Drag to look around · tap the ground to walk there"
+    : "Drag to look · W A S D to walk · click the ground to go there · Esc for the map";
+  h.classList.remove("gone");
+  clearTimeout(hintT); hintT = setTimeout(() => h.classList.add("gone"), 6000);
+}
+v3d$("v3dExit").onclick = leave3D;
+v3d$("v3dMode").onclick = () => {
+  if(!V3D) return;
+  const m = V3D.mode === "street" ? "orbit" : "street";
+  V3D.setMode(m);
+  v3dEl.classList.toggle("orbit", m === "orbit");
+  v3d$("v3dMode").title = m === "street" ? "Overview: circle the spot from above" : "Street: stand on the spot";
+};
+v3d$("v3dOpts").onclick = () => v3d$("v3dTray").classList.toggle("open");
+v3d$("v3dTime").addEventListener("click", e => {
+  const el = e.target.closest(".chip[data-t]"); if(!el) return;
+  V3D_TIME = el.dataset.t;
+  v3d$("v3dTime").querySelectorAll(".chip[data-t]").forEach(b => b.classList.toggle("on", b === el));
+  if(LAST_STATE) feed3D(LAST_STATE);
+});
+v3d$("v3dShadows").classList.toggle("on", V3D_SHADOWS);
+v3d$("v3dShadows").onclick = () => {
+  V3D_SHADOWS = !V3D_SHADOWS; v3d$("v3dShadows").classList.toggle("on", V3D_SHADOWS);
+  if(V3D) V3D.setShadows(V3D_SHADOWS);
+};
+v3d$("v3dCats").addEventListener("click", e => {
+  const el = e.target.closest(".chip"); if(!el) return;
+  el.classList.toggle("on");
+  if(V3D) V3D.setCategories([...v3d$("v3dCats").querySelectorAll(".chip.on")].map(b => b.dataset.c));
+});
+// the map's own view must not pan or zoom under the 3D one
+v3dEl.addEventListener("wheel", e => e.stopPropagation());
+// the View row: 3D stands you in the middle of the map
+document.getElementById("viewsw").addEventListener("click", e => {
+  const el = e.target.closest(".chip"); if(!el) return;
+  if(el.dataset.view === "map") return leave3D();
+  const q = V.at(stage.clientWidth/2, stage.clientHeight/2), w = MapCore.toWorld(q.px, q.py);
+  location.hash = `#3d=${Math.round(w.x)},${Math.round(w.z)}`;
+});
+// The pegman: dragged from the column and dropped on the map, or on a touch screen
+// armed by a tap and dropped by the next tap on the map. Only onto walked ground.
+const pegEl = document.getElementById("pegman");
+let PEG_ARMED = false, pegDrag = null;
+function armPeg(on){ PEG_ARMED = on; pegEl.classList.toggle("on", on); stage.classList.toggle("dropping", on); }
+function dropPeg(x, y){
+  armPeg(false);
+  const q = V.at(x, y), w = MapCore.toWorld(q.px, q.py), walked = MapCore.explored(LAYERS.imgs.fog);
+  if(walked && !walked(q.px, q.py)){
+    const n = document.createElement("div");
+    n.className = "dropnote glass"; n.textContent = "Nobody has walked here yet";
+    n.style.left = x + "px"; n.style.top = y + "px";
+    stage.appendChild(n); setTimeout(() => n.remove(), 1800);
+    return;
+  }
+  location.hash = `#3d=${Math.round(w.x)},${Math.round(w.z)}`;
+}
+pegEl.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  try{ pegEl.setPointerCapture(e.pointerId); }catch(err){}
+  pegDrag = {id: e.pointerId, x: e.clientX, y: e.clientY, ghost: null};
+});
+pegEl.addEventListener("pointermove", e => {
+  const d = pegDrag; if(!d || d.id !== e.pointerId) return;
+  if(!d.ghost && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6){
+    d.ghost = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    d.ghost.setAttribute("class", "pegghost"); d.ghost.innerHTML = '<use href="#ic-pegman"></use>';
+    document.body.appendChild(d.ghost);
+    pegEl.classList.add("on"); stage.classList.add("dropping");
+  }
+  if(d.ghost){ d.ghost.style.left = e.clientX + "px"; d.ghost.style.top = e.clientY + "px"; }
+});
+function pegEnd(e){
+  const d = pegDrag; if(!d || d.id !== e.pointerId) return;
+  pegDrag = null;
+  if(!d.ghost){ if(e.type === "pointerup") armPeg(!PEG_ARMED); return; }   // a tap arms it
+  d.ghost.remove(); armPeg(false);
+  if(e.type !== "pointerup") return;
+  const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const over = document.elementFromPoint(e.clientX, e.clientY);
+  if(x < 0 || y < 0 || x > r.width || y > r.height || (over && over.closest(".mapctl, .layers, #mini, #namer"))) return;
+  dropPeg(x, y);
+}
+pegEl.addEventListener("pointerup", pegEnd);
+pegEl.addEventListener("pointercancel", pegEnd);
+
 // ---------- deep links ----------
 // #portal=<id> centres on a portal, on both ends when it is linked; #at=<x>,<z>[,<zoom>]
-// on world metres; #layers=a,b,c switches layers on. This is how other pages link in.
+// on world metres; #3d=<x>,<z>[&look=<degrees>] stands you there in 3D; #layers=a,b,c
+// switches layers on. This is how other pages link in.
 const HIGHLIGHT = new Set();          // portal ids wearing the arrival ring
 let HL_T = 0, LAYERS_READY = false;
-let HASH_VIEW = /(^|[#&])(portal|at)=/.test(location.hash);
+let HASH_VIEW = /(^|[#&])(portal|at|3d)=/.test(location.hash);
 function hashParams(){
   const out = {};
   for(const part of location.hash.replace(/^#/,"").split("&")){
@@ -1007,6 +1248,7 @@ function showLayer(k){ if(HIDDEN.delete(k)){ applyHidden(); drawRaster(); } }
 function centerOn(px, py, z){ V.centre(px, py, z); }
 function applyHash(){
   const p = hashParams();
+  if(!p["3d"] && IN3D) leave3D(true);          // a link elsewhere: the map, as it asks
   (p.layers||"").split(",").map(s=>s.trim()).filter(Boolean).forEach(showLayer);
   // details a link asks for come on and stay on, like a legend row clicked
   const asked = (p.details||"").split(",").map(s=>s.trim()).filter(Boolean);
@@ -1032,6 +1274,9 @@ function applyHash(){
   } else if(p.at){
     const [x,z,zm] = p.at.split(",").map(Number);
     if(isFinite(x) && isFinite(z)){ const q = toPx(x,z); centerOn(q.px, q.py, zm > 0 ? zm : 20); moved = true; }
+  } else if(p["3d"]){
+    const [x, z] = p["3d"].split(",").map(Number), look = p.look !== undefined && isFinite(+p.look) ? +p.look : undefined;
+    if(isFinite(x) && isFinite(z)){ enter3D(x, z, look); moved = true; }
   }
   // a hash naming something this world hasn't got must not leave it unfitted
   if(!moved && HASH_VIEW){ HASH_VIEW = false; if(LAYERS_READY) fitExplored(true); }

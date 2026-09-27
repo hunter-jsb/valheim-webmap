@@ -47,7 +47,7 @@ guards against; there is one per failure, not one per branch.
    **nothing**, they need ZDOs or `ZNetScene`.
    The 3D ground's terraforming (`TerrainPatches.Decode`): **dotnet test**; its generator
    heights and the model export need the engine: **a running server** (`./testserver.sh`
-   on a copied world, then `view.html` in a headless Chrome).
+   on a copied world, then the map's 3D mode in a headless Chrome, `tools/check.mjs`).
 8. **Stats** (`Seen`, `Death`, `PublishSweep`, `ObserveKeys`, `stats.tsv`): **dotnet test**
    -- distance against a hop, close calls, the four ends of a corpse run, bosses, the save.
    Two faults found:

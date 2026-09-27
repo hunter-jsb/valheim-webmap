@@ -23,10 +23,10 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
   bundled page does not draw them yet.
 * **World render at the resolution you choose** — `render_size` 4096 halves the metres
   per pixel, and rendering no longer stalls the server.
-* **The world in 3D.** "See in 3D" on any walked spot stands you there at eye height:
-  the ground as the game shapes it, terraforming included, water, and every building,
-  tree and rock drawn with the game's own model, under a sky lit by the server's clock.
-  Look around, walk, or switch to an overview.
+* **The world in 3D.** Drop the little figure on any walked spot, as in Street View, and
+  you stand there at eye height: the ground as the game shapes it, terraforming included,
+  water, and every building, tree and rock drawn with the game's own model, under a sky
+  lit by the server's clock. Look around, walk, or switch to an overview.
 * **Server announcements** on every player's screen, for restart warnings and the like.
 * Chat, deaths and joins in the message log; optional Discord notifications.
 
@@ -43,9 +43,9 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 
 ## Using the map
 
-The viewer at `http://your_ip:port` is five pages — the live map, the world in 3D, a
-portal atlas drawn on a biome chart, a planning board for drawing and sharing routes, and
-per-player tallies —
+The viewer at `http://your_ip:port` is four pages — the live map (with the world in 3D
+as a mode of it), a portal atlas drawn on a biome chart, a planning board for drawing and
+sharing routes, and per-player tallies —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
@@ -58,14 +58,17 @@ Players only appear once they set **visible to other players** on the in-game ma
 
 ### The 3D view
 
-`view.html#at=<x>,<z>` (world metres; `&look=<degrees from north>` optional) is the world
-at that spot. The place card and the pin card on the map link there as **See in 3D**, and
-the page links back to the map at the same spot. It opens like a street view: at eye
-height, 1.8 m above the ground, looking north. Drag to look around; the wheel or a pinch
-zooms the eye, not the distance; `W A S D` or the arrows walk (`Shift` runs, `Q E` turn);
-a click on the ground walks there. **Overview** swaps in an orbit camera over the same
-spot, and back. Light follows the server's clock, or a time you pick; shadows are on
-except on phones.
+A mode of the map, entered as Street View is: drag the figure at the top of the map's
+buttons onto walked ground and drop it (on a phone: tap it, then tap the map), pick **3D**
+under View in the Layers card (you stand in the middle of the map), or **See in 3D** on a
+place or a pin. `#3d=<x>,<z>` (world metres; `&look=<degrees from north>` optional) links
+straight in, and the hash follows you as you go. You stand at eye height, 1.8 m above the
+ground, looking north. Drag to look around; the wheel or a pinch zooms the eye, not the
+distance; `W A S D` or the arrows walk (`Shift` runs, `Q E` turn); a click on the ground
+walks there. ⇅ swaps in an orbit camera over the same spot, and back; ☼ holds
+the light (the server's clock, or a time you pick), shadows (off on phones) and what is
+shown. **Map** or `Esc` puts the map back, centred where you stood, and the hash back to
+`#at`. The renderer and its three.js load on the first step into 3D, never with the map.
 
 The ground is the game's own: the generator's heights blended across each 64 m zone the
 way the game blends them, plus every terraform players have made, coloured by biome from
@@ -230,7 +233,7 @@ layer covers, and what nothing covers yet. CI runs both on every push and pull r
 
 `tools/sameorigin.py WebMap/web http://your_ip:port 8766` serves the viewer the way the
 mod does -- the pages from disk, every other path forwarded to the server -- and, with a
-headless Chrome started with `--remote-debugging-port=9334` (and, for the 3D page's
+headless Chrome started with `--remote-debugging-port=9334` (and, for the 3D view's
 WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names

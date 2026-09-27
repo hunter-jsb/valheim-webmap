@@ -34,6 +34,11 @@ async function open(path) {
   const until = async (expression, ms = 45000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(250)) if (await ev(expression)) return true; return false; };
   // down and up in one spot: a tap, as index.html's endPtr tells one from a drag
   const tap = async (x, y) => { for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 }); await sleep(300); };
+  // pressed at one spot, carried to another in steps, released: a drag, as the pegman wants
+  const drag = async (x0, y0, x1, y1) => {
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: x0, y: y0, button: "left", clickCount: 1 });
+    for (let i = 1; i <= 8; i++) await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x0 + (x1 - x0) * i / 8, y: y0 + (y1 - y0) * i / 8, button: "left", buttons: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x1, y: y1, button: "left", clickCount: 1 }); await sleep(300); };
   const click = async sel => { const p = await ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el || !el.offsetParent) return null;
     const r = el.getBoundingClientRect(); return {x: r.left + r.width/2, y: r.top + r.height/2}; })()`); if (p) await tap(p.x, p.y); return !!p; };
   await send("Runtime.enable"); await send("Page.enable"); await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
@@ -46,7 +51,7 @@ async function open(path) {
     if (OUT) writeFileSync(`${OUT}/${name}.png`, Buffer.from((await send("Page.captureScreenshot", { format: "png" })).data, "base64"));
     ws.close(); await fetch(`http://127.0.0.1:${PORT}/json/close/${tab.id}`);
   };
-  return { ev, until, tap, click, done };
+  return { ev, until, tap, click, drag, done };
 }
 
 async function map() {
@@ -109,17 +114,30 @@ async function players() {
   await p.done("players");
 }
 
-// the 3D page at the world's start, which any played world has walked; WebGL in a
-// headless Chrome wants --use-angle=swiftshader --enable-unsafe-swiftshader
+// The 3D mode of the map at the world's start, which any played world has walked: in by
+// the #3d link and by the pegman, out by the Map button. WebGL in a headless Chrome
+// wants --use-angle=swiftshader --enable-unsafe-swiftshader.
 async function view3d() {
   const c = await (await fetch(BASE + "/config")).json();
   const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
-  const p = await open(`/view.html#at=${Math.round(x)},${Math.round(z)}`);
-  const status = `document.getElementById("status").textContent`;
-  const ground = await p.until(`/[1-9]\\d* chunks? of ground/.test(${status})`, 60000);
-  check("3d: stands on the walked ground at the start", ground, await p.ev(status));
-  const things = ground && await p.until(`/[1-9][\\d,]* objects/.test(${status})`, 30000);
-  check("3d: stands the world's objects on it", things, await p.ev(status));
+  const p = await open("/");
+  await p.until(`document.querySelectorAll("#markers .marker").length && LAYERS_READY`);
+  const early = await p.ev(`performance.getEntriesByType("resource").some(e => /three|view3d/.test(e.name))`);
+  check("3d: the map loads without three.js", early === false);
+  await p.ev(`location.hash = "#3d=${Math.round(x)},${Math.round(z)}"`);
+  const status = `document.getElementById("v3dStatus").textContent`;
+  const ground = await p.until(`+document.getElementById("v3d").dataset.ground > 0`, 90000);
+  check("3d: #3d stands you on the walked ground at the start", ground, await p.ev(status));
+  const things = ground && await p.until(`+document.getElementById("v3d").dataset.objects > 0`, 30000);
+  check("3d: the world's objects stand on it", things, await p.ev(status));
+  await p.click("#v3dExit");
+  const back = await p.until(`document.getElementById("v3d").hidden && location.hash.startsWith("#at=")`, 5000);
+  check("3d: Map brings the map back where you stood", back, await p.ev("location.hash"));
+  const at = await p.ev(`(() => { const q = MapCore.toPx(${x}, ${z}), r = stage.getBoundingClientRect(), b = pegman.getBoundingClientRect();
+    return {x: r.left + V.tx + q.px*V.scale, y: r.top + V.ty + q.py*V.scale, bx: b.left + b.width/2, by: b.top + b.height/2}; })()`);
+  if (at) await p.drag(at.bx, at.by, at.x, at.y);
+  const dropped = !!at && await p.until(`IN3D && location.hash.startsWith("#3d=")`, 10000);
+  check("3d: the pegman dropped on walked ground stands you there", dropped, await p.ev("location.hash"));
   await p.done("3d");
 }
 

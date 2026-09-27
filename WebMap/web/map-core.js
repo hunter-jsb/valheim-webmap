@@ -650,6 +650,10 @@ const ICONS = {
             ["M12 10.2c-1.9 0-3.1.9-3.1 2.2 0 2.6 6.2 1.1 6.2 3.8 0 1.4-1.4 2.3-3.1 2.3","#14130e",1]],
   "plan":[["M3.4 3.4h17.2v17.2H3.4z","#a8784a"],
           ["M11.2 3.4h1.6v17.2h-1.6zM3.4 11.2h17.2v1.6H3.4z","#0f1310",1]],
+  // the figure you drop on the map to stand there in 3D; it takes its colour from the
+  // button it sits on, pale at rest and gold while armed or carried
+  "pegman":[["M9.2 5.2a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0","currentColor"],
+            ["M8.4 9h7.2a2 2 0 0 1 2 2v4.8h-2.4V21h-2.4v-5.2h-1.6V21H8.8v-5.2H6.4V11a2 2 0 0 1 2-2z","currentColor"]],
 };
 function spriteSVG(icons){
   icons = icons || ICONS;
@@ -711,10 +715,10 @@ function ago(iso){
 function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 // ---------- the site chrome ----------
-// Five pages wear the same bar, so a link added here reaches all of them; the
+// Four pages wear the same bar, so a link added here reaches all of them; the
 // rules it needs are in site.css. Whose name it carries and where it points out
 // to are the deployment's, not this file's.
-const NAV_PAGES = [["index", "Map"], ["view", "3D"], ["portals", "Portals"], ["plan", "Plan"], ["players", "Players"]];
+const NAV_PAGES = [["index", "Map"], ["portals", "Portals"], ["plan", "Plan"], ["players", "Players"]];
 let navEl = null, navPage = "";
 // Nameless until the world names itself, and "Valheim" until even that arrives.
 function brand(){ return cfg.brand || worldName || "Valheim"; }

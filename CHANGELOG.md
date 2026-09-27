@@ -11,11 +11,14 @@
   Worker sets after checking the member's roles again.
 * Every write from the site -- a name, a pin, a setting -- answers with the line it logged,
   and the Worker posts it to the guild's channel through the bot.
-* The world in 3D. `view.html#at=x,z` stands you on a walked spot at eye height, looking
-  north, like a street view: drag to look, wheel or pinch to zoom the eye, WASD or the
-  arrows to walk, a click on the ground to walk there, and an Overview button for an orbit
-  camera over the same spot. The place card and the pin card offer **See in 3D**; 3D is
-  in the bar; the page links back to the map where you stand. Ported, with thanks, from
+* The world in 3D, as a mode of the map entered the way Street View is: drag the figure
+  from the map's buttons onto walked ground (on a phone, tap it and then the map), pick 3D
+  under View in the Layers card, press **See in 3D** on a place or a pin, or follow a
+  `#3d=x,z` link. You stand there at eye height looking north: drag to look, wheel or
+  pinch to zoom the eye, WASD or the arrows to walk, a click on the ground to walk there,
+  ⇅ for an orbit camera over the spot, ☼ for the light and what is shown. **Map** or Esc
+  puts the map back where you stood. three.js and the renderer load on the first step
+  into 3D and never with the map. Ported, with thanks, from
   [f00d4tehg0dz/valheim-webmap](https://github.com/f00d4tehg0dz/valheim-webmap) (MIT): the prefab exporter and glTF writer, the model
   library, the texture and mesh extractors that read the game's own asset files (the
   dedicated server cannot read its textures, nor most meshes), the per-chunk world objects,

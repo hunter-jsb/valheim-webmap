@@ -1,4 +1,4 @@
-// The 3D view: one spot of the world, stood in at eye height.
+// The 3D view: one spot of the world, stood in at eye height -- a mode of the map page.
 //
 // The model path -- prefab glTFs instanced per chunk, canopy billboards over the
 // foliage the models leave out, the sky -- is ported from f00d4tehg0dz/valheim-webmap
@@ -736,16 +736,26 @@ if (uFogOn > 0.5) {
   }
 
   // ---------------------------------------------------------------- lifecycle
+  // The map page shows and hides the view: stop() leaves everything loaded, so going
+  // back into 3D is instant, and draws nothing while the map is up.
   start() {
     this.resize();
     this.applyFog();
     this.running = true;
+    this.lastFrame = 0;
     this.update();
-    this.loop();
+    if (!this.frame) this.loop();
+  }
+
+  stop() {
+    this.running = false;
+    this.keys.clear();
+    if (this.frame) { cancelAnimationFrame(this.frame); this.frame = 0; }
   }
 
   resize() {
-    const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight;
+    if (!this.canvas.clientWidth) return;       // hidden: sized again on the way back in
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -760,8 +770,8 @@ if (uFogOn > 0.5) {
   }
 
   loop() {
-    if (!this.running) return;
-    requestAnimationFrame(() => this.loop());
+    if (!this.running) { this.frame = 0; return; }
+    this.frame = requestAnimationFrame(() => this.loop());
     const now = performance.now(), dt = Math.min(0.1, (now - (this.lastFrame || now)) / 1000);
     this.lastFrame = now;
     if (this.mode === 'street') { this.handleKeys(dt); this.placeCamera(dt); }
