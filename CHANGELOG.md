@@ -65,6 +65,12 @@
   card); the ground card offers **Pin here**. The chat commands now find and remove under
   the pin list's lock, and `pins.csv` is written from a snapshot, since the site writes
   from HTTP threads.
+* Tests, where there were none. `dotnet test WebMap.Tests` runs the mod's logic from the
+  built DLL on .NET 10 -- the geography and its names, hub names, the stats walk and its
+  save, portal memory, pin writes from the site -- and `node --test` runs `map-core.js`'s
+  pure functions; CI runs both on every push and pull request. `tools/check.mjs` replaces
+  `shoot.mjs`: every page in a headless Chrome over a live server, one line per check and
+  a failing exit when one fails. `TESTING.md` ranks what is covered and what is not.
 
 ## 2.12.0
 

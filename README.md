@@ -142,14 +142,27 @@ own: every colour is a token, so a restyle is an edit to `:root` and the pages f
 The two exceptions are data, not chrome: the forest swatch's greens and the biome
 inks the map sets names in (`NAME_STYLE` in `map-core.js`).
 
+### Tests
+
+```bash
+dotnet test WebMap.Tests     # the mod's logic: builds the mod, then loads WebMap.dll on .NET 10
+node --test                  # map-core.js's pure functions, from the repo root
+```
+
+The first needs `libs/` set up as for a build. [TESTING.md](TESTING.md) says what each
+layer covers, and what nothing covers yet. CI runs both on every push and pull request.
+
 ### Checking the viewer against a live server
 
-`tools/sameorigin.py WebMap/web http://your_ip:port 8765` serves the viewer the way the
-mod does -- the pages from disk, every other path forwarded to the server -- and
-`tools/shoot.mjs http://127.0.0.1:8765 /tmp/out 9333 / /portals.html /plan.html /players.html`
-drives a headless Chrome over it and prints what each page drew, which hosts it talked
-to, and any exception. A viewer change is done when that is clean.
-`tools/bench.mjs http://127.0.0.1:8765 9333` pans and zooms the map over the same Chrome
+`tools/sameorigin.py WebMap/web http://your_ip:port 8766` serves the viewer the way the
+mod does -- the pages from disk, every other path forwarded to the server -- and, with a
+headless Chrome started with `--remote-debugging-port=9334`,
+`node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
+no exceptions, markers and names drawn, a tapped name opening its place card, the names
+flyout, hubs and dial lines, a card per player, the plan loading. One line per check, a
+non-zero exit on any failure, and a screenshot of each page when given a directory. A
+viewer change is done when that is clean.
+`tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome
 and prints ms per frame: 16.7 is the screen's own rate, anything above it is lag.
 
 ### Local test server
