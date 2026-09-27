@@ -128,6 +128,22 @@ a.btn,a.btn:hover{text-decoration:none}   /* a link that looks like a button: Se
 .spot .dots{display:flex;gap:4px;margin-top:.55rem;flex-wrap:wrap}
 .spot .dots i{width:5px;height:5px;border-radius:50%;background:var(--line)}
 .spot .dots i.on{background:var(--gold)}
+/* a player as js/card.js draws them, on the roster and in the map's tour: the class as a
+   pill, the four figures, the pentagon, and the Viking turning on the map's ground colour */
+.cls{display:inline-block;padding:.1rem .45rem;border-radius:var(--pill);border:1px solid var(--line);background:var(--hair);font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);white-space:nowrap;flex:0 0 auto}
+.cls.early{color:var(--muted);border-style:dashed}
+.mini .m{display:grid;min-width:0}
+.mini .v{font-size:.92rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.2}
+.mini .k{font-size:.55rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);white-space:nowrap}   /* "per death" on one line in the column */
+.mini .nil .v{color:var(--nil);font-weight:600}
+.mini .warn .v{color:var(--gold)}
+.radar .fill{fill:var(--gold);fill-opacity:.22;stroke:var(--gold);stroke-width:1.2;stroke-linejoin:round}
+.radar .grid{fill:none;stroke:var(--line);stroke-width:1}
+.radar .spoke{stroke:var(--hair);stroke-width:1}
+.viking{margin:0;padding:0;overflow:hidden;background:var(--stage)}
+.viking canvas{display:block;width:100%}
+.viking figcaption{padding:.35rem .6rem .4rem;border-top:1px solid var(--line);font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+.viking.ok figcaption{color:var(--ok)}
 .field{width:100%;background:var(--well);border:1px solid var(--line);border-radius:var(--r);color:var(--ink);
   font-size:.85rem;padding:.45rem .55rem}
 .field:focus{outline:none;border-color:var(--gold)}

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="site.css">
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
+<script src="js/card.js"></script>
 <!-- the 3D view's modules, fetched only when someone first steps into 3D -->
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
@@ -57,6 +58,28 @@
   .tourcap.show{opacity:1;transform:translateX(-50%)}
   .tourcap .tt{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.15rem;line-height:1.2}
   .tourcap .tl{font-size:.8rem;color:var(--ink-2);margin-top:.25rem}
+  /* a stop about a player: their card at the side, over the map and the 3D view alike */
+  .pcard{position:absolute;left:.7rem;top:.7rem;z-index:18;width:22rem;max-width:calc(100% - 1.4rem);padding:.65rem .75rem .75rem;
+    box-shadow:var(--shadow-lg);opacity:0;transform:translateX(-8px);transition:opacity .7s ease,transform .7s ease}
+  .pcard.show{opacity:1;transform:none}
+  .pcard .ph{display:flex;align-items:center;gap:.45rem;min-width:0}
+  .pcard .nm{font-weight:700;font-size:1.05rem;color:var(--bright);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pcard .pl{font-size:.74rem;color:var(--muted);margin-top:.1rem}
+  .pcard.ok .pl{color:var(--ok)}
+  .pcard .pb{display:flex;align-items:center;gap:.75rem;margin-top:.6rem}
+  .pcard .viking{flex:0 0 136px;border-radius:var(--r)}
+  .pcard .viking canvas{height:184px}
+  .pcard .viking figcaption{display:none}
+  .pcard .pr{flex:1 1 0;min-width:0;display:grid;justify-items:center;gap:.6rem}
+  .pcard .radar{width:112px;height:112px;display:block}
+  .pcard .mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem .6rem;width:100%}
+  /* a phone keeps the figures and lets the Viking go: no room on the stage, and the 3D view has the GPU */
+  @media (max-width:560px), (max-height:480px){
+    .pcard .viking{display:none}
+    .pcard .pr{grid-template-columns:64px minmax(0,1fr);justify-items:stretch;align-items:center;width:100%}
+    .pcard .radar{width:64px;height:64px}
+    .pcard .mini{grid-template-columns:repeat(4,minmax(0,1fr))}
+  }
   body.tour .mapctl,body.tour #mini,body.tour .layers,body.tour .v3d .where{opacity:.3;transition:opacity .6s}
   body.tour .v3d .hint{display:none}
   body.tour .mapctl:hover,body.tour .layers:hover{opacity:1}
@@ -309,6 +332,7 @@
       <button class="btn map" id="fsBtn"   title="Fullscreen">⛶</button>
     </div>
     <div class="tourcap glass" id="tourcap" hidden><div class="eyebrow"></div><div class="tt"></div><div class="tl"></div></div>
+    <div class="pcard glass" id="pcard" hidden></div>
     <div class="v3d" id="v3d" hidden>
       <canvas id="v3dCanvas" aria-label="The world in 3D"></canvas>
       <div class="where glass" id="v3dWhere"></div>
@@ -401,7 +425,7 @@ const PLAN_ZOOM = MapCore.PLAN_ZOOM, MAX_ZOOM = MapCore.MAX_ZOOM;
 // the window onto the map: drag to pan, wheel or pinch to zoom, a tap opens what is there
 const V = MapCore.view(stage, {
   paint, max: MAX_ZOOM,
-  guard: ".mapctl, .layers, #mini, #namer, .v3d",
+  guard: ".mapctl, .layers, #mini, #namer, .v3d, #pcard",
   down: () => { if(!namer.hidden && !placing()) closeCard(); },
   tap: (x, y, e, target) => {
     if(PEG_ARMED) return dropPeg(x, y);        // the armed pegman lands where the finger does
@@ -1329,7 +1353,7 @@ function tourStops(){
     return [...m.values()].map(c => ({n: c.n, x: c.x/c.n, z: c.z/c.n, items: c.items})).sort((a, b) => b.n - a.n); };
   const most = (items, key) => { const by = {}; items.forEach(i => { by[i[key]] = (by[i[key]] || 0) + 1; }); return Object.entries(by).sort((a, b) => b[1] - a[1])[0]; };
   for(const p of ((PLAYERS && PLAYERS.players) || []).filter(p => p.x != null && !p.hidden))
-    S.push({kind: "Online now", title: p.name, line: `in ${nameAt(p.x, p.z) || "the wild"}`, x: p.x, z: p.z, zoom: 40, dist: 90});
+    S.push({kind: "Online now", title: p.name, who: p.name, line: `in ${nameAt(p.x, p.z) || "the wild"}`, x: p.x, z: p.z, zoom: 40, dist: 90});
   const rest = [];
   cells(PORTALS, 160).filter(c => c.n >= 3).slice(0, 2).forEach(c =>
     rest.push({kind: "Portal hub", title: nameAt(c.x, c.z) || "A hub", line: `${c.n} gates stand here`, x: c.x, z: c.z, zoom: 30, dist: 140, layer: "portal"}));
@@ -1338,9 +1362,9 @@ function tourStops(){
   cells(DEATHS, 96).filter(c => c.n >= 3).slice(0, 3).forEach(c => { const m = most(c.items, "name");
     rest.push({kind: "Where people die", title: nameAt(c.x, c.z) || "A bad spot", line: `${c.n} deaths here \u00b7 ${m[0]} fell ${m[1]} of them`, x: c.x, z: c.z, zoom: 26, dist: 120, detail: "deaths"}); });
   GRAVES.slice(0, 2).forEach(g => { const w = W(g.px, g.py);
-    rest.push({kind: "A grave", title: `${g.name}'s gear`, line: "still lying where they fell", x: w.x, z: w.z, zoom: 36, dist: 80, layer: "grave"}); });
+    rest.push({kind: "A grave", title: `${g.name}'s gear`, who: g.name, line: "still lying where they fell", x: w.x, z: w.z, zoom: 36, dist: 80, layer: "grave"}); });
   if(DEATHS.length){ const d = DEATHS[DEATHS.length - 1], w = W(d.px, d.py);
-    rest.push({kind: "The latest death", title: d.name, line: `${MapCore.ago(d.t*1000)}, in ${nameAt(w.x, w.z) || "the wild"}`, x: w.x, z: w.z, zoom: 34, dist: 100, detail: "deaths"}); }
+    rest.push({kind: "The latest death", title: d.name, who: d.name, line: `${MapCore.ago(d.t*1000)}, in ${nameAt(w.x, w.z) || "the wild"}`, x: w.x, z: w.z, zoom: 34, dist: 100, detail: "deaths"}); }
   TRADERS.forEach(t => { const w = W(t.px, t.py);
     rest.push({kind: "A trader", title: t.name, line: `keeps shop in ${nameAt(w.x, w.z) || "the wild"}`, x: w.x, z: w.z, zoom: 36, dist: 90, layer: "trader"}); });
   const boats = (VEHICLES || []).filter(v => v.kind === "boat");
@@ -1402,19 +1426,49 @@ function caption(s){
   tourCap.querySelector(".eyebrow").textContent = s.kind; tourCap.querySelector(".tt").textContent = s.title; tourCap.querySelector(".tl").textContent = s.line;
   tourCap.hidden = false; tourCap.classList.remove("show"); void tourCap.offsetWidth; tourCap.classList.add("show");
 }
+// A stop about a player carries their card, as the players page reads them: the class, the
+// pentagon, the four figures, and their Viking turning where the stage has room for it.
+// One turntable for the page; the card's rig is let go as the card goes.
+const pcard = document.getElementById("pcard"), NARROW = matchMedia("(max-width:560px), (max-height:480px)");
+let VIKING = null, PCARD_T = 0;
+function showPlayerCard(name){
+  const P = (STATS && Array.isArray(STATS.players)) ? STATS.players : [], p = P.find(q => q.name === name);
+  if(!p) return dropPlayerCard();
+  const C = PlayerCard, live = ((PLAYERS && PLAYERS.players) || []).find(q => q.name === name);
+  C.rim(P);
+  const line = live ? "online now" + (live.x != null && !live.hidden ? ` \u00b7 in ${nameAt(live.x, live.z) || "the wild"}` : "") : C.seen(num(p.last_seen));
+  pcard.innerHTML = `<div class="ph"><span class="dot"></span><span class="nm">${esc(p.name)}</span>${C.pill(C.classify(p, P))}</div><div class="pl">${esc(line)}</div>`
+    + `<div class="pb"><i id="pvslot" hidden></i><div class="pr">${C.radar(p, 112, false)}${C.figures(p)}</div></div>`;
+  pcard.classList.toggle("ok", !!live);
+  const look = (live && live.look) || p.look;
+  if(look && !NARROW.matches){
+    VIKING = VIKING || C.viking(API);
+    pcard.querySelector("#pvslot").replaceWith(VIKING.el);
+    VIKING.show(p.name, look, !!live, ((LAST_STATE || {}).rev || {}).models || 0);
+  }else if(VIKING) VIKING.drop();
+  clearTimeout(PCARD_T);
+  pcard.hidden = false; pcard.classList.remove("show"); void pcard.offsetWidth; pcard.classList.add("show");
+}
+function dropPlayerCard(){
+  if(VIKING) VIKING.drop();
+  if(pcard.hidden) return;
+  pcard.classList.remove("show");
+  clearTimeout(PCARD_T); PCARD_T = setTimeout(() => { pcard.hidden = true; }, 700);
+}
 async function tourStop(s, run){
   const alive = () => TOUR.on && TOUR.run === run;
   // a spot still under fog has nothing to show and is not flown to at all
   const fog = MapCore.explored(LAYERS.imgs.fog), q = toPx(s.x, s.z);
   if(!s.far && !(fog && fog(q.px, q.py))) return;
   caption(s);
+  if(s.who) showPlayerCard(s.who);
   // what this stop switches on, it switches off again on the way out
   const undo = [];
   if(s.layer && HIDDEN.has(s.layer)){ showLayer(s.layer); undo.push(() => { HIDDEN.add(s.layer); applyHidden(); drawRaster(); }); }
   if(s.detail && !showDetail(s.detail)){ setDetail(s.detail, true); undo.push(() => setDetail(s.detail, false)); }
   // a stopped run's layers were put back by stopTour; undoing them again would switch off
   // what the viewer, or a tour started since, has switched on
-  try{ await tourLegs(s, alive); }finally{ if(alive()) undo.forEach(f => f()); }
+  try{ await tourLegs(s, alive); }finally{ if(alive()){ undo.forEach(f => f()); if(s.who) dropPlayerCard(); } }
 }
 async function tourLegs(s, alive){
   const q = toPx(s.x, s.z), W = stage.clientWidth, H = stage.clientHeight;
@@ -1471,6 +1525,7 @@ function stopTour(){
   if(k){ DETAILS.clear(); k.details.forEach(x => DETAILS.add(x)); OFF.clear(); k.off.forEach(x => OFF.add(x)); HIDDEN.clear(); k.hidden.forEach(x => HIDDEN.add(x));
          markDetails(); applyHidden(); drawRaster(); MapCore.toggleSide(k.side, false); }
   tourCap.classList.remove("show"); setTimeout(() => { if(!TOUR.on) tourCap.hidden = true; }, 700);
+  dropPlayerCard();
   document.body.classList.remove("tour"); tourBtn.classList.remove("on"); tourBtn.innerHTML = "&#9654;"; tourBtn.title = "Cinematic: a tour of the world's places, in 3D where the ground is walked. Any touch ends it.";
 }
 tourBtn.onclick = () => TOUR.on ? stopTour() : startTour();

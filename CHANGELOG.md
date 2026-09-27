@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* The tour shows who a stop is about. At someone online, the latest death or a grave,
+  their card stands at the side of the stage, over the map and the 3D view alike: the
+  name, the class with its reason under the pointer, "online now" and where or when they
+  were last seen, the pentagon and the four figures of their roster row, and their Viking
+  turning as on their page (a phone keeps the figures and drops the Viking). One renderer
+  serves every card, loaded with the first look; the card's turntable stops and its rig is
+  freed as the card goes, and none of it outlasts a stopped tour. The class, the pentagon,
+  the figures and the turntable moved out of the players page into `js/card.js`
+  (`PlayerCard`), which both pages share; the players page draws exactly as before.
 * A debugging and optimisation pass over the night's work, each change measured first.
   `/state` no longer carries the per-player tallies (a fifth of its bytes, rebuilt every
   request while anyone was on, read by no page: `/stats/players` has them). The chat

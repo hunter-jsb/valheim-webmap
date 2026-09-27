@@ -174,8 +174,9 @@ async function view3d() {
   await p.done("3d");
 }
 
-// The tour's own faults: a flight whose window is resized under it, and a tour stopped
-// mid-stop and started again, whose old stop wakes into the new tour.
+// The tour's own faults: a flight whose window is resized under it, a tour stopped
+// mid-stop and started again, whose old stop wakes into the new tour, and a player's
+// card whose turntable must stop as the card goes.
 async function tour() {
   const c = await (await fetch(BASE + "/config")).json();
   const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
@@ -195,6 +196,23 @@ async function tour() {
   const after = await p.ev(`({spin: V3D && V3D.spin, portals: !HIDDEN.has("portal")})`) || {};
   check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals, JSON.stringify(after));
   await p.ev(`stopTour()`);
+  // a player's card, built for a roster entry directly since nobody need be online; one the
+  // server remembers no look for is handed the body alone, as on the players page
+  const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
+  const look = body && { model: +body.n.slice(11), skin: [1, 0.82, 0.68], hair: [0.55, 0.32, 0.14], slots: {}, parts: [body.n] };
+  const who = await p.until(`STATS && STATS.players && STATS.players.length`, 20000) && await p.ev(`(() => {
+    const P = STATS.players, q = P.find(x => x.look && PlayerCard.classify(x, P)) || P.find(x => PlayerCard.classify(x, P)) || P[0];
+    if(!q.look) q.look = ${JSON.stringify(look || null)};
+    showPlayerCard(q.name); return q.name; })()`);
+  const stood = !!who && !!body && await p.until(`VIKING && VIKING.rig && VIKING.raf && pcard.contains(VIKING.el) && VIKING.el.querySelector("canvas").clientWidth > 0`, 60000);
+  const shown = await p.ev(`({pill: !!pcard.querySelector(".ph .cls"), radar: !!pcard.querySelector(".pr svg.radar .fill")})`) || {};
+  const frames = async () => { const f0 = await p.ev(`VIKING ? VIKING.v.renderer.info.render.frame : 0`); await sleep(600); return await p.ev(`VIKING ? VIKING.v.renderer.info.render.frame : 0`) - f0; };
+  const spun = stood ? await frames() : 0;
+  await p.ev(`dropPlayerCard()`);
+  const gone = await p.until(`pcard.hidden && (!VIKING || (!VIKING.raf && !VIKING.rig))`, 3000), still = stood ? await frames() : 0;
+  check("tour: a player's card shows their class, pentagon and turning Viking, and stops turning as it goes",
+        !!who && shown.pill && shown.radar && (!body || spun > 0) && gone && still === 0,
+        `${who}: ${shown.pill ? "pill" : "no pill"}, ${shown.radar ? "radar" : "no radar"}, ${body ? `${spun} frames turning, ${still} after` : "no body in the library to draw"}`);
   await p.done("tour");
 }
 

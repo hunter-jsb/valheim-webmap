@@ -54,7 +54,8 @@ with a legend that switches each layer and a Layers card, as on Google Maps, hol
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
 holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
-page draws from, `map-core.js` the rendering core, and each page holds only its own.
+page draws from, `map-core.js` the rendering core, `js/card.js` a player as the roster
+reads them (for the players page and the tour), and each page holds only its own.
 Our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
@@ -65,6 +66,9 @@ Players only appear once they set **visible to other players** on the in-game ma
 The ▶ among the map's buttons, or a link ending in `#tour`, plays the world for a screen
 left open: its places one after another, flown to on the map with the layer that makes
 each worth seeing, then circled in 3D where the ground is walked. Any touch ends it.
+A stop about a player -- someone online, the latest death, a grave -- carries their card
+at the side, as their row on the players page reads them: the class, the pentagon, the
+four figures, and their Viking turning beside them (a phone keeps the figures alone).
 
 ### The 3D view
 
@@ -334,8 +338,8 @@ accents, the map's own hues for portals, traders and graves, the halos over the 
 radii, shadows, fonts, the bar and sidebar widths), the base, and the components every
 page shares -- `.title .eyebrow .sub .note .section .foot`, `.card .well .glass .stat .dot`,
 `.btn .chip .field .btnrow`, `.stage .mapctl .legend`, `.spot` (a spotlight: one figure, a line of
-context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars), the nav
-and the sidebar shell. A
+context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars),
+`.cls .mini .radar .viking` (a player as `js/card.js` draws them), the nav and the sidebar shell. A
 page's own `<style>` holds only what that page alone draws, and names no colour of its
 own: every colour is a token, so a restyle is an edit to `:root` and the pages follow.
 The two exceptions are data, not chrome: the forest swatch's greens and the biome
@@ -360,7 +364,8 @@ WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names
 flyout, ground and objects in 3D at the world's start, hubs and dial lines, a card per
-player, the plan loading, the tour landing through a resize and a stopped one staying stopped. One line per check, a
+player, the plan loading, the tour landing through a resize, a stopped one staying stopped
+and a player's card turning in it until it goes. One line per check, a
 non-zero exit on any failure, and a screenshot of each page when given a directory. A
 viewer change is done when that is clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome
