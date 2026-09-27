@@ -574,12 +574,14 @@ namespace WebMap
 
         // A name given on the site (or cleared, so the generated one returns).
         // Returns null when it took, else what was wrong.
-        public static string SetName(string id, string name, string by)
+        public static string SetName(string id, string name, string by) => SetName(id, name, by, out _);
+        public static string SetName(string id, string name, string by, out string log)
         {
+            log = null;
             id = (id ?? "").Trim(); by = (by ?? "").Trim();
             name = Regex.Replace(name ?? "", @"[\p{C}]", "").Trim();
             if (name.Length > 40) return "a name is at most 40 characters";
-            if (id.StartsWith("hub@")) return SetHubName(id, name, by);
+            if (id.StartsWith("hub@")) return SetHubName(id, name, by, out log);
             lock (gate)
             {
                 Feature f = null;
@@ -590,7 +592,8 @@ namespace WebMap
                 else names[id] = new Named { name = name, by = by, t = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
                 Rebuild();
                 Save();
-                ZLog.Log($"WebMap: {(by.Length > 0 ? by : "someone")} named the {f.kind} '{was}' " + (name.Length == 0 ? "back to its own name" : $"'{name}'"));
+                log = $"{(by.Length > 0 ? by : "someone")} named the {f.kind} '{was}' " + (name.Length == 0 ? "back to its own name" : $"'{name}'");
+                ZLog.Log("WebMap: " + log);
             }
             return null;
         }
@@ -607,8 +610,9 @@ namespace WebMap
             return m.Success && float.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out x)
                              && float.TryParse(m.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out z);
         }
-        private static string SetHubName(string id, string name, string by)
+        private static string SetHubName(string id, string name, string by, out string log)
         {
+            log = null;
             if (!ParseHub(id, out float x, out float z)) return "no such place";
             var pos = Portals.Positions;
             bool near = false;
@@ -624,7 +628,8 @@ namespace WebMap
                     { was = names[k].name; names.Remove(k); }
                 if (name.Length > 0) names[key] = new Named { name = name, by = by, t = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
                 Save();
-                ZLog.Log($"WebMap: {(by.Length > 0 ? by : "someone")} named the hub " + (was.Length > 0 ? $"'{was}' " : "") + (name.Length == 0 ? "back to its gates" : $"'{name}'"));
+                log = $"{(by.Length > 0 ? by : "someone")} named the hub " + (was.Length > 0 ? $"'{was}' " : "") + (name.Length == 0 ? "back to its gates" : $"'{name}'");
+                ZLog.Log("WebMap: " + log);
             }
             return null;
         }
@@ -659,9 +664,9 @@ namespace WebMap
         }
 
         // A body of {"id":"...","name":"..."}: the two strings, escapes honoured.
-        public static bool ParseBody(string body, out string id, out string name)
+        public static bool ParseBody(string body, out string id, out string name, string a = "id", string b = "name")
         {
-            id = Body.Str(body, "id"); name = Body.Str(body, "name");
+            id = Body.Str(body, a); name = Body.Str(body, b);
             return id != null && name != null;
         }
 

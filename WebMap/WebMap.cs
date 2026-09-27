@@ -62,6 +62,7 @@ namespace WebMap
             Directory.CreateDirectory(mapDataPath);
 
             WebMapConfig.ReadConfigFile(Config);
+            Settings.Load(mapDataPath);                       // what admins set on the site lies over the config
 
             discordWebHook = new DiscordWebHook(WebMapConfig.DISCORD_WEBHOOK);
         }
