@@ -75,6 +75,10 @@ namespace WebMap
             StaticCoroutine.Start(StructureMap.Loop());
             StaticCoroutine.Start(Announce.Pump());
             StaticCoroutine.Start(PlayerSnapshotLoop());
+            // the 3D view: models exported a few a frame as the sweep meets new prefabs,
+            // and the fallback for height sampling should the engine want it on this thread
+            if (WebMapConfig.EXPORT_MODELS) StaticCoroutine.Start(Models.ModelStore.Pump());
+            StaticCoroutine.Start(Heights.Pump());
             NotifyOnline();
         }
 
@@ -132,6 +136,8 @@ namespace WebMap
             Chart.Load(worldDataPath);
             Features.Load(worldDataPath);
             Portals.Load(worldDataPath);
+            // prefabs are the same in every world, so the model library sits beside the worlds
+            if (Models.ModelStore.Root == null) Models.ModelStore.Init(mapDataPath);
 
             if (mapDataServer == null)
             {
@@ -279,6 +285,7 @@ namespace WebMap
                                             mapDataServer.fogPngStale = true;
                                             changed = true;
                                             fog[o] = fog[o + 1] = fog[o + 2] = fog[o + 3] = 255;
+                                            MapFog.MarkPixel(x, y);
                                         }
                                     }
                                 }

@@ -36,6 +36,15 @@ namespace WebMap
 
         public static string URL = "";
 
+        // The 3D view's model library. The host rewrites the .cfg on every restart,
+        // so these defaults are what a server actually runs with.
+        public static bool EXPORT_MODELS = true;
+        public static bool EXTRACT_TEXTURES = true;
+        public static bool EXTRACT_MESHES = true;
+        public static int EXPORT_MS_PER_FRAME = 6;
+        public static int TEXTURE_MAX_SIZE = 512;
+        public static string OBJECT_CATEGORIES = "piece,other,rock,bush,tree";
+
         public static void ReadConfigFile(ConfigFile config)
         {
             TEXTURE_SIZE = config.Bind("Texture", "texture_size",
@@ -115,6 +124,34 @@ namespace WebMap
             URL = config.Bind("Server", "webmap_url",
                 WebMapConfig.URL,
                 "URL to view the web map.").Value;
+
+            EXPORT_MODELS = config.Bind("Models", "export_models",
+                WebMapConfig.EXPORT_MODELS,
+                "Export each prefab the world holds as a glTF model for the 3D view, a few a "
+                + "frame, into map_data/models. Once per prefab; kept across restarts.").Value;
+
+            EXTRACT_TEXTURES = config.Bind("Models", "extract_textures",
+                WebMapConfig.EXTRACT_TEXTURES,
+                "Read the models' textures out of the game's own asset files on a background "
+                + "thread, once per game version (the dedicated server cannot read them any other "
+                + "way). Off: flat colours.").Value;
+
+            EXTRACT_MESHES = config.Bind("Models", "extract_meshes",
+                WebMapConfig.EXTRACT_MESHES,
+                "Read the meshes the engine keeps locked (most of them) out of the game's asset "
+                + "files the same way. Off: those models are left out or drawn as boxes.").Value;
+
+            EXPORT_MS_PER_FRAME = config.Bind("Models", "export_ms_per_frame",
+                WebMapConfig.EXPORT_MS_PER_FRAME,
+                "Game-thread milliseconds a frame the model export may take.").Value;
+
+            TEXTURE_MAX_SIZE = config.Bind("Models", "texture_max_size",
+                WebMapConfig.TEXTURE_MAX_SIZE,
+                "Longest edge of an extracted texture, in pixels.").Value;
+
+            OBJECT_CATEGORIES = config.Bind("Models", "object_categories",
+                WebMapConfig.OBJECT_CATEGORIES,
+                "What the 3D view is sent, of piece, other, rock, bush, tree (comma separated).").Value;
         }
 
         public static string GetWorldName()

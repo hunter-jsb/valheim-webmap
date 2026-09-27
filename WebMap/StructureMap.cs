@@ -150,6 +150,8 @@ namespace WebMap
             Portals.Begin();
             Pieces.Begin();
             Graves.Begin();
+            WorldObjects.Begin();
+            TerrainPatches.Begin();
             Stats.BeginSweep();
             try { Stats.ObserveKeys(ZoneSystem.instance != null ? ZoneSystem.instance.GetGlobalKeys() : null); } catch { }
             Traders.ScanIfNeeded();                           // once, on the game thread
@@ -177,6 +179,9 @@ namespace WebMap
                         int idx = y * size + x;
                         int pref = 0;
                         try { pref = zdo.GetPrefab(); } catch { }
+                        // the 3D view: every visible object in walked ground, and the terraforming under it
+                        if (pref == TerrainPatches.CompilerHash) TerrainPatches.Observe(zdo, p);
+                        else WorldObjects.Observe(zdo, pref, p, creator);
                         if (Graves.IsGrave(pref))
                         {
                             Graves.Observe(zdo, p);   // spawned by the game, so no creator
@@ -243,6 +248,8 @@ namespace WebMap
                 Portals.Finish();
                 Pieces.Finish();
                 Graves.Finish();
+                int objectChunks = WorldObjects.Finish();
+                TerrainPatches.Finish();
                 Stats.PublishSweep();
                 finish.Stop();
 
@@ -251,6 +258,7 @@ namespace WebMap
                 statsJson = BuildStats(byPrefab, found, seen, sweep);
                 pendingLog = $"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
                            + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps; "
+                           + $"3D {WorldObjects.Total} objects in walked ground ({objectChunks} chunks changed), {TerrainPatches.Count} terraformed zones, {Models.ModelStore.QueueLength} models to export; "
                            + $"walk {walkMs} ms over {frames} frames + finish {finish.ElapsedMilliseconds} ms off-thread, "
                            + $"{wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc";
             }

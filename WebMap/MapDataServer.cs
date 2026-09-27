@@ -103,6 +103,7 @@ namespace WebMap
             }
             fogRgba = b;
             fogPngStale = true;
+            MapFog.RebuildChunks(b);
         }
         private readonly HttpServer httpServer;
 
@@ -178,8 +179,12 @@ namespace WebMap
         // (/config, /players, /map, /pins, /messages) must not keep it running.
         private static readonly HashSet<string> sweepReads = new HashSet<string> {
             "/structures", "/forest", "/fog", "/vehicles", "/portals", "/graves", "/pieces", "/trails",
-            "/forest/stats", "/structures/stats", "/state"
+            "/forest/stats", "/structures/stats", "/state", "/objects", "/height", "/prefabs"
         };
+        // The game's clock for the 3D view's sky, built on the game thread with the players:
+        // the day and the fraction of it EnvMan lights the world by (0.25 sunrise, 0.5 noon).
+        private volatile string timeJson = "null";
+        private volatile Tuple<int, byte[]> prefabsBytes;       // /prefabs as sent, per library revision
         private readonly string publicRoot;
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
@@ -358,17 +363,29 @@ namespace WebMap
             string rawRequestPath = req.RawUrl.Split('?')[0];   // ?v= is for caches, not for us
             if (rawRequestPath == "/") rawRequestPath = "/index.html";
 
-            // GetFileName, not the last '/'-separated part: splitting on '/' alone
-            // leaves backslashes intact, and Path.Combine would honour them as
-            // separators on Windows -- an escape from the web root.
-            string requestedFile = Path.GetFileName(rawRequestPath);
+            // A path under web/, subfolders included (the vendored three.js keeps its
+            // layout, which its own imports depend on). Plain names and forward slashes
+            // only: a backslash is a separator on Windows and a dot-segment climbs out,
+            // so either is refused, and the resolved path must still be under web/.
+            string requestedFile = rawRequestPath.TrimStart('/');
+            string filePath = null;
+            if (requestedFile.Length > 0 && requestedFile.IndexOf('\\') < 0 && requestedFile.IndexOf(':') < 0
+                && Array.TrueForAll(requestedFile.Split('/'), s => s.Length > 0 && s[0] != '.'))
+            {
+                try
+                {
+                    string rootFull = Path.GetFullPath(publicRoot) + Path.DirectorySeparatorChar;
+                    string full = Path.GetFullPath(Path.Combine(publicRoot, requestedFile.Replace('/', Path.DirectorySeparatorChar)));
+                    if (full.StartsWith(rootFull, StringComparison.Ordinal)) filePath = full;
+                }
+                catch { }
+            }
             string[] fileParts = requestedFile.Split('.');
             string fileExt = fileParts[fileParts.Length - 1];
 
-            if (contentTypes.ContainsKey(fileExt))
+            if (filePath != null && contentTypes.ContainsKey(fileExt))
             {
                 byte[] requestedFileBytes = new byte[0];
-                string filePath = Path.Combine(publicRoot, requestedFile);
                 // A deploy writes a new file under the same name, so the cache holds
                 // bytes only for as long as the file still carries the timestamp they
                 // were read at: one stat per request, and a new viewer shows at once.
@@ -393,10 +410,9 @@ namespace WebMap
                 {
                     // a page must pick up a new build on the next visit; its assets can wait a bit
                     res.Headers.Add(HttpResponseHeader.CacheControl, fileExt == "html" ? "no-cache" : "public, max-age=300");
-                    res.ContentType = contentTypes[fileExt];
-                    res.StatusCode = 200;
-                    res.ContentLength64 = requestedFileBytes.Length;
-                    res.Close(requestedFileBytes, true);
+                    // text goes gzipped where it can: three.js is 2 MB as written, a quarter of that zipped
+                    bool text = fileExt == "html" || fileExt == "js" || fileExt == "css";
+                    SendBytes(req, res, requestedFileBytes, contentTypes[fileExt], compressible: text);
                 }
                 else
                 {
@@ -420,8 +436,46 @@ namespace WebMap
 
             if (sweepReads.Contains(rawRequestPath)) StructureMap.LastRead = Environment.TickCount;
 
+            if (rawRequestPath.StartsWith("/models/", StringComparison.Ordinal) && req.HttpMethod == "GET")
+            {
+                ServeModel(req, res, rawRequestPath.Substring(8));
+                return true;
+            }
+
             switch (rawRequestPath)
             {
+                case "/prefabs":
+                    // the model library's index: which prefabs have a model, their bounds, their canopy
+                    {
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                        var pb = prefabsBytes;
+                        if (pb == null || pb.Item1 != Models.ModelStore.Rev)
+                            prefabsBytes = pb = Tuple.Create(Models.ModelStore.Rev, Encoding.UTF8.GetBytes(Models.ModelStore.PrefabsJson));
+                        SendBytes(req, res, pb.Item2, "application/json");
+                        return true;
+                    }
+                case "/objects":
+                case "/height":
+                    // one 256 m chunk of the 3D view, never for ground nobody has walked
+                    {
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+                        if (!int.TryParse(req.QueryString["cx"], NumberStyles.Integer, CultureInfo.InvariantCulture, out int cx)
+                            || !int.TryParse(req.QueryString["cz"], NumberStyles.Integer, CultureInfo.InvariantCulture, out int cz))
+                        { Answer(res, 400, "{\"error\":\"cx and cz are chunk numbers: floor(metres / 256)\"}"); return true; }
+                        if (!MapFog.ChunkExplored(cx, cz)) { Answer(res, 404, "{\"error\":\"unexplored\"}"); return true; }
+                        int rev;
+                        byte[] bytes;
+                        if (rawRequestPath == "/objects") bytes = WorldObjects.ChunkBytes(cx, cz, out rev);
+                        else
+                        {
+                            try { bytes = Heights.Chunk(cx, cz, false, out rev); }
+                            catch (Exception ex) { ZLog.LogWarning("WebMap: heights failed: " + ex.Message); bytes = null; rev = 0; }
+                        }
+                        if (bytes == null) { Answer(res, 503, "{\"error\":\"not ready\"}"); return true; }
+                        res.Headers.Add("X-Rev", rev.ToString(CultureInfo.InvariantCulture));
+                        SendBytes(req, res, bytes, "application/octet-stream");
+                        return true;
+                    }
                 case "/config":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
                     res.ContentType = "application/json";
@@ -575,7 +629,9 @@ namespace WebMap
                         string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                             + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
                             + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev
-                            + ",\"features\":" + Features.Rev + "}"
+                            + ",\"features\":" + Features.Rev + ",\"objects\":" + WorldObjects.Rev + ",\"height\":" + TerrainPatches.Rev
+                            + ",\"models\":" + Models.ModelStore.Rev + "}"
+                            + ",\"time\":" + timeJson
                             + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
                             + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
                             + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
@@ -721,6 +777,52 @@ namespace WebMap
             return true;
         }
 
+        // A body, gzipped for a client that takes it: the 3D view's chunks are arrays of
+        // numbers that shrink to a third. Each body is compressed once and kept with it.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], byte[]> gzipped =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<byte[], byte[]>();
+        private static void SendBytes(HttpListenerRequest req, HttpListenerResponse res, byte[] body, string contentType, bool compressible = true)
+        {
+            if (compressible && body.Length > 1024 && (req.Headers["Accept-Encoding"] ?? "").IndexOf("gzip", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                body = gzipped.GetValue(body, raw =>
+                {
+                    using (var ms = new MemoryStream(raw.Length / 3))
+                    {
+                        using (var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Compress, true)) gz.Write(raw, 0, raw.Length);
+                        return ms.ToArray();
+                    }
+                });
+                res.Headers.Add("Content-Encoding", "gzip");
+            }
+            res.Headers.Add("Vary", "Accept-Encoding");
+            res.ContentType = contentType;
+            res.StatusCode = 200;
+            res.ContentLength64 = body.Length;
+            res.Close(body, true);
+        }
+
+        // /models/<file>: a model (<hash>.glb) or a texture (tex_<name>.png) from the
+        // library, by name only. The mesh cache beside them is game data and never served.
+        private static readonly System.Text.RegularExpressions.Regex ModelFile =
+            new System.Text.RegularExpressions.Regex(@"^([0-9a-f]{8}\.glb|tex_[A-Za-z0-9_-]{1,120}\.png)$");
+        private static void ServeModel(HttpListenerRequest req, HttpListenerResponse res, string name)
+        {
+            string root = Models.ModelStore.Root;
+            string path = root != null && ModelFile.IsMatch(name) ? Path.Combine(root, name) : null;
+            byte[] body = null;
+            DateTime stamp = DateTime.MinValue;
+            try { if (path != null && File.Exists(path)) { stamp = File.GetLastWriteTimeUtc(path); body = File.ReadAllBytes(path); } } catch { }
+            if (body == null) { Answer(res, 404, "{\"error\":\"no such model\"}"); return; }
+            // a re-export writes a new file: its time is the version
+            string etag = "\"" + stamp.Ticks.ToString("x", CultureInfo.InvariantCulture) + "\"";
+            res.Headers.Add(HttpResponseHeader.CacheControl, "public, max-age=86400");
+            res.Headers.Add(HttpResponseHeader.ETag, etag);
+            if (req.Headers["If-None-Match"] == etag) { res.StatusCode = 304; res.Close(); return; }
+            bool glb = name.EndsWith(".glb", StringComparison.Ordinal);
+            SendBytes(req, res, body, glb ? "model/gltf-binary" : "image/png", compressible: glb);
+        }
+
         private static void Answer(HttpListenerResponse res, int status, string json)
         {
             res.ContentType = "application/json";
@@ -854,11 +956,26 @@ namespace WebMap
                 }
                 Stats.MaybeSave();
                 Trails.MaybeSave();
+                timeJson = BuildTimeJson();
             }
             catch (Exception ex)
             {
                 if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: player snapshot failed: " + ex.Message);
             }
+        }
+
+        // EnvMan.RescaleDayFraction's rule: the clock's 0.15..0.85 is daylight, stretched
+        // to 0.25..0.75 so the sun is on the horizon at a quarter and three quarters.
+        private static string BuildTimeJson()
+        {
+            if (ZNet.instance == null) return "null";
+            double t = ZNet.instance.GetTimeSeconds();
+            long len = EnvMan.instance != null && EnvMan.instance.m_dayLengthSec > 0 ? EnvMan.instance.m_dayLengthSec : 1200L;
+            float f = (float)(t % len / len);
+            if (f >= 0.15f && f <= 0.85f) f = 0.25f + (f - 0.15f) / 0.7f * 0.5f;
+            else if (f < 0.5f) f = f / 0.15f * 0.25f;
+            else f = 0.75f + (f - 0.85f) / 0.15f * 0.25f;
+            return FormattableString.Invariant($"{{\"day\":{(long)(t / len)},\"frac\":{f:0.0000}}}");
         }
 
         public void Reload()
