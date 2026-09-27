@@ -118,7 +118,7 @@ export class View3D {
       for (const [k, o] of this.objChunks) if (o.missing) { this.objChunks.delete(k); this.objData.delete(k); }
     }
     if (old.height !== undefined && rev.height !== old.height) for (const c of this.chunks.values()) c.stale = true;
-    if (old.objects !== undefined && rev.objects !== old.objects) for (const o of this.objChunks.values()) o.stale = true;
+    if (old.objects !== undefined && rev.objects !== old.objects) for (const o of this.objChunks.values()) o.stale = o.stale || 'data';
     if (rev.models !== old.models) this.loadPrefabs(rev.models);
     this.scheduleUpdate();
   }
@@ -149,13 +149,13 @@ export class View3D {
     this.prefabs = next;
     this.library = { exported: d.exported, readable: d.readable, queued: d.queued, textures: d.texturesPresent, meshes: d.meshesPresent };
     for (const h of moved) this.models.delete(h);
-    for (const o of this.objChunks.values()) if (o.prefabs && [...o.prefabs].some((h) => moved.has(h))) o.stale = true;
+    for (const o of this.objChunks.values()) if (o.prefabs && [...o.prefabs].some((h) => moved.has(h))) o.stale = 'look';
     this.scheduleUpdate();
   }
 
   setCategories(cats) {
     this.cats = new Set(cats);
-    for (const o of this.objChunks.values()) o.stale = true;
+    for (const o of this.objChunks.values()) o.stale = 'look';
     this.scheduleUpdate();
   }
 
@@ -185,6 +185,10 @@ export class View3D {
     if (this.chunks.get(key) !== entry) return;
     entry.loading = false; entry.stale = false;
     if (!buf) { entry.missing = true; this.status(); return; }
+    // the revision is the world's: a terraform elsewhere moves it, and this chunk stands as it was
+    const sum = checksum(buf);
+    if (entry.mesh && entry.sum === sum) return;
+    entry.sum = sum;
     const raw = new Int16Array(buf), heights = new Float32Array(N * N);
     for (let i = 0; i < heights.length; i++) heights[i] = raw[i] / 10;
     entry.heights = heights;
@@ -359,15 +363,21 @@ if (uFogOn > 0.5) {
   // A chunk's objects, fetched only when the server's revision moved: a new model or a
   // category switched rebuilds from what is already here.
   async loadObjects(cx, cz) {
-    const key = cx + ',' + cz, rev = this.rev.objects || 0;
-    const entry = { group: new THREE.Group(), prefabs: new Set(), loading: true, old: this.objChunks.get(key) };
+    const key = cx + ',' + cz, rev = this.rev.objects || 0, prev = this.objChunks.get(key);
+    const entry = { group: new THREE.Group(), prefabs: new Set(), loading: true, old: prev };
     this.objChunks.set(key, entry);
     let data = this.objData.get(key);
     if (!data || data.rev !== rev) {
       let buf;
       try { buf = await this.getBuffer(`/objects?cx=${cx}&cz=${cz}&v=${rev}`); }
       catch (e) { entry.loading = false; entry.failed = Date.now(); return; }
-      data = { rev, objs: buf ? decodeObjects(buf) : null };
+      const sum = buf ? checksum(buf) : 0;
+      // the revision is the world's: someone building elsewhere moves it, and this chunk stands as it was
+      if (data && data.sum === sum && prev && prev.stale === 'data' && this.objChunks.get(key) === entry) {
+        data.rev = rev; prev.stale = false; this.objChunks.set(key, prev);
+        return;
+      }
+      data = { rev, sum, objs: buf ? decodeObjects(buf) : null };
       this.objData.set(key, data);
     }
     if (this.objChunks.get(key) !== entry) return;
@@ -835,6 +845,15 @@ function decodeObjects(buf) {
     o += 40;
   }
   return objs;
+}
+
+// FNV-1a over the bytes, a word at a time: is this the chunk we already have?
+function checksum(buf) {
+  const w = new Uint32Array(buf, 0, buf.byteLength >> 2), tail = new Uint8Array(buf, w.length * 4);
+  let h = 2166136261 ^ buf.byteLength;
+  for (let i = 0; i < w.length; i++) h = Math.imul(h ^ w[i], 16777619);
+  for (let i = 0; i < tail.length; i++) h = Math.imul(h ^ tail[i], 16777619);
+  return h >>> 0;
 }
 
 // Colour for a prefab still without its mesh, from what the library says it is.

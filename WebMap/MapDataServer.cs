@@ -414,8 +414,13 @@ namespace WebMap
                     // a page must pick up a new build on the next visit; its assets can wait a bit
                     res.Headers.Add(HttpResponseHeader.CacheControl, fileExt == "html" ? "no-cache" : "public, max-age=300");
                     // text goes gzipped where it can: three.js is 2 MB as written, a quarter of that zipped
-                    bool text = fileExt == "html" || fileExt == "js" || fileExt == "css";
-                    SendBytes(req, res, requestedFileBytes, contentTypes[fileExt], compressible: text);
+                    byte[] gz = null;
+                    if ((fileExt == "html" || fileExt == "js" || fileExt == "css") && TakesGzip(req, requestedFileBytes))
+                    {
+                        if (staticGz.TryGetValue(requestedFile, out var kept) && kept.Item1 == stamp) gz = kept.Item2;
+                        else staticGz[requestedFile] = Tuple.Create(stamp, gz = Gzip(requestedFileBytes));
+                    }
+                    Send(res, requestedFileBytes, gz, contentTypes[fileExt]);
                 }
                 else
                 {
@@ -804,20 +809,28 @@ namespace WebMap
         // numbers that shrink to a third. Each body is compressed once and kept with it.
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], byte[]> gzipped =
             new System.Runtime.CompilerServices.ConditionalWeakTable<byte[], byte[]>();
+        // A static file is read afresh on every request when cache_server_files is off, so
+        // its gzip is kept by name and file time instead.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Tuple<DateTime, byte[]>> staticGz =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, Tuple<DateTime, byte[]>>();
+        private static bool TakesGzip(HttpListenerRequest req, byte[] body) =>
+            body.Length > 1024 && (req.Headers["Accept-Encoding"] ?? "").IndexOf("gzip", StringComparison.OrdinalIgnoreCase) >= 0;
+        private static byte[] Gzip(byte[] raw)
+        {
+            using (var ms = new MemoryStream(raw.Length / 3))
+            {
+                using (var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Compress, true)) gz.Write(raw, 0, raw.Length);
+                return ms.ToArray();
+            }
+        }
         private static void SendBytes(HttpListenerRequest req, HttpListenerResponse res, byte[] body, string contentType, bool compressible = true)
         {
-            if (compressible && body.Length > 1024 && (req.Headers["Accept-Encoding"] ?? "").IndexOf("gzip", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                body = gzipped.GetValue(body, raw =>
-                {
-                    using (var ms = new MemoryStream(raw.Length / 3))
-                    {
-                        using (var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Compress, true)) gz.Write(raw, 0, raw.Length);
-                        return ms.ToArray();
-                    }
-                });
-                res.Headers.Add("Content-Encoding", "gzip");
-            }
+            byte[] gz = compressible && TakesGzip(req, body) ? gzipped.GetValue(body, Gzip) : null;
+            Send(res, body, gz, contentType);
+        }
+        private static void Send(HttpListenerResponse res, byte[] body, byte[] gz, string contentType)
+        {
+            if (gz != null) { body = gz; res.Headers.Add("Content-Encoding", "gzip"); }
             res.Headers.Add("Vary", "Accept-Encoding");
             res.ContentType = contentType;
             res.StatusCode = 200;
