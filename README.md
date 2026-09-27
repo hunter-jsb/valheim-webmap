@@ -44,8 +44,10 @@ After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 ## Using the map
 
 The viewer at `http://your_ip:port` is four pages — the live map (with the world in 3D
-as a mode of it), a portal atlas drawn on a biome chart, a planning board for drawing and
-sharing routes, and per-player tallies —
+as a mode of it), a portal atlas drawn on a biome chart (a hub opens close up: the base's
+floor plan with each gate where it stands, and going through a gate lands you at its far
+side with the gate you arrive at lit), a planning board for drawing and sharing routes,
+and per-player tallies —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice

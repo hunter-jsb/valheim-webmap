@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.14.0
 
 * Discord moves into the mod, and talks back. `discord_bot_token` (with `discord_guild`,
   `discord_log_channel`, `discord_chat_channel`) posts what admins do on the site --
@@ -20,9 +20,25 @@
   `settings.tsv` beside the map data and lays it over the BepInEx config, which the host
   rewrites on restart. `GET`/`POST /settings` behind the shared token and an `X-Admin` the
   Worker sets after checking the member's roles again.
-* One face of the site's own: Cinzel, served with the pages, for the brand, a page's title
-  and the map's capitals -- continents, islands, ranges. Everything else keeps the system
-  sans. The scene repaints once the face has loaded.
+* One face of the site's own: Marcellus SC, served with the pages (and by the mod: its
+  static files know `woff2` now), for the brand, a page's title and the map's capitals --
+  continents, islands, ranges. One weight, so the map's tiers rank by size and spacing.
+  Everything else keeps the system sans. The scene repaints once the face has loaded.
+* A hub opens close up on the portals page: click its name on its card or on its panel in
+  the diagram and an overlay shows the render with the base's floor plan over it, each
+  gate drawn where a player walks to it (linked bright, tagged-and-waiting amber, free
+  dim), house pins naming the buildings, and a strip of the gates -- click one to light
+  and centre it. Going through a gate from a card, a panel or a far place's node lands you
+  in the far side's close up with the gate you arrive at lit, and a lit gate's mark takes
+  you on through. Map and 3D from the header, Esc closes, `#in=x,z&at=<gate>` links in.
+  The ⌖ at the end of a card's row still opens the map on that gate.
+* `settings.html` reads in groups -- the map, players, chat and Discord, the 3D view, the
+  mod -- and the chat relay keeps one poll on the wire at a time (a slow Discord call once
+  let a line be spoken six times).
+* On the first start after this update the mod exports every prefab the world holds for the
+  3D view: a few minutes on the game thread's spare time, a burst of memory, and about
+  70 MB beside the map data. `export_models = false` skips it, and the 3D view then has
+  ground and nothing on it.
 * The plan page draws the place names too, as a reference layer of its own.
 * Every write from the site -- a name, a pin, a setting -- answers with the line it logged
   (superseded below: the mod itself posts that line to Discord now).
