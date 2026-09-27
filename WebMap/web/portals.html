@@ -37,6 +37,10 @@
   .spokes a{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline;color:var(--muted);
     font-size:.78rem;padding:.2rem .3rem;border-radius:var(--r-sm);font-variant-numeric:tabular-nums}
   .spokes a:hover{background:var(--card-2);text-decoration:none}
+  .spokes li:not(.sector){display:flex;align-items:stretch}
+  .spokes li:not(.sector) > .go{flex:1 1 auto;min-width:0}
+  .spokes .mp{flex:0 0 auto;align-self:center;padding:.2rem .4rem;color:var(--faint);font-size:.9rem;line-height:1}
+  .spokes .mp:hover{color:var(--portal);background:none}
   .spokes .g{color:var(--bright);font-weight:600}
   .spokes .arr{color:var(--portal)}
   .spokes .to{color:var(--ink)}
@@ -138,7 +142,7 @@
       &#183; drag to pan, scroll or pinch to zoom</p>
     <div class="btnrow" id="hubs" hidden></div>
     <div class="list" id="list"></div>
-    <p class="foot"><span id="stamp"></span> &#183; a node opens the map on that portal<span class="credits"> &#183;
+    <p class="foot"><span id="stamp"></span> &#183; a gate takes you through to its far side; &#8982; opens the map there<span class="credits"> &#183;
       <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
   </aside>
 
@@ -432,7 +436,27 @@ function fitPx(b){
 }
 function fitAll(){ if(BBOX) fitPx(BBOX); else V.fitWorld(); }
 // a drag that began on a node is a pan, not a click through to the map
-net.addEventListener("click", e => { if(V.moved > 6) e.preventDefault(); });
+net.addEventListener("click", e => {
+  if(V.moved > 6){ e.preventDefault(); return; }
+  const a = e.target.closest("[data-go]"); if(a){ e.preventDefault(); goThrough(a.dataset.go, a.dataset.via); }
+});
+// Through the gate: the view lands on its far side -- a hub is picked and its card
+// brought up, a lone place is framed with the hub it hangs off -- and the line
+// just travelled stays lit a moment. The map is a step further, by the glyph.
+let LIT = 0;
+function goThrough(key, via){
+  const dst = SITES.find(s => siteKey(s) === key); if(!dst) return;
+  if(dst.portals.length > 1){
+    FOCUS = dst; renderHubChips(HUBS); applyFocus(); fitHub(dst);
+    const card = listEl.querySelector(`.card[data-hub="${CSS.escape(hubId(dst))}"]`);
+    if(card) card.scrollIntoView({block: "start", behavior: "smooth"});
+  }else{
+    const sp = SPOKE.get(via), pts = sp ? [sp.a, sp.b] : [dst];
+    fitPx(pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}));
+  }
+  setHover(via ? [via] : []);
+  clearTimeout(LIT); LIT = setTimeout(() => setHover([]), 1800);
+}
 stage.addEventListener("pointermove", e => { if(!e.buttons) setHover(keysOf(e.target)); });
 stage.addEventListener("pointerleave", () => setHover([]));
 document.getElementById("fitBtn").onclick = fitAll;
@@ -460,7 +484,8 @@ function panel(site, sps){
   const chip = g => {
     const s = sps.find(x => x.gate === g);
     return `<a class="gate ${s ? "on" : "free"}" href="${link(g.id)}" tabindex="-1"`
-      + (s ? ` data-s="${s.k}"` : "") + `>${esc(g.name || (s ? "untagged" : "free"))}</a>`;
+      + (s ? ` data-s="${s.k}" data-go="${siteKey(s.dst)}" data-via="${s.k}" title="Through to ${esc(s.dst.label)}"` : "")
+      + `>${esc(g.name || (s ? "untagged" : "free"))}</a>`;
   };
   const gates = site.portals.slice().sort((a, b) => rank(a) - rank(b));
   const linked = gates.filter(g => sps.some(x => x.gate === g)).length, big = gates.length > 6;
@@ -479,11 +504,12 @@ function hubCard(hub, sps){
     + `<span class="xz">${Math.round(hub.x)}, ${Math.round(hub.z)}</span> &#183; `
     + (d < 50 ? "the world centre" : `${bearing(hub.x, hub.z)}, ${span(d)} out`);
   const one = sps.filter(s => s.kind === "link").length === 1;
-  const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a href="${link(s.target)}">`
+  const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a class="go" href="${link(s.target)}" data-go="${siteKey(s.dst)}" data-via="${s.k}" title="Through to ${esc(s.dst.label)}">`
     + `<span class="g">${s.kind === "dial" ? "dial " : ""}${esc(s.tag)}</span><span class="arr">&#8594;</span>`
     + `<span class="to">${esc(s.dst.label)}</span> <span>&#183; ${span(s.d)} ${s.ab}</span>`
     + `<span class="st ${s.kind === "dial" ? "dial" : "on"}">`
-    + (s.kind === "dial" ? "one retag away" : one ? "dialled now" : "linked") + `</span></a></li>`;
+    + (s.kind === "dial" ? "one retag away" : one ? "dialled now" : "linked") + `</span></a>`
+    + `<a class="mp" href="${link(s.target)}" title="See this gate on the map">&#8982;</a></li>`;
   const bySector = new Map();
   for(const s of sps){ const k = Math.round(s.br/45) % 8; (bySector.get(k) || bySector.set(k, []).get(k)).push(s); }
   const groups = [...bySector.keys()].sort((a, b) => a - b).map(k =>
@@ -515,6 +541,8 @@ listEl.addEventListener("input", e => {
   applyFilter(inp.closest(".card"));
 });
 listEl.addEventListener("click", e => {
+  const go = e.target.closest("[data-go]");
+  if(go){ e.preventDefault(); goThrough(go.dataset.go, go.dataset.via); return; }
   const pen = e.target.closest("[data-rename]");
   if(pen){ e.preventDefault(); EDITING = pen.dataset.rename; LAST = ""; render(LIST); const f = listEl.querySelector(".rename input"); if(f){ f.focus(); f.select(); } return; }
   if(e.target.closest("[data-cancel]")){ EDITING = null; LAST = ""; render(LIST); return; }
@@ -562,7 +590,8 @@ function fitHub(hub){
   fitPx(pts.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py), x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}));
 }
 
-let LIST = [];
+let LIST = [], SITES = [];
+const siteKey = s => `${Math.round(s.x)},${Math.round(s.z)}`;
 function render(list){
   LIST = list;
   const by = new Map(list.map(p => [p.id, p]));
@@ -654,8 +683,8 @@ function render(list){
     const dial = sps.every(s => s.kind === "dial");
     const o = sps[0].a === site ? sps[0].b : sps[0].a;
     const d = Math.hypot(site.x-o.x, site.z-o.z), ab = abbr(site.x-o.x, site.z-o.z);
-    nodes.push({site, kind: dial ? "dial" : "rem", pri: dial ? 2 : 1, d,
-      keys: sps.map(s => s.k), href: link(p0.id), title: site.pin || p0.name || "untagged",
+    nodes.push({site, kind: dial ? "dial" : "rem", pri: dial ? 2 : 1, d, go: siteKey(o), via: sps[0].k,
+      keys: sps.map(s => s.k), href: link(p0.id), title: `${site.pin || p0.name || "untagged"} · through to ${o.label}`,
       html: ico + `<span class="lb"><span class="t">${dial ? `<span class="dl">dial </span>` : ""}`
         + `${esc(p0.name || sps[0].tag)}</span><span class="d">${span(d)} ${ab}</span></span>`});
   }
@@ -664,7 +693,7 @@ function render(list){
   const netHTML = nodes.map((n, i) => n.kind === "hub"
     ? `<div class="node hub" id="n${i}">${n.html}</div>`
     : `<a class="node ${n.kind}" id="n${i}" href="${n.href}" tabindex="-1" data-s="${n.keys.join(" ")}"`
-      + ` title="${esc(n.title)}">${n.html}</a>`).join("");
+      + (n.go ? ` data-go="${n.go}" data-via="${n.via}"` : "") + ` title="${esc(n.title)}">${n.html}</a>`).join("");
   const sig = netHTML + "|" + sites.map(s => Math.round(s.px) + "," + Math.round(s.py)).join(";");
   if(sig !== LAST_NET){
     LAST_NET = sig;
@@ -687,7 +716,11 @@ function render(list){
     BBOX = sites.length ? sites.reduce((b, s) => ({x0: Math.min(b.x0, s.px), y0: Math.min(b.y0, s.py),
       x1: Math.max(b.x1, s.px), y1: Math.max(b.y1, s.py)}), {x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9}) : null;
     if(!FITTED && sites.length){ FITTED = true; fitAll(); } else draw();
+  }else{
+    nodes.forEach((n, i) => { NODES[i].site = n.site; n.site.node = NODES[i]; });
+    spokes.forEach((s, i) => { SPOKES[i].a = s.a; SPOKES[i].b = s.b; });
   }
+  SITES = sites;
 
   let html = "";
   for(const hub of hubs) html += hubCard(hub, hubSpokes.get(hub) || []);

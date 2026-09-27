@@ -102,6 +102,12 @@ async function portals() {
     return {loose: loose.length, wrong: wrong.map(q => q.name)}; })()`);
   check("portals: one dashed spoke for each tagged portal standing unlinked", built && d && !d.wrong.length,
         d ? `${d.loose} standing unlinked` + (d.wrong.length ? `; wrong: ${d.wrong.join(", ")}` : "") : "");
+  // a spoke row whose far side is a hub: the click picks that hub, not the map
+  const t = await p.ev(`(() => {
+    const row = [...document.querySelectorAll(".spokes a.go[data-go]")].find(a => { const s = SITES.find(x => siteKey(x) === a.dataset.go); return s && s.portals.length > 1; });
+    if(!row) return null; row.click(); return {to: row.dataset.go, focus: FOCUS && siteKey(FOCUS), page: location.pathname}; })()`);
+  check("portals: a gate steps through to the hub on its far side", built && (!t || (t.focus === t.to && t.page.endsWith("portals.html"))),
+        t ? `picked ${t.focus}` : "no hub-to-hub gate to try");
   await p.done("portals");
 }
 
