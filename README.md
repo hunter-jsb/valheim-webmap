@@ -353,7 +353,7 @@ WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names
 flyout, ground and objects in 3D at the world's start, hubs and dial lines, a card per
-player, the plan loading. One line per check, a
+player, the plan loading, the tour landing through a resize and a stopped one staying stopped. One line per check, a
 non-zero exit on any failure, and a screenshot of each page when given a directory. A
 viewer change is done when that is clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome

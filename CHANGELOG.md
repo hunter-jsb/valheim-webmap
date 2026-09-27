@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+* A debugging and optimisation pass over the night's work, each change measured first.
+  `/state` no longer carries the per-player tallies (a fifth of its bytes, rebuilt every
+  request while anyone was on, read by no page: `/stats/players` has them). The chat
+  dedupe hashed every RPC sent to everybody, every damage number among them; it now
+  looks at chat alone. A fault in the second's player snapshot is logged once instead of
+  silently stopping looks, gear or the stats saves for the run, and a pin placed from the
+  site counts at once. A 3D chunk holds its objects or their bytes, not both (53 MB less
+  on our world), and "model export done" names its longest frame and slowest step. The
+  World page's minute takes 6 ms, not 235. The tour lands on its spot when the window is
+  resized in flight, a stopped tour's last stop no longer stops the next tour circling or
+  undoes layers shown since, and its fold of the sidebar is not kept as the site's
+  choice. The 3D view frees a departed player's name tag and, two minutes after you
+  leave it for the map, lets its world go (a 64 MB heap and 1,800 GPU geometries down
+  to 9 MB and 17). Each page asks `/auth/me` once, not twice.
 * A player's page draws them: above the pentagon, their Viking as the 3D view draws them,
   turning slowly on the map's ground colour under a key light (a still with reduced
   motion) -- the live look while they are online, the one the server remembers once they

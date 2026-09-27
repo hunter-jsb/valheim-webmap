@@ -36,7 +36,7 @@ guards against; there is one per failure, not one per branch.
 5. **The viewer.** A broken page is seen by everyone at once. **check.mjs** loads every
    page and checks markers, names at a mid zoom, a tapped name opening its place card, the
    names flyout, hubs and one dial line per tagged unlinked portal, a card per player and a
-   player's rig standing on their page, the plan. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
+   player's rig standing on their page, the plan, and the tour: a flight resized under it, a stopped tour's last stop. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
    escaping, ages, vehicles. Not reached: anything signed in (renaming, the pin card, hub
    names), the plan's tools and shared links, sorting and the boss board, and drawing
    itself beyond what it leaves behind. Live players in 3D: which part a look hangs on
