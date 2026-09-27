@@ -51,6 +51,21 @@
   `extract_meshes`, `export_ms_per_frame`, `texture_max_size`, `object_categories`.
 * The mod serves subfolders of `web/` now (the vendored three.js keeps its layout), and
   gzips text and the 3D chunks for a client that takes it.
+* Mined rocks in 3D show only what is left of them. A rock mined in pieces (MineRock5, the
+  `*_frac` rocks, and MineRock) keeps a health per hit area in its ZDO; `/objects` is now
+  `OBJ2`, carrying a mask of the areas gone per rock, and `/prefabs` says which hit area
+  each part of a rock's model belongs to (`rk`, `pa`; the library's index is format 6, so
+  the first start re-exports every model, about a quarter of a minute). The rock the base
+  was cut into at -296, 328 now stands as the two pieces the miners left.
+* The overview flies: `W A S D` or the arrows carry the circled spot over the land the way
+  the camera faces, `E` or `Space` raise it, `Q` or `Shift` alone lower it, and `Shift` with
+  a key goes faster. Street view keeps its own keys.
+* Whole continents in 3D. Pulled out, the view loads in rings from the camera -- everything
+  close in, ground and the big things (pieces, boulders, trees as crowns or cones) out to a
+  few kilometres, coarse ground to sixteen -- asks only for walked chunks, nearest first,
+  and lets go of what no ring wants. `/height` takes `step` (1, 2, 4, 8 or 16 m between
+  samples, each cached on its own), so the far rings cost a few hundred small requests. The
+  haze and the camera reach kilometres, and the sea runs on to the horizon.
 
 ## 2.13.0
 

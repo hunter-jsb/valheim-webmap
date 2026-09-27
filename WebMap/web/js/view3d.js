@@ -14,18 +14,25 @@ import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Lighting } from './sky.js';
 
-const CHUNK = 256, N = 257;              // a chunk's edge in metres; its height samples a side, both edges
+const CHUNK = 256;                       // a chunk's edge in metres
+const MAX_GROUND = 1600, MAX_OBJECTS = 120;   // chunks held at once: ground, and objects
+const NEAR_CAMERA = 700;                 // the overview draws everything around its point only this close
 const EYE = 1.8;                         // a Viking's eyes above the ground
 const WALK = 5, RUN = 16;                // metres a second; Shift runs
 const FOV = 62, FOV_MIN = 28, FOV_MAX = 78;
 
 export class View3D {
   // api: where the server is ("" for the mod's own origin); phone: a small, weak screen
-  constructor(canvas, { api = '', phone = false, water = 30 } = {}) {
+  // geom: the mod's fog and chart texture, {size} pixels at {pixel} metres each (/config)
+  constructor(canvas, { api = '', phone = false, water = 30, geom = { size: 2048, pixel: 12 } } = {}) {
     this.canvas = canvas;
     this.api = api;
     this.phone = phone;
     this.waterLevel = water;
+    this.geom = geom;
+    this.fetched = { height: 0, objects: 0, bytes: 0 };   // what the view has asked the server for
+    this.jobs = []; this.inflight = 0;                     // chunk fetches waiting, nearest first, and under way
+    this.walked = null;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !phone, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, phone ? 1.5 : 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -45,7 +52,7 @@ export class View3D {
     const pixel = (r, g, b) => { const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1); t.needsUpdate = true; return t; };
     this.ground = {
       uChart: { value: pixel(120, 130, 90) }, uFog: { value: pixel(255, 255, 255) }, uFogOn: { value: 0 },
-      uWorld: { value: 1 / (2048 * 12) }, uFogShift: { value: 0.5 / 2048 }, uWater: { value: water },
+      uWorld: { value: 1 / (geom.size * geom.pixel) }, uFogShift: { value: 0.5 / geom.size }, uWater: { value: water },
       uDetail: { value: this.detailTexture() },
     };
     this.waterNormals = this.waterNormalTexture();
@@ -84,7 +91,7 @@ export class View3D {
     this.orbit.dampingFactor = 0.1;
     this.orbit.maxPolarAngle = Math.PI * 0.49;
     this.orbit.minDistance = 8;
-    this.orbit.maxDistance = 1400;
+    this.orbit.maxDistance = 12000;   // far enough out to see a continent
     this.orbit.screenSpacePanning = false;
     this.orbit.addEventListener('change', () => this.scheduleUpdate());
     this.keys = new Set();
@@ -100,10 +107,24 @@ export class View3D {
   url(path) { return this.api + path; }
 
   async getBuffer(path) {
+    this.fetched[path.startsWith('/height') ? 'height' : 'objects']++;
     const r = await fetch(this.url(path));
     if (r.status === 404) return null;            // nobody has walked there
     if (!r.ok) throw new Error(path + ' ' + r.status);
-    return r.arrayBuffer();
+    const buf = await r.arrayBuffer();
+    this.fetched.bytes += buf.byteLength;
+    return buf;
+  }
+
+  // Chunk fetches wait in one queue, nearest first, a few at a time: the ground under your
+  // feet is never held up behind a continent's worth of far chunks. update() sets the
+  // queue afresh, so a chunk you have moved away from before its turn is never fetched.
+  pump() {
+    while (this.inflight < 6 && this.jobs.length) {
+      const job = this.jobs.shift();
+      this.inflight++;
+      Promise.resolve().then(job.run).catch(() => {}).finally(() => { this.inflight--; this.pump(); });
+    }
   }
 
   // The revisions from /state: a layer is fetched again only when its own moved.
@@ -130,7 +151,7 @@ export class View3D {
       t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
       const old = this.ground[uniform].value;
       this.ground[uniform].value = t;
-      if (uniform === 'uFog') this.ground.uFogOn.value = 1;
+      if (uniform === 'uFog') { this.ground.uFogOn.value = 1; this.walkedFrom(t.image); }
       if (old) old.dispose();
     });
   }
@@ -160,73 +181,93 @@ export class View3D {
   }
 
   // ---------------------------------------------------------------- the ground
-  // Height at a world spot from whichever chunk holds it, bilinear; null where none is loaded.
+  // Height at a world spot from whichever chunk holds it, bilinear over that chunk's own
+  // grid (a metre apart near you, up to 16 m far out); null where none is loaded.
   heightAt(x, z) {
     const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
     const c = this.chunks.get(cx + ',' + cz);
     if (!c || !c.heights) return null;
-    const u = x - cx * CHUNK, v = z - cz * CHUNK;
-    const i = Math.min(N - 2, Math.floor(u)), j = Math.min(N - 2, Math.floor(v));
+    const n = c.n, u = (x - cx * CHUNK) / c.step, v = (z - cz * CHUNK) / c.step;
+    const i = Math.min(n - 2, Math.floor(u)), j = Math.min(n - 2, Math.floor(v));
     const tx = u - i, tz = v - j, h = c.heights;
-    const a = h[j * N + i], b = h[j * N + i + 1], d = h[(j + 1) * N + i], e = h[(j + 1) * N + i + 1];
+    const a = h[j * n + i], b = h[j * n + i + 1], d = h[(j + 1) * n + i], e = h[(j + 1) * n + i + 1];
     return (a + (b - a) * tx) * (1 - tz) + (d + (e - d) * tx) * tz;
   }
   // the ground you stand on: land, or the water's surface over it
   standAt(x, z) { const h = this.heightAt(x, z); return h === null ? null : Math.max(h, this.waterLevel - 1.2); }
 
+  // A chunk's heights at a step (1, 2, 4, 8 or 16 m between samples); the mesh it had
+  // stands until the new one is built.
   async loadChunk(cx, cz, step) {
     const key = cx + ',' + cz;
     const entry = this.chunks.get(key) || { cx, cz };
     entry.loading = true; entry.failed = 0;
     this.chunks.set(key, entry);
     let buf;
-    try { buf = await this.getBuffer(`/height?cx=${cx}&cz=${cz}&v=${this.rev.height || 0}`); }
+    try { buf = await this.getBuffer(`/height?cx=${cx}&cz=${cz}&step=${step}&v=${this.rev.height || 0}`); }
     catch (e) { entry.loading = false; entry.failed = Date.now(); return; }
     if (this.chunks.get(key) !== entry) return;
     entry.loading = false; entry.stale = false;
     if (!buf) { entry.missing = true; this.status(); return; }
     // the revision is the world's: a terraform elsewhere moves it, and this chunk stands as it was
     const sum = checksum(buf);
-    if (entry.mesh && entry.sum === sum) return;
+    if (entry.mesh && entry.sum === sum && entry.step === step) return;
     entry.sum = sum;
-    const raw = new Int16Array(buf), heights = new Float32Array(N * N);
+    const n = CHUNK / step + 1, raw = new Int16Array(buf), heights = new Float32Array(n * n);
     for (let i = 0; i < heights.length; i++) heights[i] = raw[i] / 10;
-    entry.heights = heights;
-    this.buildTerrain(entry, step);
-    // the neighbours' edge normals read this chunk's heights: rebuild theirs to match
+    entry.heights = heights; entry.n = n; entry.step = step;
+    this.buildTerrain(entry);
+    // the neighbours' edge normals read this chunk's heights: at the same detail, rebuild theirs to match
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const n = this.chunks.get((cx + dx) + ',' + (cz + dz));
-      if (n && n.mesh) this.buildTerrain(n, n.step);
+      const nb = this.chunks.get((cx + dx) + ',' + (cz + dz));
+      if (nb && nb.mesh && nb.step === step && step <= 2) this.buildTerrain(nb);
     }
-    this.settle();
+    if (step <= 2) this.settle();
     this.status();
   }
 
-  // A chunk's ground as one mesh, every step metres (1 near, coarser far or on a phone).
-  buildTerrain(entry, step) {
-    const n = Math.floor((N - 1) / step) + 1, h = entry.heights;
-    const pos = new Float32Array(n * n * 3), nrm = new Float32Array(n * n * 3);
+  // A chunk's ground as one mesh from its own grid, with a skirt hanging from its edges
+  // so a coarse chunk beside a fine one shows no crack between them.
+  buildTerrain(entry) {
+    const n = entry.n, s = entry.step, h = entry.heights, skirt = Math.max(1.5, s * 1.5);
+    const count = n * n + 4 * n;
+    const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3);
     const x0 = entry.cx * CHUNK, z0 = entry.cz * CHUNK;
     const at = (i, j) => {
-      if (i >= 0 && j >= 0 && i < N && j < N) return h[j * N + i];
-      const o = this.heightAt(x0 + i, z0 + j);
-      return o === null ? h[Math.min(N - 1, Math.max(0, j)) * N + Math.min(N - 1, Math.max(0, i))] : o;
+      if (i >= 0 && j >= 0 && i < n && j < n) return h[j * n + i];
+      const o = this.heightAt(x0 + i * s, z0 + j * s);
+      return o === null ? h[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))] : o;
     };
     for (let j = 0, k = 0; j < n; j++)
       for (let i = 0; i < n; i++, k++) {
-        const gi = i * step, gj = j * step, y = h[gj * N + gi];
-        pos[k * 3] = gi; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -gj;
+        pos[k * 3] = i * s; pos[k * 3 + 1] = h[j * n + i]; pos[k * 3 + 2] = -j * s;
         // normal from the height field (across the seam where a neighbour is loaded): (-dy/dx, 1, dy/dz)
-        const fx = (at(gi + 1, gj) - at(gi - 1, gj)) / 2, fz = (at(gi, gj + 1) - at(gi, gj - 1)) / 2;
+        const fx = (at(i + 1, j) - at(i - 1, j)) / (2 * s), fz = (at(i, j + 1) - at(i, j - 1)) / (2 * s);
         const len = Math.hypot(fx, 1, fz);
         nrm[k * 3] = -fx / len; nrm[k * 3 + 1] = 1 / len; nrm[k * 3 + 2] = fz / len;
       }
-    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
-    for (let j = 0, o = 0; j < n - 1; j++)
+    // the skirt: south, north, west, east edges, each vertex copied a little lower
+    const edges = [(t) => t, (t) => (n - 1) * n + t, (t) => t * n, (t) => t * n + n - 1];
+    for (let e = 0, k = n * n; e < 4; e++)
+      for (let t = 0; t < n; t++, k++) {
+        const v = edges[e](t);
+        pos[k * 3] = pos[v * 3]; pos[k * 3 + 1] = pos[v * 3 + 1] - skirt; pos[k * 3 + 2] = pos[v * 3 + 2];
+        nrm[k * 3] = nrm[v * 3]; nrm[k * 3 + 1] = nrm[v * 3 + 1]; nrm[k * 3 + 2] = nrm[v * 3 + 2];
+      }
+    const idx = new Uint32Array((n - 1) * (n - 1) * 6 + 4 * (n - 1) * 12);
+    let o = 0;
+    for (let j = 0; j < n - 1; j++)
       for (let i = 0; i < n - 1; i++) {
-        const a = j * n + i, b = a + 1, c = a + n, d = c + 1;   // c is a metre north of a
+        const a = j * n + i, b = a + 1, c = a + n, d = c + 1;   // c is a step north of a
         idx[o++] = a; idx[o++] = b; idx[o++] = c;
         idx[o++] = b; idx[o++] = d; idx[o++] = c;
+      }
+    for (let e = 0; e < 4; e++)
+      for (let t = 0; t < n - 1; t++) {
+        const a = edges[e](t), b = edges[e](t + 1), c = n * n + e * n + t, d = c + 1;
+        // both faces: the skirt is seen from outside whichever edge it hangs from
+        idx[o++] = a; idx[o++] = c; idx[o++] = b; idx[o++] = b; idx[o++] = c; idx[o++] = d;
+        idx[o++] = a; idx[o++] = b; idx[o++] = c; idx[o++] = b; idx[o++] = d; idx[o++] = c;
       }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -236,11 +277,37 @@ export class View3D {
     if (entry.mesh) { this.scene.remove(entry.mesh); entry.mesh.geometry.dispose(); }
     const mesh = new THREE.Mesh(geo, this.terrainMat);
     mesh.position.set(x0, 0, -z0);
-    mesh.receiveShadow = true;
+    mesh.receiveShadow = s <= 2;
     mesh.userData.ground = true;
-    entry.mesh = mesh; entry.step = step;
+    entry.mesh = mesh;
     this.scene.add(mesh);
   }
+
+  // Which 256 m chunks have walked ground, from the explored mask the way the mod marks
+  // them (MapFog: a pixel on a chunk's edge counts for both sides): the far rings ask
+  // only for those, rather than for every chunk in reach and a 404 from most.
+  walkedFrom(img) {
+    // the fog moves every few seconds while people explore; the far rings can wait half a minute
+    if (this.walked && Date.now() - this.walkedAt < 30000) return;
+    this.walkedAt = Date.now();
+    try {
+      const S = img.width, g = Object.assign(document.createElement('canvas'), { width: S, height: S }).getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, S, S).data, out = new Uint8Array(128 * 128), half = S / 2, ps = this.geom.pixel * this.geom.size / S;
+      const mark = (x0, x1, z0, z1) => { for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) if (cx >= 0 && cz >= 0 && cx < 128 && cz < 128) out[cz * 128 + cx] = 1; };
+      for (let r = 0; r < S; r++) {
+        const z = (S - 1 - r - half) * ps, z0 = Math.floor((z - ps / 2) / CHUNK) + 64, z1 = Math.floor((z + ps / 2) / CHUNK) + 64;
+        for (let px = 0; px < S; px++) {
+          if (d[(r * S + px) * 4] <= 127) continue;
+          const x = (px - half) * ps;
+          mark(Math.floor((x - ps / 2) / CHUNK) + 64, Math.floor((x + ps / 2) / CHUNK) + 64, z0, z1);
+        }
+      }
+      this.walked = out;
+      this.scheduleUpdate();
+    } catch (e) { console.warn('walked chunks', e); }
+  }
+  isWalked(cx, cz) { return !!this.walked && cx >= -64 && cz >= -64 && cx < 64 && cz < 64 && this.walked[(cz + 64) * 128 + cx + 64] === 1; }
 
   dropChunk(key) {
     const c = this.chunks.get(key);
@@ -279,12 +346,14 @@ uniform float uFogOn; uniform float uWorld; uniform float uFogShift; uniform flo
   float grain = (texture2D(uDetail, dp / 24.0).r - 0.5) * 0.30 + (texture2D(uDetail, dp / 5.0).g - 0.5) * 0.18;
   diffuseColor.rgb *= biome * (1.0 + grain);
 }` : '#include <map_fragment>')
-        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        // the fog of war darkens the land only: the sea runs on to the horizon everywhere, and
+        // where nobody has walked there is no land to darken
+        .replace('#include <dithering_fragment>', ground ? `#include <dithering_fragment>
 if (uFogOn > 0.5) {
   float wx = vGroundPos.x, wz = -vGroundPos.z;
   float explored = texture2D(uFog, vec2(wx * uWorld + 0.5 + uFogShift, wz * uWorld + 0.5 + uFogShift)).r;
   gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.0), 0.8 * (1.0 - smoothstep(0.35, 0.65, explored)));
-}`);
+}` : '#include <dithering_fragment>');
     };
     mat.customProgramCacheKey = () => 'ground-' + kind;
     return mat;
@@ -362,9 +431,11 @@ if (uFogOn > 0.5) {
 
   // A chunk's objects, fetched only when the server's revision moved: a new model or a
   // category switched rebuilds from what is already here.
-  async loadObjects(cx, cz) {
+  // tier 'near' draws everything; 'mid', the ring beyond, only what reads from afar -- trees,
+  // rocks and the bigger player pieces -- and casts no shadow.
+  async loadObjects(cx, cz, tier = 'near') {
     const key = cx + ',' + cz, rev = this.rev.objects || 0, prev = this.objChunks.get(key);
-    const entry = { group: new THREE.Group(), prefabs: new Set(), loading: true, old: prev };
+    const entry = { group: new THREE.Group(), prefabs: new Set(), loading: true, old: prev, tier };
     this.objChunks.set(key, entry);
     let data = this.objData.get(key);
     if (!data || data.rev !== rev) {
@@ -373,7 +444,7 @@ if (uFogOn > 0.5) {
       catch (e) { entry.loading = false; entry.failed = Date.now(); return; }
       const sum = buf ? checksum(buf) : 0;
       // the revision is the world's: someone building elsewhere moves it, and this chunk stands as it was
-      if (data && data.sum === sum && prev && prev.stale === 'data' && this.objChunks.get(key) === entry) {
+      if (data && data.sum === sum && prev && prev.stale === 'data' && prev.tier === tier && this.objChunks.get(key) === entry) {
         data.rev = rev; prev.stale = false; this.objChunks.set(key, prev);
         return;
       }
@@ -388,7 +459,7 @@ if (uFogOn > 0.5) {
     for (const o of objs) {
       entry.prefabs.add(o.prefab);
       const info = this.prefabs.get(o.prefab);
-      if (!info || !this.cats.has(info.c)) continue;
+      if (!info || !this.cats.has(info.c) || (tier === 'mid' && !bigFromAfar(info))) continue;
       if (!byPrefab.has(o.prefab)) byPrefab.set(o.prefab, []);
       byPrefab.get(o.prefab).push(o);
     }
@@ -402,14 +473,27 @@ if (uFogOn > 0.5) {
       const parts = await this.model(hash);
       if (this.objChunks.get(key) !== entry) return;
       const cat = info ? info.c : 'other';
-      const shadows = !this.phone;
-      if (parts) {
+      const shadows = !this.phone && tier === 'near';
+      // From afar a tree is its crown: the canopy quads below where it has them, else a cone
+      // of its size -- a pine's own model is thousands of triangles, a forest of them millions.
+      const farTree = tier === 'mid' && cat === 'tree' && info;
+      if (farTree && !info.k && info.b) {
+        const b = info.b;
+        off.compose(new THREE.Vector3((b[0] + b[3]) / 2, b[1], (b[2] + b[5]) / 2), new THREE.Quaternion(),
+          new THREE.Vector3(Math.max(0.5, b[3] - b[0]) * 0.8, Math.max(0.5, b[4] - b[1]), Math.max(0.5, b[5] - b[2]) * 0.8));
+        const im = new THREE.InstancedMesh(this.coneGeometry(), this.plain('#2d4f33'), list.length);
+        im.receiveShadow = true; im.userData.prefab = hash;
+        list.forEach((o, i) => { out.multiplyMatrices(place(o), off); im.setMatrixAt(i, out); });
+        im.instanceMatrix.needsUpdate = true;
+        im.computeBoundingSphere();
+        group.add(im);
+      } else if (parts && !farTree) {
         for (const [p, part] of parts.entries()) {
           // a part the mining took off stands on none of the rocks it is gone from
           const on = info && info.pa ? list.filter((o) => partShows(info, p, o)) : list;
           if (!on.length) continue;
           const im = new THREE.InstancedMesh(part.geometry, part.material, on.length);
-          im.castShadow = shadows; im.receiveShadow = true;
+          im.castShadow = shadows; im.receiveShadow = true; im.userData.prefab = hash;
           on.forEach((o, i) => im.setMatrixAt(i, place(o)));
           im.instanceMatrix.needsUpdate = true;
           im.computeBoundingSphere();
@@ -421,7 +505,7 @@ if (uFogOn > 0.5) {
         off.compose(new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2), new THREE.Quaternion(),
           new THREE.Vector3(Math.max(0.1, b[3] - b[0]), Math.max(0.1, b[4] - b[1]), Math.max(0.1, b[5] - b[2])));
         const im = new THREE.InstancedMesh(this.box, this.plain(fallbackColor(info)), list.length);
-        im.castShadow = shadows; im.receiveShadow = true;
+        im.castShadow = shadows; im.receiveShadow = true; im.userData.prefab = hash;
         list.forEach((o, i) => { out.multiplyMatrices(place(o), off); im.setMatrixAt(i, out); });
         im.instanceMatrix.needsUpdate = true;
         im.computeBoundingSphere();
@@ -437,7 +521,7 @@ if (uFogOn > 0.5) {
         off.compose(new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2), new THREE.Quaternion(),
           new THREE.Vector3(Math.max(0.3, b[3] - b[0]), Math.max(0.3, b[4] - b[1]), Math.max(0.3, b[5] - b[2])));
         const im = new THREE.InstancedMesh(this.canopyGeometry(), this.canopyMaterial(info), list.length);
-        im.castShadow = shadows; im.receiveShadow = true;
+        im.castShadow = shadows; im.receiveShadow = true; im.userData.prefab = hash;
         list.forEach((o, i) => { out.multiplyMatrices(place(o), off); im.setMatrixAt(i, out); });
         im.instanceMatrix.needsUpdate = true;
         im.computeBoundingSphere();
@@ -485,6 +569,12 @@ if (uFogOn > 0.5) {
     g.setIndex(idx);
     this._canopyGeo = g;
     return g;
+  }
+
+  // A unit cone standing on its base, for a far tree without a canopy of its own.
+  coneGeometry() {
+    if (!this._coneGeo) this._coneGeo = new THREE.ConeGeometry(0.5, 1, 7).translate(0, 0.5, 0);
+    return this._coneGeo;
   }
 
   canopyMaterial(info) {
@@ -610,10 +700,18 @@ if (uFogOn > 0.5) {
     this.orbit.update();
   }
 
+  // The haze closes in at the edge of what is loaded, kilometres out when the overview is
+  // pulled back; the sea is one plane, grown to the horizon.
   applyFog() {
-    const f = this.scene.fog;
-    if (this.mode === 'street') { f.near = 160; f.far = 520; this.camera.far = 3000; }
-    else { f.near = 700; f.far = 2600; this.camera.far = 8000; }
+    const f = this.scene.fog, r = this.reach();
+    if (this.mode === 'street') { f.near = 160; f.far = 520; this.camera.near = 0.3; this.camera.far = 3000; }
+    else {
+      f.near = Math.max(700, r.d * 1.5); f.far = Math.max(2600, r.far * 1.1);
+      this.camera.near = Math.min(20, Math.max(0.3, r.d * 0.002)); this.camera.far = Math.max(8000, r.far * 1.6 + r.d);
+    }
+    this.water.scale.setScalar(Math.max(1, (f.far * 2.2) / 6000));
+    // from far out the sea is opaque: seen through, the walked seabed would stand out in squares
+    this.water.material.opacity = r.d > NEAR_CAMERA ? 1 : 0.8;
     this.camera.updateProjectionMatrix();
   }
 
@@ -796,7 +894,7 @@ if (uFogOn > 0.5) {
   }
   setShadows(on) {
     this.lighting.setShadows(on);
-    for (const o of this.objChunks.values()) o.group.traverse((m) => { if (m.isInstancedMesh) m.castShadow = on; });
+    for (const o of this.objChunks.values()) o.group.traverse((m) => { if (m.isInstancedMesh) m.castShadow = on && o.tier === 'near'; });
   }
 
   loop() {
@@ -823,7 +921,8 @@ if (uFogOn > 0.5) {
     this.lighting.update(this.camera, target);
     this.water.position.x = this.camera.position.x; this.water.position.z = this.camera.position.z;
     const t = now / 1000;
-    this.waterNormals.offset.set((t * 0.012 + this.camera.position.x / 40) % 1, (t * 0.009 - this.camera.position.z / 40) % 1);
+    const per = 40 * this.water.scale.x;   // metres a ripple tile spans, as the sea plane grows
+    this.waterNormals.offset.set((t * 0.012 + this.camera.position.x / per) % 1, (t * 0.009 - this.camera.position.z / per) % 1);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -832,32 +931,59 @@ if (uFogOn > 0.5) {
     this.updateTimer = setTimeout(() => { this.updateTimer = null; this.update(); }, 150);
   }
 
-  // The chunks around the focus: the one you are in and its eight neighbours; the
-  // overview, pulled far out, a ring more of ground (coarser) without objects.
+  // How far the rings reach, in metres from the camera: near is the chunk under the focus
+  // and its eight neighbours, everything in them, while the camera is within NEAR_CAMERA of
+  // it; mid, ground and what reads from afar; far, ground alone and coarse. Street view
+  // keeps to the near ring, whose fog closes in before the rest would show.
+  reach() {
+    if (this.mode !== 'orbit') return { d: 0, mid: 0, far: 0 };
+    const d = this.camera.position.distanceTo(this.orbit.target);
+    return { d, mid: Math.min(3000, Math.max(500, d * 1.1)), far: Math.min(16000, Math.max(1500, d * 5)) };
+  }
+
+  // The chunks each ring wants, at the detail it wants them, queued nearest first; what
+  // no ring wants any more is dropped, so a pull-out and a fly-over stay within budget
+  // (MAX_GROUND chunks of ground, MAX_OBJECTS of objects). Beyond the near ring only walked
+  // chunks are asked for (the explored mask says which); the server refuses the rest anyway.
   update() {
     if (!this.running) return;
-    const f = this.focus(), cx = Math.floor(f.x / CHUNK), cz = Math.floor(f.z / CHUNK);
-    const far = this.mode === 'orbit' && this.camera.position.distanceTo(this.orbit.target) > 260;
-    const ring = far ? 2 : 1, now = Date.now();
-    const wantG = new Map(), wantO = new Set();
-    for (let dz = -ring; dz <= ring; dz++)
-      for (let dx = -ring; dx <= ring; dx++) {
-        const outer = Math.max(Math.abs(dx), Math.abs(dz)) > 1;
-        wantG.set((cx + dx) + ',' + (cz + dz), { cx: cx + dx, cz: cz + dz, step: outer ? 4 : this.phone ? 2 : 1 });
-        if (!outer) wantO.add((cx + dx) + ',' + (cz + dz));
+    const f = this.focus(), fx = Math.floor(f.x / CHUNK), fz = Math.floor(f.z / CHUNK), r = this.reach(), now = Date.now();
+    const wantG = [], wantO = [];
+    // the camera over the ground: a chunk's distance is from there, height and all
+    const cam = this.camera.position, camX = this.mode === 'orbit' ? cam.x : f.x, camZ = this.mode === 'orbit' ? -cam.z : f.z;
+    const up = this.mode === 'orbit' ? cam.y - this.orbit.target.y : 0, nearOn = this.mode !== 'orbit' || r.d < NEAR_CAMERA;
+    const span = Math.max(1, Math.ceil(r.far / CHUNK) + 1), cx0 = Math.floor(camX / CHUNK), cz0 = Math.floor(camZ / CHUNK);
+    for (let cz = Math.min(fz, cz0) - span; cz <= Math.max(fz, cz0) + span; cz++)
+      for (let cx = Math.min(fx, cx0) - span; cx <= Math.max(fx, cx0) + span; cx++) {
+        const d = Math.hypot((cx + 0.5) * CHUNK - camX, (cz + 0.5) * CHUNK - camZ, up);
+        if (nearOn && Math.abs(cx - fx) <= 1 && Math.abs(cz - fz) <= 1) {
+          wantG.push({ cx, cz, step: this.phone ? 2 : 1, pri: d }); wantO.push({ cx, cz, tier: 'near', pri: d + 1 }); continue;
+        }
+        if (!this.isWalked(cx, cz)) continue;
+        if (d <= r.mid) { wantG.push({ cx, cz, step: d < 700 ? 2 : d < 1500 ? 4 : 8, pri: 1e5 + d }); wantO.push({ cx, cz, tier: 'mid', pri: 2e5 + d }); }
+        else if (d <= r.far) wantG.push({ cx, cz, step: d < 3000 ? 8 : 16, pri: 3e5 + d });
       }
-    for (const [key, w] of wantG) {
+    wantG.sort((a, b) => a.pri - b.pri); wantO.sort((a, b) => a.pri - b.pri);
+    const g = new Map(wantG.slice(0, MAX_GROUND).map((w) => [w.cx + ',' + w.cz, w]));
+    const o = new Map(wantO.slice(0, MAX_OBJECTS).map((w) => [w.cx + ',' + w.cz, w]));
+    const jobs = [];
+    for (const [key, w] of g) {
       const c = this.chunks.get(key);
-      if (!c || c.stale || (c.failed && now - c.failed > 5000)) { if (!c || !c.loading) this.loadChunk(w.cx, w.cz, w.step); }
-      else if (c.mesh && c.step !== w.step) this.buildTerrain(c, w.step);
+      if (c && (c.loading || (c.missing && !c.stale))) continue;
+      if (!c || c.stale || c.step !== w.step || (c.failed && now - c.failed > 5000))
+        jobs.push({ pri: w.pri, run: () => this.loadChunk(w.cx, w.cz, w.step) });
     }
-    for (const key of [...this.chunks.keys()]) if (!wantG.has(key)) this.dropChunk(key);
-    for (const key of wantO) {
-      const o = this.objChunks.get(key);
-      const [ox, oz] = key.split(',').map(Number);
-      if (!o || (o.stale && !o.loading) || (o.failed && now - o.failed > 5000)) this.loadObjects(ox, oz);
+    for (const key of [...this.chunks.keys()]) if (!g.has(key)) this.dropChunk(key);
+    for (const [key, w] of o) {
+      const e = this.objChunks.get(key);
+      if (e && (e.loading || e.missing)) continue;
+      if (!e || e.stale || e.tier !== w.tier || (e.failed && now - e.failed > 5000))
+        jobs.push({ pri: w.pri, run: () => this.loadObjects(w.cx, w.cz, w.tier) });
     }
-    for (const key of [...this.objChunks.keys()]) if (!wantO.has(key)) this.dropObjects(key);
+    for (const key of [...this.objChunks.keys()]) if (!o.has(key)) this.dropObjects(key);
+    this.jobs = jobs.sort((a, b) => a.pri - b.pri);
+    this.pump();
+    this.applyFog();
     this.status();
   }
 
@@ -867,7 +993,7 @@ if (uFogOn > 0.5) {
     for (const c of this.chunks.values()) { if (c.mesh) ground++; if (!c.missing) walked++; }
     for (const o of this.objChunks.values()) objects += o.count || 0;
     const here = this.chunks.get(Math.floor(this.focus().x / CHUNK) + ',' + Math.floor(this.focus().z / CHUNK));
-    this.onStatus({ ground, chunks: this.chunks.size, objects, unwalked: !!(here && here.missing), library: this.library });
+    this.onStatus({ ground, chunks: this.chunks.size, objects, unwalked: this.mode === 'street' && !!(here && here.missing), library: this.library });
   }
 }
 
@@ -901,6 +1027,15 @@ function decodeObjects(buf) {
     }
   }
   return objs;
+}
+
+// Worth drawing from a few hundred metres off: trees, and rocks and player pieces two metres
+// across or three high (walls, floors, roofs, boulders), not the chairs, chests and pebbles.
+function bigFromAfar(info) {
+  const b = info.b;
+  if (!b || (info.c !== 'tree' && info.c !== 'rock' && info.c !== 'piece')) return false;
+  if (info.c === 'tree') return b[4] - b[1] >= 3;          // a standing tree, not a stump or a log
+  return Math.max(b[3] - b[0], b[5] - b[2]) >= 1.9 || b[4] - b[1] >= 3;
 }
 
 // Does this part of the model stand on this object? A mined rock's broken-off areas do not;

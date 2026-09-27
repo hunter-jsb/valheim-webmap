@@ -74,8 +74,21 @@ The ground is the game's own: the generator's heights blended across each 64 m z
 way the game blends them, plus every terraform players have made, coloured by biome from
 the chart, with water at 30 m. On it stands every object in the three 256 m chunks around
 you -- buildings, trees, rocks, bushes, ruins, boats -- each drawn with the game's model
-of it and placed, turned and scaled as in the world. Only chunks somebody has walked are
-sent at all; the rest stay dark, as on the map.
+of it and placed, turned and scaled as in the world; a rock mined for its ore or for a
+base shows only the pieces still standing. Only chunks somebody has walked are sent at
+all; the rest stay dark, as on the map.
+
+Pull the overview out and the view reaches further in rings measured from the camera:
+the nine chunks under it with everything, while the camera is within 700 m; out to about
+the camera's distance (at most 3 km) the ground a little coarser and only what reads from
+afar -- player pieces two metres across or three high, big rocks, trees as their crowns
+or as cones; beyond, out to five times the distance (at most 16 km), the ground alone at
+8 or 16 m a sample. From 4 km up the whole walked world of our copy is 1,019 chunks at
+16 m, 575 KB over 1,019 requests, three seconds from the mod on a desktop. The explored
+mask says which chunks to ask for, fetches go nearest first six at a time, and whatever
+no ring wants is let go (at most 1,600 chunks of ground and 120 of objects). In the
+overview, `W A S D` or the arrows carry the circled spot over the land, `E` or `Space`
+raise it and `Q` or `Shift` alone lower it; `Shift` with a key goes faster.
 
 ### The model library
 
@@ -202,9 +215,9 @@ defaults are what runs):
 | `/stats/players` | per-player tallies: joins, deaths, chat, distance, portal hops, pins, standing pieces/portals/ships, graves (JSON) |
 | `/players`, `/pins`, `/messages` | live state (JSON) |
 | `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset) |
-| `/height` | `?cx=&cz=`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): 257 x 257 little-endian int16, decimetres of world height, a metre apart; row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
-| `/objects` | `?cx=&cz=`, every visible object in the chunk as `OBJ1`, little-endian: `'OBJ1'`, u32 count, u32 prefab count, i32 prefab hashes, then 44 bytes an object -- u16 prefab index, u8 flags (1 = player-built), u8 pad, f32 x y z, f32 rotation quaternion x y z w, f32 scale x y z (Unity's frame, y up, z north). 404 for a chunk nobody has walked; its revision in `X-Rev` |
-| `/prefabs` | the model library's index: per prefab hash, its name `n`, category `c`, whether it has a model `m` and its version `v`, bounds `b`, and for foliage the canopy bounds `k`, leaf texture `kt` and tint `kc` (JSON) |
+| `/height` | `?cx=&cz=[&step=]`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): (256/step + 1)² little-endian int16, decimetres of world height, `step` metres apart (1, 2, 4, 8 or 16: 257 a side down to 17; default 1, each step cached on its own under the same revision); row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
+| `/objects` | `?cx=&cz=`, every visible object in the chunk as `OBJ2`, little-endian: `'OBJ2'`, u32 count, u32 prefab count, i32 prefab hashes, then 44 bytes an object -- u16 prefab index, u8 flags (1 = player-built, 2 = pieces mined off), u8 pad, f32 x y z, f32 rotation quaternion x y z w, f32 scale x y z (Unity's frame, y up, z north) -- then the mined rocks: u32 count, and per rock u32 object index, u16 bit count, bits/8 bytes, bit i set when its hit area i is gone. (`OBJ1`, the first cut, was the same without the flag and the table; the page reads both.) 404 for a chunk nobody has walked; its revision in `X-Rev` |
+| `/prefabs` | the model library's index: per prefab hash, its name `n`, category `c`, whether it has a model `m` and its version `v`, bounds `b`, and for foliage the canopy bounds `k`, leaf texture `kt` and tint `kc`; for a rock mined in pieces its kind `rk` (5 MineRock5, 1 MineRock) and `pa`, the hit area of each glTF primitive in order (-1 none, -2 MineRock's whole-rock model) (JSON) |
 | `/models/<file>` | a model (`<hash>.glb`, the hash as eight hex digits) or a texture (`tex_<name>.png`) from the library; cacheable for a day, `ETag` the file's time |
 | `/announce` | POST, see above |
 

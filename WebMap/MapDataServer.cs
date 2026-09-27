@@ -476,7 +476,12 @@ namespace WebMap
                         if (rawRequestPath == "/objects") bytes = WorldObjects.ChunkBytes(cx, cz, out rev);
                         else
                         {
-                            try { bytes = Heights.Chunk(cx, cz, false, out rev); }
+                            // step: metres between samples, for the view's far rings; 1 unless asked
+                            string st = req.QueryString["step"];
+                            int step = 1;
+                            if (st != null && (!int.TryParse(st, NumberStyles.Integer, CultureInfo.InvariantCulture, out step) || !Heights.ValidStep(step)))
+                            { Answer(res, 400, "{\"error\":\"step is 1, 2, 4, 8 or 16\"}"); return true; }
+                            try { bytes = Heights.Chunk(cx, cz, step, false, out rev); }
                             catch (Exception ex) { ZLog.LogWarning("WebMap: heights failed: " + ex.Message); bytes = null; rev = 0; }
                         }
                         if (bytes == null) { Answer(res, 503, "{\"error\":\"not ready\"}"); return true; }
