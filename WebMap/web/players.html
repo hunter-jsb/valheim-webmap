@@ -192,8 +192,9 @@
         <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
         <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
         <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them, or, when your own game was running the fight, with you standing there; a creature that despawns is nobody's kill.</li>
-        <li><b>Class</b> — read three ways: what you wear (eitr-weave says mage, heavy armour tank, light armour rogue or archer); what weapons you carry on your back and in hand, what you have held and, where the server saw them, what you have landed; and what you have done, as shares of the roster's best in pieces, trees and rocks, and kills. The gear decides; a builder or a harvester is someone with no fighting identity at all. The reason names all three. Dashed until ten minutes have had something in hand or the hits have come in. The server sees hands and back slots, never the bag.</li>
-        <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees and rocks together.</li>
+        <li><b>Kitchen</b> — what came out of the stations: <b>dishes cooked</b> on a fire or in the oven, for whoever put them on (<b>burnt</b> instead if left there too long); <b>meads brewed</b>, counted at the tap for whoever filled the fermenter; <b>honey taken</b> from a hive; and <b>smelted</b>, each bar, coal, flour or thread a smelter, kiln, windmill, spinning wheel or refinery made, for whoever loaded it. The server sees the stations, never the bag: the cauldron and the preparation table are invisible, so of bread and pies only the oven's step shows. At a fermenter, a hive or a smelter the player standing within 8 m is the one credited, and a slot filled before the count began counts for nobody.</li>
+        <li><b>Class</b> — read three ways: what you wear (eitr-weave says mage, heavy armour tank, light armour rogue or archer); what weapons you carry on your back and in hand, what you have held and, where the server saw them, what you have landed; and what you have done, as shares of the roster's best in pieces, trees and rocks, and kills, or what came out of your kitchen (a cook, a baker, a brewer or a smith, from fifty things made). The gear decides; a builder or a harvester is someone with no fighting identity at all. The reason names all three. Dashed until ten minutes have had something in hand or the hits have come in. The server sees hands and back slots, never the bag.</li>
+        <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees, rocks, dishes cooked and things smelted together.</li>
         <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
         <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
       </ul>
@@ -332,6 +333,14 @@ function renderDetail(){
       + `${num(runs.open) ? ` &#183; <a href="index.html#layers=grave" class="bad">${num(runs.open)} out there</a>` : ""}`
       + `${num(runm.best) ? ` &#183; longest run ${km(runm.best)} km` : ""}</div>` : "";
   const group = (name, figs, more) => `<section class="group"><h3 class="eyebrow">${name}</h3><div class="figs">${figs}</div>${more || ""}</section>`;
+  const K = p.kitchen, dishes = K ? Object.entries(K.dishes || {}).sort((a, b) => num(b[1]) - num(a[1])).slice(0, 3) : [];   // none from a mod without a kitchen
+  const kitchen = K ? group("Kitchen",
+        fig(num(K.cooked), "dishes cooked", nil(num(K.cooked)))
+        + fig(num(K.burnt), "burnt", num(K.burnt) ? "warn" : "nil")
+        + fig(num(K.brewed), "meads brewed", nil(num(K.brewed)))
+        + fig(num(K.honey), "honey taken", nil(num(K.honey)))
+        + fig(num(K.smelted), "smelted", nil(num(K.smelted))),
+        dishes.length ? `<div class="line"><b>Most made</b> ${dishes.map(([k, n]) => `${num(n)} ${esc(itemWord(k))}`).join(" &#183; ")}</div>` : "") : "";
   const html = `<div class="top"><div class="groups">`
     + group("Survival",
         fig(num(p.deaths), "deaths", nil(num(p.deaths)))
@@ -347,6 +356,7 @@ function renderDetail(){
         fig(num(p.kills), "kills", nil(num(p.kills)))
         + fig(num(p.trees), "trees felled", nil(num(p.trees)))
         + fig(num(p.rocks), "rocks broken", nil(num(p.rocks))))
+    + kitchen
     + group("Building",
         fig(num(p.pieces), "pieces", nil(num(p.pieces)))
         + fig(num(p.portals), "portals", nil(num(p.portals)))
@@ -382,6 +392,7 @@ function rankLine(p, get, top, bottom, desc = true){
   return better === 0 ? top : of > 1 && better === of - 1 ? bottom : `${ord(better + 1)} of ${of} on the roster`;
 }
 const slice = (p, get) => { const all = DATA.reduce((t, q) => t + get(q), 0); return all ? get(p)/all : 0; };   // of everyone's together
+const kit = p => p.kitchen || {};
 const SPOTS = [
   p => { const c = classify(p); return c && c.top && c.top.length ? {k: "Class", v: c.name, c: c.why, svg: bars(c.top.map(t => ({frac: t.share, label: `${Math.round(t.share*100)}% ${t.fam}`})))} : null; },
   p => num(p.deaths) ? {k: "Deaths", v: `${num(p.deaths)}`, c: rankLine(p, q => num(q.deaths), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.deaths))} : null,
@@ -399,6 +410,12 @@ const SPOTS = [
   p => num(p.hops) ? {k: "Hops", v: `${num(p.hops)} <small>portal trips</small>`, c: rankLine(p, q => num(q.hops), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.hops))} : null,
   p => num(p.kills) ? {k: "Slayer", v: `${num(p.kills)} <small>kills</small>`, c: rankLine(p, q => num(q.kills), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.kills))} : null,
   p => num(p.trees) + num(p.rocks) ? {k: "Harvester", v: `${num(p.trees)} <small>trees</small> · ${num(p.rocks)} <small>rocks</small>`, c: rankLine(p, q => num(q.trees) + num(q.rocks), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.trees) + num(q.rocks))} : null,
+  p => { const k = kit(p), c = num(k.cooked), b = num(k.burnt); return c + b ? {k: "Cooked", v: `${c} <small>dishes</small>`, c: b ? `burnt ${b} of ${c + b} cooked` : "nothing burnt yet",
+         svg: ring(slice(p, q => num(kit(q).cooked)), "of the roster's cooking")} : null; },
+  p => { const d = Object.entries(kit(p).dishes || {}).sort((a, b) => num(b[1]) - num(a[1])); if(!d.length) return null; const most = num(d[0][1]);
+         return {k: "Top dish", v: esc(itemWord(d[0][0])), c: `${most} made`, svg: bars(d.slice(0, 3).map(([k, n]) => ({frac: num(n)/most, label: `${num(n)} ${itemWord(k)}`})))}; },
+  p => num(kit(p).brewed) ? {k: "Brewed", v: `${num(kit(p).brewed)} <small>meads</small>`, c: rankLine(p, q => num(kit(q).brewed), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(kit(q).brewed))} : null,
+  p => num(kit(p).smelted) ? {k: "Smelted", v: `${num(kit(p).smelted)}`, c: rankLine(p, q => num(kit(q).smelted), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(kit(q).smelted))} : null,
   p => num(p.pins) ? {k: "Pins", v: `${num(p.pins)}`, c: rankLine(p, q => num(q.pins), "most on the roster", "fewest on the roster"), svg: ring(slice(p, q => num(q.pins)), "of the map's pins")} : null,
   p => num(p.chat) ? {k: "Chat", v: `${num(p.chat)} <small>lines</small>`, c: rankLine(p, q => num(q.chat), "the roster's loudest", "the roster's quietest"), svg: ring(slice(p, q => num(q.chat)), "of everything said")} : null,
   p => num(p.joins) ? {k: "Joins", v: `${num(p.joins)}`, c: rankLine(p, q => num(q.joins), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.joins))} : null,

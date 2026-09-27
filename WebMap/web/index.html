@@ -830,6 +830,10 @@ function worldSpots(){
     out.push({k: "Standing", v: `${PIECES_ALL.length.toLocaleString()} <small>pieces</small>`, c: b && num(b.pieces) ? `${esc(b.name)} built the most of it` : "built by everyone", svg: b && all ? pic.ring(num(b.pieces)/all, `of it is ${b.name}'s`) : ""}); }
   if(FOREST.stumps != null){ const b = top(q => num(q.trees));
     out.push({k: "Felled", v: `${num(FOREST.stumps).toLocaleString()} <small>trees</small>`, c: b && num(b.trees) ? `${esc(b.name)} felled the most` : "stumps standing where trees were", svg: b && num(b.trees) ? pic.strip(P, b, q => num(q.trees)) : ""}); }
+  const K = STATS && STATS.kitchen;   // none from a mod without a kitchen
+  if(K && num(K.cooked) + num(K.brewed) + num(K.smelted)){ const cook = top(q => num((q.kitchen || {}).cooked)), mine = cook ? num((cook.kitchen || {}).cooked) : 0;
+    out.push({k: "Kitchen", v: `${num(K.cooked).toLocaleString()} <small>meals cooked</small>`, c: `${num(K.brewed).toLocaleString()} meads brewed · ${num(K.smelted).toLocaleString()} bars smelted`,
+              svg: mine && num(K.cooked) ? pic.ring(mine/num(K.cooked), `of it cooked by ${cook.name}`) : ""}); }
   const boats = (VEHICLES || []).filter(v => v.kind === "boat");
   if(boats.length){ const kinds = {}; boats.forEach(v => { const k = MapCore.vehicleStyle(v).label; kinds[k] = (kinds[k] || 0) + 1; });
     const rows = Object.entries(kinds).sort((a, b) => b[1] - a[1]);
