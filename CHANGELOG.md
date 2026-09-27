@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* A cinematic, for a screen left open: the ▶ among the map's buttons (or a link ending in
+  `#tour`) starts a tour of the world's places one after another -- who is on, the portal
+  hubs, the biggest build, where people die, the graves, the traders, a boat, the largest
+  lands -- each flown to on the map with the layer that makes it worth seeing, held, then
+  circled slowly in 3D where the ground is walked, a land from kilometres up. A caption
+  names the place and why. Any touch ends it and puts the layers and the sidebar back.
+  The 3D view gained `setSpin` and `setOrbitDist` for it.
 * Back to one face. The brand, a page's title and the map's capitals are the site's own sans
   in tracked capitals again; no font is served with the pages any more.
 * The players page reads as a roster: one row per player with the four figures people

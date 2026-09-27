@@ -85,6 +85,8 @@ export class View3D {
     // where you stand and where you look: heading in degrees clockwise from north, pitch up
     this.me = { x: 0, z: 0, y: water + EYE, heading: 0, pitch: 0 };
     this.mode = 'street';
+    this.spin = 0;                // degrees a second the overview turns on its own (the tour)
+    this.orbitDist = 140;         // metres the overview stands off the circled point
     this.orbit = new MapControls(this.camera, canvas);
     this.orbit.enabled = false;
     this.orbit.enableDamping = true;
@@ -697,12 +699,15 @@ if (uFogOn > 0.5) {
 
   // The overview: from behind and above where you stood, looking at it.
   aimOrbit() {
-    const y = this.standAt(this.me.x, this.me.z) ?? this.waterLevel, h = this.me.heading * Math.PI / 180, d = 140;
+    const y = this.standAt(this.me.x, this.me.z) ?? this.waterLevel, h = this.me.heading * Math.PI / 180, d = this.orbitDist || 140;
     this.orbit.target.set(this.me.x, y, -this.me.z);
     this.camera.position.set(this.me.x - Math.sin(h) * d * 0.7, y + d * 0.7, -this.me.z + Math.cos(h) * d * 0.7);
     this.lift = 0;                   // metres the circled point rides above the ground (E and Q)
     this.orbit.update();
   }
+
+  setSpin(degPerSec) { this.spin = degPerSec || 0; }
+  setOrbitDist(d) { this.orbitDist = d; if (this.mode === 'orbit') { this.aimOrbit(); this.applyFog(); this.update(); } }
 
   // The haze closes in at the edge of what is loaded, kilometres out when the overview is
   // pulled back; the sea is one plane, grown to the horizon.
@@ -909,6 +914,11 @@ if (uFogOn > 0.5) {
     if (this.mode === 'street') { this.handleKeys(dt); this.placeCamera(dt); }
     else {
       this.handleKeys(dt);
+      if (this.spin) {              // the tour's slow turn about the circled point
+        const t = this.orbit.target, c = this.camera.position, a = this.spin * Math.PI / 180 * dt, dx = c.x - t.x, dz = c.z - t.z;
+        c.x = t.x + dx * Math.cos(a) - dz * Math.sin(a); c.z = t.z + dx * Math.sin(a) + dz * Math.cos(a);
+        this.scheduleUpdate();
+      }
       this.orbit.update();
       // the circled point follows the ground, lifted by what E and Q have made of it
       const t = this.orbit.target, h = this.heightAt(t.x, -t.z);

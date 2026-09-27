@@ -58,6 +58,12 @@ Our own hosted copy at
 
 Players only appear once they set **visible to other players** on the in-game map (`m`).
 
+### The cinematic
+
+The ▶ among the map's buttons, or a link ending in `#tour`, plays the world for a screen
+left open: its places one after another, flown to on the map with the layer that makes
+each worth seeing, then circled in 3D where the ground is walked. Any touch ends it.
+
 ### The 3D view
 
 A mode of the map, entered as Street View is: drag the figure at the top of the map's

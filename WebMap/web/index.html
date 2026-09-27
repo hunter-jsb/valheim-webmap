@@ -51,6 +51,15 @@
   .status.bad .shead{color:var(--off)}
   .status.warn .shead{color:var(--gold)}
   .spot{margin-top:0}
+  /* the tour: a caption over the stage, the controls faded until a hand comes near */
+  .tourcap{position:absolute;left:50%;bottom:1.1rem;transform:translateX(-50%) translateY(8px);z-index:18;max-width:min(520px,calc(100% - 2rem));
+    padding:.7rem 1.1rem .8rem;text-align:center;opacity:0;transition:opacity .7s ease,transform .7s ease;pointer-events:none}
+  .tourcap.show{opacity:1;transform:translateX(-50%)}
+  .tourcap .tt{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.15rem;line-height:1.2}
+  .tourcap .tl{font-size:.8rem;color:var(--ink-2);margin-top:.25rem}
+  body.tour .mapctl,body.tour #mini,body.tour .layers,body.tour .v3d .hint,body.tour .v3d .where{opacity:.3;transition:opacity .6s}
+  body.tour .mapctl:hover,body.tour .layers:hover{opacity:1}
+  #tourBtn.on{color:var(--gold);border-color:var(--gold)}
   .online{font-size:.78rem;color:var(--muted);margin-top:.7rem}
   .online b{color:var(--ok);font-weight:600}
   .feedhead{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}
@@ -291,12 +300,14 @@
     </div>
     <div class="mapctl">
       <button class="btn map peg" id="pegman" title="Drag onto the map to stand there in 3D (or tap, then tap the map)" aria-label="3D"><svg><use href="#ic-pegman"></use></svg></button>
+      <button class="btn map" id="tourBtn" title="Cinematic: a tour of the world's places, in 3D where the ground is walked. Any touch ends it." aria-label="Cinematic">&#9654;</button>
       <button class="btn map" id="zoomIn"  title="Zoom in">+</button>
       <button class="btn map" id="zoomOut" title="Zoom out">−</button>
       <button class="btn map" id="zoomFit" title="Fit">⌂</button>
       <button class="btn map" id="helpBtn" title="Commands &amp; help">?</button>
       <button class="btn map" id="fsBtn"   title="Fullscreen">⛶</button>
     </div>
+    <div class="tourcap glass" id="tourcap" hidden><div class="eyebrow"></div><div class="tt"></div><div class="tl"></div></div>
     <div class="v3d" id="v3d" hidden>
       <canvas id="v3dCanvas" aria-label="The world in 3D"></canvas>
       <div class="where glass" id="v3dWhere"></div>
@@ -1134,6 +1145,7 @@ async function boot(){
   try{ await MapCore.fetchConfig(API); }catch(e){}
   await tickState();
   applyHash();                 // needs the portals list, which the first tick brings
+  if(/(^|[#&])tour(&|$)/.test(location.hash)) setTimeout(startTour, 2500);   // a screen left open on #tour plays from the start
   // visibility-gated so a background tab makes no requests
   setInterval(()=>{ if(document.visibilityState==="visible") tickState(); }, 5000);
   tickStats();
@@ -1273,6 +1285,129 @@ document.getElementById("viewsw").addEventListener("click", e => {
 const pegEl = document.getElementById("pegman");
 let PEG_ARMED = false, pegDrag = null;
 function armPeg(on){ PEG_ARMED = on; pegEl.classList.toggle("on", on); stage.classList.toggle("dropping", on); }
+
+// ---------- the tour ----------
+// A cinematic for a screen left open: the world's places one after another -- who is
+// on, the hubs, the biggest build, where people die, the graves, the traders, a boat,
+// the named lands -- each flown to on the map with the layer that makes it worth
+// seeing, then circled in 3D where the ground is walked (a land from far above).
+// Any touch ends it; what it switched on is switched back.
+const TOUR = {on: false, run: 0, keep: null};
+const tourBtn = document.getElementById("tourBtn"), tourCap = document.getElementById("tourcap");
+const sleepT = ms => new Promise(r => setTimeout(r, ms));
+function flyTo(px, py, scale, ms){
+  return new Promise(res => {
+    const W = stage.clientWidth, H = stage.clientHeight, s0 = V.scale, c0 = V.at(W/2, H/2), t0 = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0)/ms), e = t < .5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
+      const s = Math.exp(Math.log(s0) + (Math.log(scale) - Math.log(s0))*e), cx = c0.px + (px - c0.px)*e, cy = c0.py + (py - c0.py)*e;
+      V.scale = s; V.tx = W/2 - cx*s; V.ty = H/2 - cy*s; V.request();
+      if(t < 1 && TOUR.on) requestAnimationFrame(step); else res();
+    };
+    requestAnimationFrame(step);
+  });
+}
+// the most particular named place a point lies in
+function nameAt(x, z){
+  let best = null;
+  for(const f of FEATURES || []){
+    if(f.kind === "river" || f.w == null || !f.name) continue;
+    if(x < f.x - f.w/2 || x > f.x + f.w/2 || z < f.z - f.h/2 || z > f.z + f.h/2) continue;
+    if(!best || f.w*f.h < best.w*best.h) best = f;
+  }
+  return best ? best.name : null;
+}
+function tourStops(){
+  const S = [], W = (px, py) => MapCore.toWorld(px, py);
+  // things gathered into cells, the fullest first
+  const cells = (list, size) => { const m = new Map();
+    for(const it of list){ const w = W(it.px, it.py), k = Math.floor(w.x/size) + "," + Math.floor(w.z/size); const c = m.get(k) || {n: 0, x: 0, z: 0, items: []}; c.n++; c.x += w.x; c.z += w.z; c.items.push(it); m.set(k, c); }
+    return [...m.values()].map(c => ({n: c.n, x: c.x/c.n, z: c.z/c.n, items: c.items})).sort((a, b) => b.n - a.n); };
+  const most = (items, key) => { const by = {}; items.forEach(i => { by[i[key]] = (by[i[key]] || 0) + 1; }); return Object.entries(by).sort((a, b) => b[1] - a[1])[0]; };
+  for(const p of ((PLAYERS && PLAYERS.players) || []).filter(p => p.x != null && !p.hidden))
+    S.push({kind: "Online now", title: p.name, line: `in ${nameAt(p.x, p.z) || "the wild"}`, x: p.x, z: p.z, zoom: 40, dist: 90});
+  const rest = [];
+  cells(PORTALS, 160).filter(c => c.n >= 3).slice(0, 2).forEach(c =>
+    rest.push({kind: "Portal hub", title: nameAt(c.x, c.z) || "A hub", line: `${c.n} gates stand here`, x: c.x, z: c.z, zoom: 30, dist: 140, layer: "portal"}));
+  if(PIECES_ALL && PIECES_ALL.length){ const c = cells(PIECES_ALL, 128)[0];
+    rest.push({kind: "The biggest build", title: nameAt(c.x, c.z) || "A settlement", line: `${c.n.toLocaleString()} pieces in this one stretch`, x: c.x, z: c.z, zoom: 36, dist: 170}); }
+  cells(DEATHS, 96).filter(c => c.n >= 3).slice(0, 3).forEach(c => { const m = most(c.items, "name");
+    rest.push({kind: "Where people die", title: nameAt(c.x, c.z) || "A bad spot", line: `${c.n} deaths here \u00b7 ${m[0]} fell ${m[1]} of them`, x: c.x, z: c.z, zoom: 26, dist: 120, detail: "deaths"}); });
+  GRAVES.slice(0, 2).forEach(g => { const w = W(g.px, g.py);
+    rest.push({kind: "A grave", title: `${g.name}'s gear`, line: "still lying where they fell", x: w.x, z: w.z, zoom: 36, dist: 80, layer: "grave"}); });
+  if(DEATHS.length){ const d = DEATHS[DEATHS.length - 1], w = W(d.px, d.py);
+    rest.push({kind: "The latest death", title: d.name, line: `${MapCore.ago(d.t*1000)}, in ${nameAt(w.x, w.z) || "the wild"}`, x: w.x, z: w.z, zoom: 34, dist: 100, detail: "deaths"}); }
+  TRADERS.forEach(t => { const w = W(t.px, t.py);
+    rest.push({kind: "A trader", title: t.name, line: `keeps shop in ${nameAt(w.x, w.z) || "the wild"}`, x: w.x, z: w.z, zoom: 36, dist: 90, layer: "trader"}); });
+  const boats = (VEHICLES || []).filter(v => v.kind === "boat");
+  if(boats.length){ const b = boats[Math.floor(Math.random()*boats.length)], w = W(b.px, b.py);
+    rest.push({kind: "Afloat", title: MapCore.vehicleStyle(b).label, line: `lies at ${nameAt(w.x, w.z) || "sea"}`, x: w.x, z: w.z, zoom: 40, dist: 70, layer: "vehicles"}); }
+  (FEATURES || []).filter(f => (f.kind === "continent" || f.kind === "island") && f.w).sort((a, b) => b.w*b.h - a.w*a.h).slice(0, 2).forEach(f =>
+    rest.push({kind: f.kind === "continent" ? "A continent" : "An island", title: f.name, line: `${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2`, x: f.x, z: f.z, fit: {w: f.w, h: f.h}, dist: Math.min(2600, Math.max(700, Math.max(f.w, f.h)*0.9)), detail: "names", far: true}));
+  for(let i = rest.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+  const seen = new Set();   // one visit per place a cycle
+  return S.concat(rest.filter(s => { const k = s.kind + "|" + s.title; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 9));
+}
+function setDetail(k, on){
+  if(DEFAULT_ON.has(k)) on ? OFF.delete(k) : OFF.add(k); else on ? DETAILS.add(k) : DETAILS.delete(k);
+  markDetails(); drawRaster();
+}
+function caption(s){
+  tourCap.querySelector(".eyebrow").textContent = s.kind; tourCap.querySelector(".tt").textContent = s.title; tourCap.querySelector(".tl").textContent = s.line;
+  tourCap.hidden = false; tourCap.classList.remove("show"); void tourCap.offsetWidth; tourCap.classList.add("show");
+}
+async function tourStop(s, run){
+  const alive = () => TOUR.on && TOUR.run === run;
+  caption(s);
+  if(s.layer) showLayer(s.layer);
+  if(s.detail && !showDetail(s.detail)) setDetail(s.detail, true);
+  const q = toPx(s.x, s.z);
+  if(s.fit){ const W = stage.clientWidth, H = stage.clientHeight; await flyTo(q.px, q.py, Math.min(W/(s.fit.w/GEOM.pixel*1.4), H/(s.fit.h/GEOM.pixel*1.4)), 5000); }
+  else { await flyTo(q.px, q.py, Math.min(6, s.zoom), 3500); if(!alive()) return; await flyTo(q.px, q.py, s.zoom, 3000); }
+  if(!alive()) return; await sleepT(2500); if(!alive()) return;
+  const walked = MapCore.explored(LAYERS.imgs.fog);
+  if(s.dist && (s.far || (walked && walked(s.x, s.z)))){
+    await enter3D(s.x, s.z, Math.random()*360); if(!alive()) return;
+    if(V3D){ V3D.setOrbitDist(s.dist); V3D.setMode("orbit"); v3dEl.classList.add("orbit"); V3D.setSpin(s.far ? 2.5 : 6); }
+    await sleepT(s.far ? 22000 : 15000);
+    if(V3D) V3D.setSpin(0);
+    if(!alive()) return;
+    leave3D(true);
+  }
+  await sleepT(1500);
+}
+async function runTour(){
+  const run = ++TOUR.run;
+  while(TOUR.on && TOUR.run === run){
+    const stops = tourStops();
+    if(!stops.length){ await sleepT(5000); continue; }
+    for(const s of stops){ if(!TOUR.on || TOUR.run !== run) return; await tourStop(s, run); }
+  }
+}
+function startTour(){
+  if(TOUR.on) return;
+  TOUR.on = true;
+  TOUR.keep = {details: new Set(DETAILS), off: new Set(OFF), hidden: new Set(HIDDEN), side: document.body.classList.contains("side-open")};
+  document.body.classList.add("tour"); tourBtn.classList.add("on"); tourBtn.innerHTML = "&#9632;"; tourBtn.title = "Stop the tour";
+  closeCard(); armPeg(false); layersEl.classList.remove("open"); MapCore.toggleSide(false);
+  runTour();
+}
+function stopTour(){
+  if(!TOUR.on) return;
+  TOUR.on = false; TOUR.run++;
+  if(V3D){ V3D.setSpin(0); V3D.setOrbitDist(140); }
+  if(IN3D) leave3D(true);
+  if(V3D){ V3D.setMode("street"); v3dEl.classList.remove("orbit"); }
+  const k = TOUR.keep;
+  if(k){ DETAILS.clear(); k.details.forEach(x => DETAILS.add(x)); OFF.clear(); k.off.forEach(x => OFF.add(x)); HIDDEN.clear(); k.hidden.forEach(x => HIDDEN.add(x));
+         markDetails(); applyHidden(); drawRaster(); MapCore.toggleSide(k.side); }
+  tourCap.classList.remove("show"); setTimeout(() => { if(!TOUR.on) tourCap.hidden = true; }, 700);
+  document.body.classList.remove("tour"); tourBtn.classList.remove("on"); tourBtn.innerHTML = "&#9654;"; tourBtn.title = "Cinematic: a tour of the world's places, in 3D where the ground is walked. Any touch ends it.";
+}
+tourBtn.onclick = () => TOUR.on ? stopTour() : startTour();
+// a hand on anything ends the tour: the screen is someone's again
+for(const ev of ["pointerdown", "wheel", "keydown"])
+  document.addEventListener(ev, e => { if(TOUR.on && !(e.target.closest && e.target.closest("#tourBtn"))) stopTour(); }, true);
 function dropPeg(x, y){
   armPeg(false);
   const q = V.at(x, y), w = MapCore.toWorld(q.px, q.py), walked = MapCore.explored(LAYERS.imgs.fog);
