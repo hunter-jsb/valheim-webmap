@@ -35,7 +35,13 @@
   body{overflow:hidden}
 
   /* ---------- sidebar ---------- */
-  .status{display:block;width:100%;padding:.5rem .6rem;border-radius:var(--r);margin-bottom:1rem}
+  /* the status row: the status page's word, then the two figures that change by the minute */
+  .statusrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.5rem;align-items:stretch;margin-bottom:.6rem}
+  .statusrow .stat{padding:.45rem .6rem;display:flex;flex-direction:column;justify-content:center;min-width:4.4rem}
+  .statusrow .stat .k{font-size:.56rem}
+  .statusrow .stat .v{font-size:1.05rem;margin-top:.05rem}
+  .statusrow .stat .v small{font-size:.66rem}
+  .status{display:block;min-width:0;padding:.5rem .6rem;border-radius:var(--r)}
   .status .shead{display:flex;align-items:center;gap:.4rem;font-size:.78rem}
   .status .srows{display:grid;gap:.2rem;margin-top:.4rem;font-size:.72rem;color:var(--muted)}
   .status .srows span{display:flex;align-items:center;gap:.4rem}
@@ -44,8 +50,7 @@
   .status .srows .warn{color:var(--gold)}
   .status.bad .shead{color:var(--off)}
   .status.warn .shead{color:var(--gold)}
-  .grid{display:grid;gap:.6rem;grid-template-columns:1fr 1fr}
-  .spot{margin-top:.6rem}
+  .spot{margin-top:0}
   .online{font-size:.78rem;color:var(--muted);margin-top:.7rem}
   .online b{color:var(--ok);font-weight:600}
   .feedhead{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}
@@ -224,8 +229,9 @@
         <span class="shead"><span class="dot" id="sdot"></span><b id="stext">checking…</b></span>
         <span class="srows" id="srows"></span>
       </a>
+      <div class="card stat" title="Of the world, walked by someone"><div class="k">Explored</div><div class="v" id="explored">\u2014</div></div>
+      <div class="card stat" title="Players on right now"><div class="k">Online</div><div class="v" id="pcount">\u2014</div></div>
     </div>
-    <div class="grid" id="tiles"></div>
     <div class="card spot" id="spot" hidden title="Next"></div>
     <div class="online" id="online"></div>
     <div class="feed section">
@@ -726,7 +732,6 @@ let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
 
 const esc = MapCore.esc;
-function tile(k,v,sub){ return `<div class="card stat"><div class="k">${k}</div><div class="v">${v}${sub?` <small>${sub}</small>`:""}</div></div>`; }
 // Statuspage summary, rendered in the site's own styling rather than their
 // floating widget. Their v2 API is CORS-open, so no proxy is involved. A
 // deployment with no status page keeps the box: it carries the live pill alone.
@@ -843,14 +848,8 @@ function showSpot(advance){
 
 function renderTiles(){
   const count = (PLAYERS && PLAYERS.count != null) ? PLAYERS.count : "\u2014";
-  document.getElementById("tiles").innerHTML = [
-    tile("Players", count),
-    tile("World", esc(GEOM.world || "Mothership")),
-    tile("Version", "1.0"),
-    tile("Explored", EXPLORED==null ? "\u2014" : (EXPLORED*100).toFixed(1), EXPLORED==null?"":"%"),
-    tile("Felled", FOREST.stumps==null ? "\u2014" : FOREST.stumps.toLocaleString(), " trees"),
-    tile("Afloat", VEHICLES==null ? "\u2014" : VEHICLES.filter(v=>v.kind==="boat").length, " boats"),
-  ].join("");
+  document.getElementById("pcount").textContent = count;
+  document.getElementById("explored").innerHTML = EXPLORED==null ? "\u2014" : (EXPLORED*100).toFixed(1) + "<small>%</small>";
   const list = (PLAYERS && PLAYERS.players) || [];
   const hiddenCount = list.filter(p=>p.hidden).length;
   let line = list.length ? `<b>Online:</b> ${list.map(p=>esc(p.name)).join(", ")}` : "";

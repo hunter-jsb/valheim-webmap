@@ -755,12 +755,11 @@ const NAV_PAGES = [["index", "Map"], ["portals", "Portals"], ["plan", "Plan"], [
 let navEl = null, navPage = "";
 // Nameless until the world names itself, and "Valheim" until even that arrives.
 function brand(){ return cfg.brand || worldName || "Valheim"; }
-// The map is the world's own page and wears both names; the rest are "<page> -- <brand>".
+// The tab is the world's name -- the map plain, the rest "<world> · <page>" -- and the
+// deployment's brand only until the world has named itself.
 function setTitle(page){
-  const row = NAV_PAGES.find(p => p[0] === page);
-  document.title = (!row || page === "index")
-    ? (cfg.brand && worldName ? cfg.brand + " \u2014 " + worldName : brand())
-    : row[1] + " \u2014 " + brand();
+  const row = NAV_PAGES.find(p => p[0] === page), name = worldName || brand();
+  document.title = (!row || page === "index") ? name : name + " \u00b7 " + row[1];
 }
 // The footer credits whoever runs this one; a deployment that names no repo has none.
 function credits(){

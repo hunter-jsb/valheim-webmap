@@ -17,7 +17,10 @@
   picture for each; a hover holds it, a click moves on. The map's sidebar has one for the world:
   how much is walked, who built the most of what stands, the boats by kind, the gates
   linked, the bosses down, where people die, the graves out there, the names given, the
-  roster's farthest, deadliest and loudest, and the latest death.
+  roster's farthest, deadliest and loudest, and the latest death. The sidebar's tiles are gone with it: the status row
+  carries the explored share and the count online, small, and the felled trees and the boats
+  afloat turn in the spotlight. The tab wears the world's name, the map plain and the other
+  pages as "world · page".
 * Kills, trees felled and rocks broken, per player: `kills`, `trees` and `rocks` in
   `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). The server
   runs none of it, so it reads what passes through it: a hit sent to another player's
