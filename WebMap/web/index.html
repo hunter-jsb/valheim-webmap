@@ -35,13 +35,13 @@
   body{overflow:hidden}
 
   /* ---------- sidebar ---------- */
-  /* the status row: the status page's word, then the two figures that change by the minute */
-  .statusrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.5rem;align-items:stretch;margin-bottom:.6rem}
-  .statusrow .stat{padding:.45rem .6rem;display:flex;flex-direction:column;justify-content:center;min-width:4.4rem}
-  .statusrow .stat .k{font-size:.56rem}
-  .statusrow .stat .v{font-size:1.05rem;margin-top:.05rem}
-  .statusrow .stat .v small{font-size:.66rem}
-  .status{display:block;min-width:0;padding:.5rem .6rem;border-radius:var(--r)}
+  /* the status row: the status page's word, then the two figures that change by the minute, as plain figures beside it */
+  .statusrow{display:flex;align-items:center;gap:.9rem;margin-bottom:.6rem}
+  .status{flex:1 1 auto;min-width:0;padding:.5rem .6rem;border-radius:var(--r)}
+  .statusrow .fig{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+  .statusrow .fig b{font-size:1.05rem;font-weight:700;color:var(--bright);font-variant-numeric:tabular-nums}
+  .statusrow .fig b small{font-size:.66rem;font-weight:500;color:var(--muted)}
+  .statusrow .fig .k{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
   .status .shead{display:flex;align-items:center;gap:.4rem;font-size:.78rem}
   .status .srows{display:grid;gap:.2rem;margin-top:.4rem;font-size:.72rem;color:var(--muted)}
   .status .srows span{display:flex;align-items:center;gap:.4rem}
@@ -239,8 +239,8 @@
         <span class="shead"><span class="dot" id="sdot"></span><b id="stext">checking…</b></span>
         <span class="srows" id="srows"></span>
       </a>
-      <div class="card stat" title="Of the world, walked by someone"><div class="k">Explored</div><div class="v" id="explored">\u2014</div></div>
-      <div class="card stat" title="Players on right now"><div class="k">Online</div><div class="v" id="pcount">\u2014</div></div>
+      <span class="fig" title="Of the world, walked by someone"><b id="explored">\u2014</b><span class="k">explored</span></span>
+      <span class="fig" title="Players on right now"><b id="pcount">\u2014</b><span class="k">online</span></span>
     </div>
     <div class="card spot" id="spot" hidden title="Next"></div>
     <div class="online" id="online"></div>
