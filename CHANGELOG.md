@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+* A player's page draws them: above the pentagon, their Viking as the 3D view draws them,
+  turning slowly on the map's ground colour under a key light (a still with reduced
+  motion) -- the live look while they are online, the one the server remembers once they
+  have gone, captioned "online now" or "as last seen"; a player with no look yet shows no
+  card. The mod keeps each player's latest look (the JSON `/state` carries) and yaw in
+  `stats.tsv` as an `l` line, taken as `/state`'s players are built and stored only when it
+  changes; a player hidden from the map is kept too, since a look says nothing of where
+  they are. `/stats/players` carries it as `look` with `yaw`; an older file reads as none.
+  three.js loads with the first look shown. The rig builder moved out of the 3D view into
+  `js/rig.js` (`RigBuilder`), which both pages share.
 * Live players in 3D as themselves: the body they chose (the game's two), their skin and hair
   colour, their hair and beard, and what they wear and hold -- helmet, chest, legs, cape,
   belt, trinket, what is in each hand and what is slung on the back -- facing their way,

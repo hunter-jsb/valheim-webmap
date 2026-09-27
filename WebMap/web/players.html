@@ -11,6 +11,9 @@
 <link rel="stylesheet" href="site.css">
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 <style>
   body{min-height:100%}
 
@@ -86,6 +89,11 @@
   .dhead .links .btn{height:30px;padding:0 .6rem;font-size:.74rem}
   .top{display:grid;grid-template-columns:minmax(0,1fr) 232px;gap:.6rem 1.4rem;align-items:start;margin-top:1.1rem}
   .side{display:grid;gap:.9rem;width:232px}
+  /* the player as the 3D view draws them, turning on the map's own ground colour */
+  .viking{margin:0;padding:0;overflow:hidden;background:var(--stage)}
+  .viking canvas{display:block;width:100%;height:300px}
+  .viking figcaption{padding:.35rem .6rem .4rem;border-top:1px solid var(--line);font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+  .viking.ok figcaption{color:var(--ok)}
   .radar.big{width:232px;height:232px;display:block;overflow:visible}
   .radar.big .fill{fill:var(--gold);fill-opacity:.2;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
   .radar.big .grid{fill:none;stroke:var(--line);stroke-width:1}
@@ -497,8 +505,9 @@ function renderDetail(){
         fig(num(p.joins), "joins", nil(num(p.joins)))
         + fig(num(p.chat), "chat lines", nil(num(p.chat))))
     + gearGroup(p)
-    + `</div><div class="side">` + radar(p, 232, true) + `<div class="card spot" id="spot" title="Next"></div></div></div>` + biomeRows(p);
+    + `</div><div class="side"><i id="vslot" hidden></i>` + radar(p, 232, true) + `<div class="card spot" id="spot" title="Next"></div></div></div>` + biomeRows(p);
   if(html !== DLAST){ body.innerHTML = html; DLAST = html; spotlight(p); }
+  viking(p, here);
   if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
 }
 // the ground under an online player, in the world's own names: "in Homeplains, Meadows"
@@ -570,8 +579,98 @@ function showSpot(advance){
   if(advance) requestAnimationFrame(() => requestAnimationFrame(() => { const i = el.querySelector(".in"); if(i) i.classList.remove("out"); }));
 }
 
+// ---------- the Viking ----------
+// The player as the 3D view draws them, on a slow turntable above the pentagon: the look
+// /state has while they are online, the one the server remembers once they are gone.
+// three.js and the rig load with the first look shown; a rig is built again only when
+// the look's key changes. The card moves into each fresh render of the column, so the
+// renderer survives the minute's refresh.
+const STILL = matchMedia("(prefers-reduced-motion: reduce)");
+// lib: the library's index as fetched, {rev, p}; gen counts the fetches that moved a rig part, built the one the rig is from
+const VK = {el: null, ready: null, v: null, lib: null, gen: 0, built: -1, key: undefined, name: null, rig: null, missing: 0, want: null, raf: 0, w: 0, h: 0};
+let MODELS = 0;   // the library's revision, from /state
+function vikingEl(){
+  if(!VK.el){
+    VK.el = document.createElement("figure"); VK.el.className = "card viking"; VK.el.hidden = true;
+    VK.el.innerHTML = `<canvas aria-hidden="true"></canvas><figcaption></figcaption>`;
+  }
+  return VK.el;
+}
+function loadViking(){
+  if(!VK.ready) VK.ready = Promise.all([import("three"), import("three/addons/loaders/GLTFLoader.js"), import("./js/rig.js")]).then(([THREE, {GLTFLoader}, rig]) => {
+    const renderer = new THREE.WebGLRenderer({canvas: vikingEl().querySelector("canvas"), antialias: true, alpha: true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(30, 232/300, 0.1, 50);
+    camera.position.set(0, 1.2, 5); camera.lookAt(0, 0.9, 0);    // room for a cape to swing past
+    // a warm key high on the left, the sky's cool fill, a rim off the dark behind
+    const key = new THREE.DirectionalLight(0xfff0dc, 2.8); key.position.set(-2.2, 3.4, 3); scene.add(key);
+    const rim = new THREE.DirectionalLight(0xa8bcd8, 1.4); rim.position.set(1.6, 2.4, -3); scene.add(rim);
+    scene.add(new THREE.HemisphereLight(0xd0d8e0, 0x3a3326, 1.7));
+    // the spot they stand on, a soft pool of light
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const x = c.getContext("2d"), grad = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(201,161,90,.22)"); grad.addColorStop(1, "rgba(201,161,90,0)");
+    x.fillStyle = grad; x.fillRect(0, 0, 64, 64);
+    const glow = new THREE.CanvasTexture(c); glow.colorSpace = THREE.SRGBColorSpace;
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(0.75, 48), new THREE.MeshBasicMaterial({map: glow, transparent: true, depthWrite: false}));
+    pool.rotation.x = -Math.PI/2; pool.position.y = 0.002; scene.add(pool);
+    const turn = new THREE.Group(); scene.add(turn);
+    VK.v = {rig, renderer, scene, camera, turn, builder: new rig.RigBuilder(THREE, new GLTFLoader(), {api: API, shadows: false, aniso: renderer.capabilities.getMaxAnisotropy()})};
+    return VK.v;
+  });
+  return VK.ready;
+}
+async function viking(p, here){
+  const el = vikingEl(), slot = document.getElementById("vslot");
+  if(slot) slot.replaceWith(el);
+  const look = (p.online && here && here.look) || p.look, me = VK.want = {};
+  if(!look || !(look.parts || []).length){ hideViking(); return; }
+  let v;
+  try{ v = await loadViking(); }catch(e){ hideViking(); return; }   // no WebGL: no card
+  if(VK.want !== me) return;
+  const key = v.rig.lookKey(look);
+  el.classList.toggle("ok", !!p.online);
+  el.querySelector("figcaption").textContent = p.online ? "online now" : "as last seen";
+  if(p.name !== VK.name) hideViking();              // never someone else's rig under this name
+  // the index again only when the library moved and this look may have gained a part
+  if(!VK.lib || (VK.lib.rev !== MODELS && (key !== VK.key || VK.missing))){
+    const lib = VK.lib = {rev: MODELS};
+    lib.p = MapCore.fetchJSON(API, `/prefabs?v=${MODELS}`)
+      .then(j => { if(v.builder.setLibrary(new Map(Object.entries(j.prefabs || {}).map(([h, e]) => [+h, e])))) VK.gen++; })
+      .catch(() => { if(VK.lib === lib) VK.lib = null; });
+  }
+  await VK.lib.p;
+  if(VK.want !== me) return;
+  VK.name = p.name;
+  if(key === VK.key && VK.built === VK.gen){ if(VK.rig) showViking(); return; }
+  const gen = VK.gen;
+  let g = null;
+  try{ g = await v.builder.build(look); }catch(e){ console.warn("rig", e.message || e); }
+  if(VK.want !== me) return;
+  if(VK.rig) v.turn.remove(VK.rig);
+  VK.rig = g; VK.key = key; VK.built = gen; VK.missing = g ? g.userData.missing : 1;
+  if(!g){ hideViking(); return; }                   // the library has no body yet
+  v.turn.add(g); showViking();
+}
+function showViking(){ VK.el.hidden = false; if(!VK.raf) VK.raf = requestAnimationFrame(spin); }
+function hideViking(){ if(VK.el) VK.el.hidden = true; cancelAnimationFrame(VK.raf); VK.raf = 0; }
+// a turn every 25 s; with reduced motion, one still from a little to the side
+function spin(t){
+  VK.raf = 0;
+  const v = VK.v, c = v.renderer.domElement, w = c.clientWidth, h = c.clientHeight;
+  if(VK.el.hidden || !w || !h) return;
+  if(w !== VK.w || h !== VK.h){ VK.w = w; VK.h = h; v.renderer.setSize(w, h, false); v.camera.aspect = w/h; v.camera.updateProjectionMatrix(); }
+  v.turn.rotation.y = STILL.matches ? 0.5 : 0.5 + t*0.00025;
+  v.renderer.render(v.scene, v.camera);
+  if(!STILL.matches) VK.raf = requestAnimationFrame(spin);
+}
+addEventListener("resize", () => { if(VK.el && !VK.el.hidden && !VK.raf) VK.raf = requestAnimationFrame(spin); });
+
 function pick(name){
   PICK = name || null; DLAST = ""; SPOT.i = -1; clearInterval(SPOT.timer);
+  if(!PICK){ VK.want = null; hideViking(); }
   document.getElementById("app").classList.toggle("picked", !!PICK);
   for(const b of document.querySelectorAll("#list .row")) b.classList.toggle("pick", b.dataset.name === PICK);
   if(PICK){ renderDetail(); document.getElementById("detail").scrollTop = 0; }
@@ -605,6 +704,7 @@ async function load(){
       const st = await MapCore.fetchState(API);
       DEATHS = ((st.deaths || {}).deaths) || [];
       ONLINE = ((st.players || {}).players) || [];
+      MODELS = (st.rev || {}).models || 0;
       if(WHERE && !ONLINE.some(q => q.name === WHERE.name)) WHERE = null;
     }catch(e){}
     if(!LOADED){ LOADED = true; applyHash(); }

@@ -327,6 +327,11 @@ namespace WebMap
                 maxHealth = Math.Max(maxHealth, health);
                 bool hidden = !player.m_publicRefPos;
                 bool showPos = player.m_publicRefPos || WebMapConfig.ALWAYS_VISIBLE;
+                // how they look is no spoiler of where they are: kept for their page either way
+                int yaw = (int)Math.Round(zdoData.GetRotation().eulerAngles.y);
+                string look = null;
+                try { look = Models.RigExporter.LookJson(zdoData); } catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: a player's look failed: " + e.Message); }
+                Stats.Looked(player.m_playerName, look, yaw);
 
                 var sb = new StringBuilder();
                 sb.Append("{\"name\":\"").Append(JsonEscape(player.m_playerName)).Append("\"");
@@ -339,9 +344,7 @@ namespace WebMap
                 {
                     sb.Append(FormattableString.Invariant($",\"x\":{pos.x:0.##},\"z\":{pos.z:0.##}"));
                     // the 3D view draws them as the game does: facing their way, in what they wear
-                    sb.Append(FormattableString.Invariant($",\"yaw\":{zdoData.GetRotation().eulerAngles.y:0}"));
-                    string look = null;
-                    try { look = Models.RigExporter.LookJson(zdoData); } catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: a player's look failed: " + e.Message); }
+                    sb.Append(",\"yaw\":").Append(yaw);
                     if (look != null) sb.Append(",\"look\":").Append(look);
                 }
                 sb.Append("}");

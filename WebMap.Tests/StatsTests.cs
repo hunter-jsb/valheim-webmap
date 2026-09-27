@@ -122,10 +122,12 @@ namespace WebMap.Tests
             Stats.Deed(A, Deeds.Kind.Kill); Stats.Deed(A, Deeds.Kind.Tree); Stats.Deed(A, Deeds.Kind.Rock); Stats.Deed(A, Deeds.Kind.Rock);
             Stats.Wore(A, Gear.Hand.Axe, Gear.Hand.None, true, Gear.Armor.Heavy, new[] { "Battleaxe", null, "ArmorIronChest", null, "HelmetIron", null }, 1f);
             Gear.Struck(A, false, Skills.SkillType.Knives, 6f, true);
+            Stats.Looked(A, Look, 118);
             string deaths = Stats.DeathsJson();
             var before = Doc();
             Assert.Equal(338, before.GetProperty("players")[0].GetProperty("biomes").EnumerateArray().First(b => b.Str("biome") == "Meadows").Num("m"));
             Assert.Equal(1, before.GetProperty("players")[0].GetProperty("gear").GetProperty("hand").Int("twohanded"));
+            Assert.Equal(Look, before.GetProperty("players")[0].GetProperty("look").GetRawText());
 
             Stats.Save();
             Stats.Load(Dir);
@@ -149,6 +151,21 @@ namespace WebMap.Tests
             Assert.Equal(new[] { 0, 0, 0 }, new[] { "kills", "trees", "rocks" }.Select(k => Me().Int(k)));
             Assert.Equal("{\"hand\":{},\"armor\":{},\"worn\":{},\"hits\":{\"melee\":0,\"ranged\":0,\"magic\":0,\"backstab\":0}}",
                          Me().GetProperty("gear").GetRawText());
+            Assert.False(Me().TryGetProperty("look", out _));
+        }
+
+        // RigExporter.LookJson's shape; /state builds it every second for everyone online
+        const string Look = "{\"model\":0,\"skin\":[0.9,0.9,0.9],\"hair\":[0.1,0.049,0.028],\"slots\":{\"helmet\":\"HelmetMage\",\"hair\":\"Hair13\"},\"parts\":[\"Player@body0\",\"HelmetMage@Helmet_attach\",\"Hair12_2@Helmet_attach\"]}";
+
+        [Fact]
+        public void TheSameLookASecondLaterRebuildsNothing()
+        {
+            Stats.Looked(A, Look, 90);
+            string json = Stats.Json(new Dictionary<string, int>());
+            Stats.Looked(A, Look, 95);
+            Assert.Same(json, Stats.Json(new Dictionary<string, int>()));
+            Stats.Looked(A, Look.Replace("HelmetMage", "HelmetBronze"), 95);
+            Assert.Equal("HelmetBronze", Me().GetProperty("look").GetProperty("slots").Str("helmet"));
         }
 
         [Fact]

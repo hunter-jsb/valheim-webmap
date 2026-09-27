@@ -131,6 +131,19 @@ async function players() {
   const opened = name && await p.until(`app.classList.contains("picked") && document.querySelector("#dhead h2")`);   // the hash carries the pick, a tick later
   const t = opened ? await p.ev(`({shown: getComputedStyle(detail).visibility === "visible", head: document.querySelector("#dhead h2").textContent.trim(), figs: document.querySelectorAll("#dbody .fig").length})`) : null;
   check("players: a row opens the player's page", loaded && (!name || (opened && t.shown && t.head.startsWith(name) && t.figs > 0)), name ? `${name}, ${t ? t.figs : 0} figures` : "no rows");   // the head carries a class pill after the name
+  // a player with a look, live or remembered, stands above the pentagon; with none on the
+  // server, the page is handed one shaped like RigExporter.LookJson's, of the body alone
+  const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
+  const look = body && { model: +body.n.slice(11), skin: [1, 0.82, 0.68], hair: [0.55, 0.32, 0.14], slots: {}, parts: [body.n] };
+  const who = loaded && body ? await p.ev(`(() => {
+    const live = q => q.online && (ONLINE.find(o => o.name === q.name) || {}).look;
+    let q = DATA.find(x => x.look || live(x));
+    if(!q && DATA.length){ q = DATA[DATA.length - 1]; q.look = ${JSON.stringify(look)}; }
+    if(q) pick(q.name);
+    return q && q.name; })()`) : null;
+  const stood = !!who && await p.until(`VK.rig && VK.rig.children.length && !VK.el.hidden && VK.el.isConnected && VK.el.querySelector("canvas").clientWidth > 0`, 60000);
+  check("players: a player with a look stands above the pentagon", !body || stood,
+        body ? `${who}, ${await p.ev("VK.rig ? VK.rig.children.length : 0")} meshes, ${await p.ev(`VK.el.textContent`)}` : "no body in the library to draw");
   await p.done("players");
 }
 

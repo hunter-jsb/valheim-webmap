@@ -35,15 +35,15 @@ guards against; there is one per failure, not one per branch.
    never collide; commas in `X-User`; unwalked ground.
 5. **The viewer.** A broken page is seen by everyone at once. **check.mjs** loads every
    page and checks markers, names at a mid zoom, a tapped name opening its place card, the
-   names flyout, hubs and one dial line per tagged unlinked portal, a card per player, the
-   plan. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
+   names flyout, hubs and one dial line per tagged unlinked portal, a card per player and a
+   player's rig standing on their page, the plan. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
    escaping, ages, vehicles. Not reached: anything signed in (renaming, the pin card, hub
    names), the plan's tools and shared links, sorting and the boss board, and drawing
    itself beyond what it leaves behind. Live players in 3D: which part a look hangs on
    which joint and the skin a part's glTF carries, **dotnet test**; when a player is dressed
-   again, **node --test**; the standing pose, the export and the rig as drawn, **nothing**:
-   a running server (`./testserver.sh`, where nobody can log in) and a player's look fed to
-   the view by hand.
+   again, **node --test**; a rig built on a player's page, **check.mjs**; the standing pose,
+   the export and how the rig looks, **nothing**: a running server (`./testserver.sh`, where
+   nobody can log in) and a player's look fed to the view by hand.
 6. **Fog reveal and save** (`UpdateFogTextureLoop`, `SaveFogTexture`): the map stops
    revealing, or forgets on a restart. **Nothing**.
 7. **Spoilers.** What stands in unwalked ground must not be reported. Portals, `/at` and
@@ -61,7 +61,8 @@ guards against; there is one per failure, not one per branch.
    Reading hits off the wire and classifying what fell: **nothing**; only a running server.
    **Gear**: an item's data to a hand family and a chest class, a second's tally, the worn
    set, hits by kind and backstab, the save and an older file: **dotnet test**. Reading the
-   equipment off a player's ZDO and the prefab behind a hash: **nothing**.
+   equipment off a player's ZDO and the prefab behind a hash: **nothing**. The look last
+   seen: its save, an older file, and the same look kept without a rebuild, **dotnet test**.
    Two faults found:
    - Mistlands is biome class 10, one past `Stats.Biomes = 10`, so metres and deaths there
      are dropped. `AWalkInTheMistlandsCounts` is written and skipped; `Biomes = 11` passes it.

@@ -9,8 +9,9 @@ namespace WebMap
 {
     // Per-player tallies for the site's players page: what the server sees
     // anyway, added up -- joins, deaths, chat, distance covered, what is standing
-    // in the world with their name on it, and the gear they carry. No time played
-    // as a figure, by choice, though the seconds with each chest class add up to it.
+    // in the world with their name on it, the gear they carry and the look they
+    // were last seen in. No time played as a figure, by choice, though the seconds
+    // with each chest class add up to it.
     //
     // Keyed by character name, the one identity every source shares. Builds
     // carry the character's player id instead; it is learned from the player's
@@ -46,6 +47,7 @@ namespace WebMap
             public double[] hand = new double[Gear.HandNames.Length], armor = new double[Gear.ArmorNames.Length];
             public string[] worn = new string[Gear.Slots.Length];
             public int[] hits = new int[Gear.HitNames.Length];
+            public string look; public int yaw;          // RigExporter's look JSON as last seen, for a page to draw them offline
         }
         // a death spot: where, how far the walk had come, and whether a sweep has seen a grave there
         private class Spot { public float x, z; public double distAt; public long t; public bool seen; public int sweep; }
@@ -216,6 +218,20 @@ namespace WebMap
             }
         }
 
+        // Game thread, as /state's players are built. A look changes only with the gear, so
+        // the same one a second later marks nothing for a rebuild or a save.
+        public static void Looked(string name, string look, int yaw)
+        {
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(look)) return;
+            lock (gate)
+            {
+                var p = Get(name);
+                p.yaw = yaw;
+                if (look == p.look) return;
+                p.look = look; dirty = true; jsonStale = true;
+            }
+        }
+
         public static void Struck(string name, Gear.Hit kind, bool backstab)
         {
             if (string.IsNullOrEmpty(name)) return;
@@ -367,7 +383,9 @@ namespace WebMap
                     sb.Append("},\"hits\":{");
                     for (int i = 0; i < p.hits.Length; i++)
                         sb.Append(i > 0 ? ",\"" : "\"").Append(Gear.HitNames[i]).Append("\":").Append(p.hits[i]);
-                    sb.Append("}}}");
+                    sb.Append("}}");
+                    if (p.look != null) sb.Append(",\"look\":").Append(p.look).Append(",\"yaw\":").Append(p.yaw);
+                    sb.Append('}');
                 }
                 sb.Append("],\"bosses\":[");
                 for (int i = 0; i < bosses.Count; i++)
@@ -462,6 +480,11 @@ namespace WebMap
                             var p = Get(f[1]);
                             for (int i = 0; i < p.hits.Length; i++) int.TryParse(f[i + 2], out p.hits[i]);
                         }
+                        else if (f.Length >= 4 && f[0] == "l" && f[3].StartsWith("{", StringComparison.Ordinal) && f[3].EndsWith("}", StringComparison.Ordinal))   // the look last seen, whole
+                        {
+                            var p = Get(f[1]);
+                            int.TryParse(f[2], out p.yaw); p.look = f[3];
+                        }
                         else if (f.Length >= 7 && f[0] == "g")        // a death not yet reached
                         {
                             var o = new Spot();
@@ -524,6 +547,8 @@ namespace WebMap
                             sb.Append("w\t").Append(p.name).Append('\t').Append(string.Join("\t", Array.ConvertAll(p.worn, w => w ?? ""))).Append('\n');
                         if (Array.Exists(p.hits, n => n > 0))
                             sb.Append("x\t").Append(p.name).Append('\t').Append(string.Join("\t", p.hits)).Append('\n');
+                        if (p.look != null)                           // its JSON escapes tabs and newlines
+                            sb.Append("l\t").Append(p.name).Append('\t').Append(p.yaw).Append('\t').Append(p.look).Append('\n');
                     }
                     foreach (var b in bosses) sb.Append(FormattableString.Invariant($"b\t{b.key}\t{b.t}\n"));
                     foreach (var d in deaths)

@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Lighting } from './sky.js';
-import { lookKey, paintOf } from './rig.js';
+import { lookKey, RigBuilder } from './rig.js';
 
 const CHUNK = 256;                       // a chunk's edge in metres
 const MAX_GROUND = 1600, MAX_OBJECTS = 120;   // chunks held at once: ground, and objects
@@ -74,14 +74,12 @@ export class View3D {
     this.cats = new Set(['piece', 'other', 'rock', 'bush', 'tree']);
     this.rev = {};               // the server's content revisions, from /state
     this.gltf = new GLTFLoader();
+    this.rigs = new RigBuilder(THREE, this.gltf, { api, shadows: !phone, aniso: this.maxAniso });
     this.loader = new THREE.TextureLoader();
     this.loader.setCrossOrigin('anonymous');
     this.matCache = new Map();
     this.box = new THREE.BoxGeometry(1, 1, 1);
     this.players = new Map();
-    this.rigParts = new Map();   // rig part hash -> Promise<pieces[] | null>, baked in the standing pose
-    this.rigNames = new Map();   // rig part name -> hash
-    this.images = new Map();     // texture file -> Promise<image | null>, for the body's paint
     this.playerGroup = new THREE.Group();
     this.scene.add(this.playerGroup);
     this.raycaster = new THREE.Raycaster();
@@ -177,11 +175,7 @@ export class View3D {
     this.library = { exported: d.exported, readable: d.readable, queued: d.queued, textures: d.texturesPresent, meshes: d.meshesPresent };
     for (const h of moved) this.models.delete(h);
     // a rig part new or re-exported dresses every player again, from the parts already baked
-    this.rigNames = new Map([...next].filter(([, p]) => p.c === 'rig').map(([h, p]) => [p.n, h]));
-    if ([...moved].some((h) => next.get(h).c === 'rig')) {
-      for (const h of moved) this.rigParts.delete(h);
-      for (const e of this.players.values()) e.key = undefined;
-    }
+    if (this.rigs.setLibrary(next)) for (const e of this.players.values()) e.key = undefined;
     for (const o of this.objChunks.values()) if (o.prefabs && [...o.prefabs].some((h) => moved.has(h))) o.stale = 'look';
     this.scheduleUpdate();
   }
@@ -679,7 +673,7 @@ if (uFogOn > 0.5) {
       }
       e.x = p.x; e.z = p.z; e.yaw = p.yaw || 0;
       e.group.position.set(p.x, this.standAt(p.x, p.z) ?? this.waterLevel, -p.z);
-      if (e.body) e.body.rotation.y = -e.yaw * Math.PI / 180;
+      if (e.body) e.body.rotation.y = facing(e.yaw);
       const key = lookKey(p.look);
       if (key !== e.key) { e.key = key; this.dress(e, p.look, key); }
     }
@@ -689,7 +683,7 @@ if (uFogOn > 0.5) {
   // A player's body: their rig once its parts are in the library, a plain figure until then.
   async dress(e, look, key) {
     let body = null;
-    try { body = key ? await this.rig(look) : null; } catch (err) { console.warn('rig', err.message || err); }
+    try { body = key ? await this.rigs.build(look) : null; } catch (err) { console.warn('rig', err.message || err); }
     if (e.key !== key) return;                      // dressed again meanwhile
     if (!body) {
       if (e.body && e.body.userData.figure) return;
@@ -699,96 +693,8 @@ if (uFogOn > 0.5) {
     }
     if (e.body) e.group.remove(e.body);
     e.body = body;
-    body.rotation.y = -e.yaw * Math.PI / 180;       // yaw clockwise from north; the rig faces north (-Z)
+    body.rotation.y = facing(e.yaw);
     e.group.add(body);
-  }
-
-  // The look's parts stood together: every part carries the same posed skeleton, so each
-  // lands where it belongs at the rig's origin. The skin and hair take the player's colours.
-  async rig(look) {
-    const hashes = look.parts.map((n) => this.rigNames.get(n));
-    const entries = hashes.map((h) => (h === undefined ? null : this.prefabs.get(h)));
-    if (!entries[0] || !entries[0].m) return null;
-    const parts = await Promise.all(hashes.map((h) => (h === undefined ? null : this.rigPart(h))));
-    if (!parts[0]) return null;
-    const paint = paintOf(entries), g = new THREE.Group();
-    for (const pieces of parts)
-      for (const pc of pieces || []) {
-        const mat = pc.role === 'skin' ? await this.skinMaterial(pc.material, look.skin, paint)
-          : pc.role === 'hair' ? this.tinted(pc.material, look.hair) : pc.material;
-        const m = new THREE.Mesh(pc.geometry, mat);
-        m.castShadow = !this.phone; m.receiveShadow = true;
-        g.add(m);
-      }
-    return g;
-  }
-
-  // A rig part's glTF, its skinned meshes baked in the pose its skeleton stands in: plain
-  // meshes, shared by every player who wears it. [] for a part that only paints the body.
-  rigPart(hash) {
-    if (this.rigParts.has(hash)) return this.rigParts.get(hash);
-    const info = this.prefabs.get(hash);
-    const file = (hash >>> 0).toString(16).padStart(8, '0');
-    const p = !info || !info.m ? Promise.resolve([]) : this.gltf.loadAsync(this.url(`/models/${file}.glb?v=${info.v || 0}`)).then((g) => {
-      const pieces = [];
-      g.scene.updateMatrixWorld(true);
-      g.scene.traverse((o) => {
-        if (!o.isMesh) return;
-        const geometry = o.isSkinnedMesh ? bakeSkin(o) : o.geometry.clone().applyMatrix4(o.matrixWorld);
-        if (!geometry.attributes.normal) geometry.computeVertexNormals();
-        const m = o.material;
-        m.side = THREE.DoubleSide; m.metalness = 0; m.roughness = Math.max(0.7, m.roughness);
-        if (m.map) m.map.anisotropy = Math.min(4, this.maxAniso);
-        pieces.push({ geometry, material: m, role: m.name === 'webmap:skin' ? 'skin' : m.name === 'webmap:hair' ? 'hair' : null });
-      });
-      return pieces;
-    }).catch((e) => { console.warn('rig part', file, e.message || e); return null; });
-    this.rigParts.set(hash, p);
-    return p;
-  }
-
-  // The body's skin: its texture in the player's skin colour, the legs' and then the chest's
-  // paint laid over it (a garment's or the body's own), drawn once per look on a canvas.
-  async skinMaterial(base, rgb, paint) {
-    const key = ['skin', base.uuid, (rgb || []).join(), paint.chest, paint.legs].join('|');
-    if (this.matCache.has(key)) return this.matCache.get(key);
-    const [legs, chest] = await Promise.all([this.image(paint.legs), this.image(paint.chest)]);
-    if (this.matCache.has(key)) return this.matCache.get(key);
-    const img = base.map && base.map.image, S = img ? img.width : 256;
-    const c = document.createElement('canvas'); c.width = c.height = S;
-    const ctx = c.getContext('2d');
-    if (img) ctx.drawImage(img, 0, 0, S, S); else { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, S, S); }
-    const col = new THREE.Color().setRGB(...(rgb || [1, 1, 1]), THREE.SRGBColorSpace);
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = '#' + col.getHexString(THREE.SRGBColorSpace); ctx.fillRect(0, 0, S, S);
-    ctx.globalCompositeOperation = 'source-over';
-    for (const over of [legs, chest]) if (over) ctx.drawImage(over, 0, 0, S, S);
-    const t = new THREE.CanvasTexture(c);
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(4, this.maxAniso);
-    const mat = base.clone(); mat.map = t; mat.color.set(0xffffff);
-    this.matCache.set(key, mat);
-    return mat;
-  }
-
-  // hair and beard: their grey texture in the player's hair colour
-  tinted(base, rgb) {
-    const key = ['hair', base.uuid, (rgb || []).join()].join('|');
-    if (!this.matCache.has(key)) {
-      const mat = base.clone();
-      mat.color.setRGB(...(rgb || [1, 1, 1]), THREE.SRGBColorSpace);
-      this.matCache.set(key, mat);
-    }
-    return this.matCache.get(key);
-  }
-
-  image(file) {
-    if (!file) return Promise.resolve(null);
-    if (!this.images.has(file)) this.images.set(file, new Promise((resolve) => {
-      const im = new Image(); im.crossOrigin = 'anonymous';
-      im.onload = () => resolve(im); im.onerror = () => resolve(null);
-      im.src = this.url(`/models/${file}`);
-    }));
-    return this.images.get(file);
   }
 
   // ---------------------------------------------------------------- the camera
@@ -1139,36 +1045,9 @@ if (uFogOn > 0.5) {
 
 const KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e', ' ', 'Shift', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 const IDENTITY = new THREE.Matrix4();
+// yaw is degrees clockwise from north, north is -Z here, and a rig stands facing +Z
+const facing = (yaw) => Math.PI - (yaw || 0) * Math.PI / 180;
 
-// A skinned mesh as its skeleton stands it, as plain geometry in the scene's frame: the
-// pose never moves, so skinning it once beats skinning it every frame for every player.
-function bakeSkin(o) {
-  o.skeleton.update();
-  const g = o.geometry, pos = g.attributes.position, nrm = g.attributes.normal, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
-  const bones = o.skeleton.boneMatrices, n = pos.count;
-  const P = new Float32Array(n * 3), N = nrm ? new Float32Array(n * 3) : null;
-  const acc = new THREE.Matrix4(), full = new THREE.Matrix4(), nm = new THREE.Matrix3(), v = new THREE.Vector3();
-  const post = new THREE.Matrix4().multiplyMatrices(o.matrixWorld, o.bindMatrixInverse), e = acc.elements;
-  for (let i = 0; i < n; i++) {
-    e.fill(0);
-    for (let k = 0; k < 4; k++) {
-      const w = sw.getComponent(i, k);
-      if (!w) continue;
-      const j = si.getComponent(i, k) * 16;
-      for (let c = 0; c < 16; c++) e[c] += w * bones[j + c];
-    }
-    full.multiplyMatrices(post, acc).multiply(o.bindMatrix);
-    v.fromBufferAttribute(pos, i).applyMatrix4(full);
-    P[i * 3] = v.x; P[i * 3 + 1] = v.y; P[i * 3 + 2] = v.z;
-    if (N) { v.fromBufferAttribute(nrm, i).applyMatrix3(nm.getNormalMatrix(full)).normalize(); N[i * 3] = v.x; N[i * 3 + 1] = v.y; N[i * 3 + 2] = v.z; }
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(P, 3));
-  if (N) out.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-  if (g.attributes.uv) out.setAttribute('uv', g.attributes.uv);
-  if (g.index) out.setIndex(g.index);
-  return out;
-}
 const _ahead = new THREE.Vector3(), _v2 = new THREE.Vector3();
 
 // OBJ1, little-endian: 'OBJ1', u32 count, u32 prefabs, i32[prefabs] hashes, then per object
