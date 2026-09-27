@@ -107,6 +107,28 @@ a.btn,a.btn:hover{text-decoration:none}   /* a link that looks like a button: Se
   color:var(--muted);font-size:.68rem;line-height:1.4;white-space:nowrap;cursor:pointer;user-select:none}
 .chip:hover{color:var(--ink);border-color:var(--gold)}
 .chip.on{color:var(--gold-ink);background:var(--gold);border-color:var(--gold);font-weight:600}
+/* a spotlight: one figure, a line of context and a small picture; it turns on its own */
+.spot{padding:.6rem .75rem .65rem;cursor:pointer;user-select:none;min-height:9.2rem;display:flex;flex-direction:column}
+.spot .eyebrow{display:flex;justify-content:space-between;gap:.5rem}
+.spot .eyebrow .n{font-weight:400;letter-spacing:0;text-transform:none;color:var(--faint)}
+.spot .in{flex:1 1 auto;transition:opacity .3s ease,transform .3s ease}
+.spot .in.out{opacity:0;transform:translateY(5px)}
+.spot .v{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.3rem;line-height:1.2;font-variant-numeric:tabular-nums}
+.spot .v small{font-size:.76rem;font-weight:500;color:var(--muted)}
+.spot .c{font-size:.74rem;color:var(--muted);margin-top:.2rem;line-height:1.35}
+.spot svg{display:block;width:200px;max-width:100%;height:34px;margin-top:.55rem;overflow:visible}
+.spot .ax{stroke:var(--line);stroke-width:1}
+.spot .sd{fill:var(--faint)}
+.spot .sm{fill:var(--gold);stroke:var(--card);stroke-width:1.5}
+.spot .rg{fill:none;stroke:var(--line);stroke-width:4}
+.spot .rf{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round}
+.spot .bb{fill:var(--well);stroke:var(--line);stroke-width:1}
+.spot .bf{fill:var(--gold)}
+.spot .t{font-size:9.5px;fill:var(--muted)}
+.spot .t .tb{font-weight:600;fill:var(--ink-2)}
+.spot .dots{display:flex;gap:4px;margin-top:.55rem;flex-wrap:wrap}
+.spot .dots i{width:5px;height:5px;border-radius:50%;background:var(--line)}
+.spot .dots i.on{background:var(--gold)}
 .field{width:100%;background:var(--well);border:1px solid var(--line);border-radius:var(--r);color:var(--ink);
   font-size:.85rem;padding:.45rem .55rem}
 .field:focus{outline:none;border-color:var(--gold)}

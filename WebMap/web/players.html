@@ -83,28 +83,6 @@
   .top{display:grid;grid-template-columns:minmax(0,1fr) 232px;gap:.6rem 1.4rem;align-items:start;margin-top:1.1rem}
   .side{display:grid;gap:.9rem;width:232px}
   .radar.big{width:232px;height:232px;display:block;overflow:visible}
-  /* the spotlight: one figure, a line of context, a small picture; it turns on its own */
-  .spot{padding:.6rem .75rem .65rem;cursor:pointer;user-select:none;min-height:9.2rem;display:flex;flex-direction:column}
-  .spot .eyebrow{display:flex;justify-content:space-between;gap:.5rem}
-  .spot .eyebrow .n{font-weight:400;letter-spacing:0;text-transform:none;color:var(--faint)}
-  .spot .in{flex:1 1 auto;transition:opacity .3s ease,transform .3s ease}
-  .spot .in.out{opacity:0;transform:translateY(5px)}
-  .spot .v{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.3rem;line-height:1.2;font-variant-numeric:tabular-nums}
-  .spot .v small{font-size:.76rem;font-weight:500;color:var(--muted)}
-  .spot .c{font-size:.74rem;color:var(--muted);margin-top:.2rem;line-height:1.35}
-  .spot svg{display:block;width:100%;height:34px;margin-top:.55rem;overflow:visible}
-  .spot .ax{stroke:var(--line);stroke-width:1}
-  .spot .sd{fill:var(--faint)}
-  .spot .sm{fill:var(--gold);stroke:var(--card);stroke-width:1.5}
-  .spot .rg{fill:none;stroke:var(--line);stroke-width:4}
-  .spot .rf{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round}
-  .spot .bb{fill:var(--well);stroke:var(--line);stroke-width:1}
-  .spot .bf{fill:var(--gold)}
-  .spot .t{font-size:9.5px;fill:var(--muted)}
-  .spot .t .tb{font-weight:600;fill:var(--ink-2)}
-  .spot .dots{display:flex;gap:4px;margin-top:.55rem}
-  .spot .dots i{width:5px;height:5px;border-radius:50%;background:var(--line)}
-  .spot .dots i.on{background:var(--gold)}
   .radar.big .fill{fill:var(--gold);fill-opacity:.2;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
   .radar.big .grid{fill:none;stroke:var(--line);stroke-width:1}
   .radar.big .spoke{stroke:var(--hair);stroke-width:1}
@@ -211,7 +189,7 @@
         <li><b>Streak</b> — the longest walk between two deaths, and how far you have come since the last one.</li>
         <li><b>Corpse runs</b> — <b>recovered</b> means you got back to where you died; <b>failed</b> means you died again within 200 m of it first; <b>rescued</b> means the grave was emptied by someone else before you got there; <b>out there</b> is a death you have not returned to.</li>
         <li><b>Bosses</b> — the world's own record of which have fallen, in the order they did.</li>
-        <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them; a creature that despawns is nobody's kill.</li>
+        <li><b>Kills</b>, <b>trees</b> and <b>rocks</b> — creatures that fell, trees felled and rock areas broken with you as the last to hit them, or, when your own game was running the fight, with you standing there; a creature that despawns is nobody's kill.</li>
         <li><b>The pentagon</b> — five sides, each your share of the roster's best, square-rooted so one giant does not flatten everyone: Explorer is km, portal hops and km at sea taken together; Builder pieces standing; Survivor km per death; Slayer kills; Harvester trees and rocks together.</li>
         <li>Anything built before the tally started counts for nobody, so a builder who has not logged in since shows zero.</li>
         <li>Time played is not tracked, and no figure here is a stand-in for it. Distances are the yardstick.</li>
@@ -252,9 +230,7 @@ const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 
 // deaths per km reads as "1 per N km": one death every so far, which is what people say
 const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
 const rate = p => { const d = num(p.deaths), k = num(p.dist_m)/1000; return d && k ? d/k : 0; };
-// the map's own colours for the biomes, beside the name (the name carries the identity)
-const INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#caa27b", "Mountain": "#ffffff", "Plains": "#e2c98f",
-             "Mistlands": "#c4a4dc", "Ashlands": "#e6907e", "Deep North": "#dde8f2", "Ocean": "#9fd0e6"};
+const INK = MapCore.BIOME_INK;
 const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
 
 // ---------- the bosses ----------
@@ -482,28 +458,10 @@ async function whereIs(name, at){
 // the roster as dots on a line with the player lit, a share of everything as a
 // ring, a health bar, the streak against the walk since. Six seconds each; a
 // hover holds it and a click moves on. Figures the player has nothing of are skipped.
-const ord = n => n + (["st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 3 : n % 10 - 1] || "th");
+const ord = MapCore.ord, strip = (p, get) => MapCore.pic.strip(DATA, p, get), ring = MapCore.pic.ring, bars = MapCore.pic.bars;
 function rankLine(p, get, top, bottom, desc = true){
   const v = get(p), better = DATA.filter(q => desc ? get(q) > v : get(q) < v).length, of = DATA.length;
   return better === 0 ? top : of > 1 && better === of - 1 ? bottom : `${ord(better + 1)} of ${of} on the roster`;
-}
-function strip(p, get){
-  const max = Math.max(1e-9, ...DATA.map(get)), x = v => (4 + 192*Math.sqrt(Math.min(1, v/max))).toFixed(1);
-  return `<svg viewBox="0 0 200 34"><line class="ax" x1="4" y1="17" x2="196" y2="17"/>`
-    + DATA.filter(q => q !== p).map(q => `<circle class="sd" cx="${x(get(q))}" cy="17" r="3"/>`).join("")
-    + `<circle class="sm" cx="${x(get(p))}" cy="17" r="5.5"/></svg>`;
-}
-function ring(share, text){
-  const r = 12, C = 2*Math.PI*r;
-  return `<svg viewBox="0 0 200 34"><circle class="rg" cx="17" cy="17" r="${r}"/>`
-    + `<circle class="rf" cx="17" cy="17" r="${r}" stroke-dasharray="${(C*Math.max(.02, share)).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 17 17)"/>`
-    + `<text class="t" x="40" y="21"><tspan class="tb">${Math.round(share*100)}%</tspan> ${esc(text)}</text></svg>`;
-}
-function bars(rows){   // [{frac, label, colour?}]: one thin bar each, labelled at the right
-  const h = rows.length > 1 ? 12 : 16, gap = 4;
-  return `<svg viewBox="0 0 200 ${rows.length*(h + gap)}">` + rows.map((r, i) => { const y = i*(h + gap);
-    return `<rect class="bb" x="0" y="${y}" width="130" height="${h}" rx="3"/><rect class="bf" x="0" y="${y}" width="${Math.max(2, 130*Math.min(1, r.frac)).toFixed(1)}" height="${h}" rx="3"${r.colour ? ` style="fill:${r.colour}"` : ""}/>`
-      + `<text class="t" x="136" y="${y + h/2 + 3.5}">${esc(r.label)}</text>`; }).join("") + `</svg>`;
 }
 const slice = (p, get) => { const all = DATA.reduce((t, q) => t + get(q), 0); return all ? get(p)/all : 0; };   // of everyone's together
 const SPOTS = [

@@ -695,6 +695,34 @@ function vehicleStyle(m){
 }
 const PIN_ICON = {dot: "pin-dot", fire: "pin-fire", mine: "pin-mine", house: "pin-house", cave: "pin-cave"};
 
+// ---------- little pictures ----------
+// The small drawings a spotlight sets beside a figure: a roster as dots on a line
+// with one lit, a share as a ring, a few labelled bars. Inline SVG, 200 wide.
+// the map's own hues for the biomes, beside a name (the name carries the identity)
+const BIOME_INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#caa27b", "Mountain": "#ffffff", "Plains": "#e2c98f",
+                   "Mistlands": "#c4a4dc", "Ashlands": "#e6907e", "Deep North": "#dde8f2", "Ocean": "#9fd0e6"};
+const ord = n => n + (["st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 3 : n % 10 - 1] || "th");
+const pic = {
+  strip(list, me, get){
+    const max = Math.max(1e-9, ...list.map(get)), x = v => (4 + 192*Math.sqrt(Math.min(1, v/max))).toFixed(1);
+    return `<svg viewBox="0 0 200 34"><line class="ax" x1="4" y1="17" x2="196" y2="17"/>`
+      + list.filter(q => q !== me).map(q => `<circle class="sd" cx="${x(get(q))}" cy="17" r="3"/>`).join("")
+      + (me ? `<circle class="sm" cx="${x(get(me))}" cy="17" r="5.5"/>` : "") + `</svg>`;
+  },
+  ring(share, text){
+    const r = 12, C = 2*Math.PI*r;
+    return `<svg viewBox="0 0 200 34"><circle class="rg" cx="17" cy="17" r="${r}"/>`
+      + `<circle class="rf" cx="17" cy="17" r="${r}" stroke-dasharray="${(C*Math.max(.02, Math.min(1, share))).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 17 17)"/>`
+      + `<text class="t" x="40" y="21"><tspan class="tb">${Math.round(share*100)}%</tspan> ${esc(text)}</text></svg>`;
+  },
+  bars(rows){   // [{frac, label, colour?}]: one thin bar each, labelled at the right
+    const h = rows.length > 1 ? 12 : 16, gap = 4;
+    return `<svg viewBox="0 0 200 ${rows.length*(h + gap)}" style="height:${rows.length*(h + gap)/200*100}%">` + rows.map((r, i) => { const y = i*(h + gap);
+      return `<rect class="bb" x="0" y="${y}" width="130" height="${h}" rx="3"/><rect class="bf" x="0" y="${y}" width="${Math.max(2, 130*Math.min(1, r.frac)).toFixed(1)}" height="${h}" rx="3"${r.colour ? ` style="fill:${r.colour}"` : ""}/>`
+        + `<text class="t" x="136" y="${y + h/2 + 3.5}">${esc(r.label)}</text>`; }).join("") + `</svg>`;
+  },
+};
+
 // ---------- odds and ends ----------
 // The mod's pin CSV: placer,id,type,owner,x,z,text -- and the text may hold commas.
 // The placer is a player's platform id, or "web" for a pin placed on the site.
@@ -835,5 +863,5 @@ return {cfg, brand, setTitle, credits, toggleSide,
         api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
         drawRasters, kindOf, ORDER, shade, parsePieces, explored, filterExplored, drawPieces, drawFires, drawDeaths, drawNames, hitName, viewCache, post,
         ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
-        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut};
+        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut, pic, ord, BIOME_INK};
 })();

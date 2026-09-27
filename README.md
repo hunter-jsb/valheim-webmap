@@ -272,7 +272,9 @@ may not reach the server before it falls.
 accents, the map's own hues for portals, traders and graves, the halos over the world,
 radii, shadows, fonts, the bar and sidebar widths), the base, and the components every
 page shares -- `.title .eyebrow .sub .note .section .foot`, `.card .well .glass .stat .dot`,
-`.btn .chip .field .btnrow`, `.stage .mapctl .legend`, the nav and the sidebar shell. A
+`.btn .chip .field .btnrow`, `.stage .mapctl .legend`, `.spot` (a spotlight: one figure, a line of
+context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars), the nav
+and the sidebar shell. A
 page's own `<style>` holds only what that page alone draws, and names no colour of its
 own: every colour is a token, so a restyle is an edit to `:root` and the pages follow.
 The two exceptions are data, not chrome: the forest swatch's greens and the biome

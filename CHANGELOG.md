@@ -14,7 +14,10 @@
   in five groups: Survival, Journeys, Deeds, Building, Presence. A spotlight beside the pentagon
   turns through the player's figures one at a time -- where each sits among the roster, a
   share of everything, the closest call, the streak against the walk since -- with a small
-  picture for each; a hover holds it, a click moves on.
+  picture for each; a hover holds it, a click moves on. The map's sidebar has one for the world:
+  how much is walked, who built the most of what stands, the boats by kind, the gates
+  linked, the bosses down, where people die, the graves out there, the names given, the
+  roster's farthest, deadliest and loudest, and the latest death.
 * Kills, trees felled and rocks broken, per player: `kills`, `trees` and `rocks` in
   `/stats/players`, kept in `stats.tsv` (an older file reads as none yet). The server
   runs none of it, so it reads what passes through it: a hit sent to another player's
