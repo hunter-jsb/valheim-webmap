@@ -19,6 +19,8 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 NAME=valheim-test
 DATA="${VALHEIM_TEST_DIR:-$HOME/valheim-test}"
+# a copy of a real world (worlds_local/<name>/ podman-cp'd into /valheim-saves) runs under its own name
+WORLD="${VALHEIM_TEST_WORLD:-WebMapTest}"
 IMAGE=docker.io/indifferentbroccoli/valheim-server-docker:latest
 PASSWORD=testpass123          # local only; must be 5+ chars and not inside the server name
 WEBPORT=3000                  # the mod's own HTTP port (its default)
@@ -40,7 +42,7 @@ up)
     -v "$DATA/server-files:/valheim:z" \
     -v "$DATA/server-data:/valheim-saves:z" \
     -e SERVER_NAME="WebMap Test" \
-    -e WORLD_NAME="WebMapTest" \
+    -e WORLD_NAME="$WORLD" \
     -e SERVER_PASSWORD="$PASSWORD" \
     -e SERVER_PUBLIC=false \
     -e BEPINEX_ENABLED=true \

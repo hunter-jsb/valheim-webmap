@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+<title>Valheim WebMap</title>
+<meta name="description" content="A live map of a Valheim server: builds, forest, portals, boats and players.">
+<meta property="og:title" content="Valheim WebMap">
+<meta property="og:description" content="A live map of a Valheim server: builds, forest, portals, boats and players.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪓</text></svg>">
+<link rel="stylesheet" href="site.css">
+<script src="site-config.js"></script>
+<script src="map-core.js"></script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<style>
+  html,body{height:100%}
+  body{overflow:hidden}
+  .where{font-size:.95rem;font-weight:700;color:var(--bright);margin-top:.5rem}
+  .where small{display:block;font-size:.74rem;font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums}
+  .group{margin-top:.9rem}
+  .group .eyebrow{margin-bottom:.4rem}
+  .chips{display:flex;flex-wrap:wrap;gap:.35rem}
+  .chips.more{margin-top:.4rem}
+  .how ul{list-style:none;display:grid;gap:.25rem;font-size:.74rem;color:var(--muted);margin-top:.4rem}
+  .how b{color:var(--ink-2);font-weight:600}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .stage{cursor:grab}
+  .stage.orbit{cursor:default}
+  /* what the view is waiting on, or why it is empty */
+  .veil{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);z-index:5;padding:.6rem .9rem;
+    font-size:.82rem;color:var(--ink);max-width:22rem;text-align:center;pointer-events:none}
+  .veil:empty{display:none}
+  .compass{position:absolute;left:.7rem;bottom:.7rem;z-index:5;padding:.3rem .55rem;font-size:.72rem;
+    color:var(--ink-2);font-variant-numeric:tabular-nums;pointer-events:none}
+</style>
+</head>
+<body>
+
+<nav class="nav" data-page="view" data-side></nav>
+<script>MapCore.nav();</script>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <button class="sideclose" type="button" aria-label="Close">&times;</button>
+    <h1 class="title">3D</h1>
+    <p class="sub">The world where you stand, as the server holds it.</p>
+    <div class="where" id="where">&#8230;<small></small></div>
+    <p class="note bad" id="note"></p>
+
+    <div class="group">
+      <h2 class="eyebrow">Camera</h2>
+      <div class="btnrow">
+        <button class="btn on" id="street" type="button" title="Stand at eye height and look around">Street</button>
+        <button class="btn" id="overview" type="button" title="Circle the spot from above">Overview</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2 class="eyebrow">Light</h2>
+      <div class="chips" id="time">
+        <button class="chip on" data-t="server" type="button">Server clock</button>
+        <button class="chip" data-t="0.28" type="button">Morning</button>
+        <button class="chip" data-t="0.5" type="button">Noon</button>
+        <button class="chip" data-t="0.72" type="button">Evening</button>
+        <button class="chip" data-t="0.02" type="button">Night</button>
+      </div>
+      <div class="chips more"><button class="chip" id="shadows" type="button">Shadows</button></div>
+    </div>
+
+    <div class="group">
+      <h2 class="eyebrow">Show</h2>
+      <div class="chips" id="cats">
+        <button class="chip on" data-c="piece" type="button">Buildings</button>
+        <button class="chip on" data-c="tree" type="button">Trees</button>
+        <button class="chip on" data-c="bush" type="button">Bushes</button>
+        <button class="chip on" data-c="rock" type="button">Rocks</button>
+        <button class="chip on" data-c="other" type="button">Everything else</button>
+      </div>
+    </div>
+
+    <p class="note" id="status"></p>
+
+    <section class="how section">
+      <h2 class="eyebrow">Getting about</h2>
+      <ul>
+        <li><b>Drag</b> to look around; <b>scroll</b> or <b>pinch</b> to zoom the eye.</li>
+        <li><b>W A S D</b> or the <b>arrows</b> walk, <b>Shift</b> runs, <b>Q E</b> turn.</li>
+        <li><b>Click</b> the ground to walk there.</li>
+        <li><b>Overview</b> circles the spot from above: drag to pan, right-drag or two fingers to turn.</li>
+        <li>Only ground somebody has walked is drawn; the rest stays dark, as on the map.</li>
+      </ul>
+    </section>
+
+    <p class="foot"><a id="maplink" href="index.html">Back to the map here</a> &#183; models are the game's own,
+      read from this server's files &#183; 3D after
+      <a href="https://github.com/f00d4tehg0dz/valheim-webmap" target="_blank" rel="noopener">f00d4tehg0dz/valheim-webmap</a></p>
+  </aside>
+
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="veil glass" id="veil">Reading the ground&#8230;</div>
+    <div class="compass glass" id="compass"></div>
+    <div class="mapctl">
+      <button class="btn map" id="modebtn" type="button" title="Overview" aria-label="Switch camera">&#8645;</button>
+      <a class="btn map" id="mapbtn" href="index.html" title="Back to the map here" aria-label="Map">&#9638;</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { View3D } from './js/view3d.js';
+
+const API = MapCore.cfg.api, esc = MapCore.esc;
+const PHONE = matchMedia('(max-width:760px), (pointer:coarse)').matches;
+const $ = id => document.getElementById(id);
+const view = new View3D($('cv'), { api: API, phone: PHONE });
+let TIME = 'server', STATE = null, SPOT = null;
+
+// #at=<x>,<z> in world metres, &look=<degrees from north>: how the map links in
+function fromHash(){
+  const p = {};
+  for(const part of location.hash.replace(/^#/, '').split('&')){ const i = part.indexOf('='); if(i > 0) p[part.slice(0, i)] = decodeURIComponent(part.slice(i + 1)); }
+  const [x, z] = (p.at || '').split(',').map(Number);
+  return isFinite(x) && isFinite(z) && p.at ? {x, z, look: isFinite(+p.look) && p.look !== undefined ? +p.look : undefined} : null;
+}
+function mapHref(x, z){ return `index.html#at=${Math.round(x)},${Math.round(z)},40`; }
+const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+// the view came to rest: keep the link, the way back to the map and the place's name current
+let placeAt = null;
+view.onMove = (x, z, heading) => {
+  SPOT = {x, z};
+  const h = `#at=${Math.round(x)},${Math.round(z)}` + (heading != null ? `&look=${Math.round(heading)}` : '');
+  if(location.hash !== h) history.replaceState(null, '', h);
+  $('maplink').href = $('mapbtn').href = mapHref(x, z);
+  $('compass').textContent = `${Math.round(x)}, ${Math.round(z)}` + (heading != null ? ` · facing ${DIRS[Math.round(heading / 45) % 8]}` : '');
+  clearTimeout(placeAt);
+  placeAt = setTimeout(() => place(x, z), 600);
+};
+async function place(x, z){
+  const el = $('where');
+  let name = null;
+  try{
+    const j = await MapCore.fetchJSON(API, `/at?x=${x.toFixed(1)}&z=${z.toFixed(1)}`);
+    const f = (j && j.here || [])[0];
+    if(f) name = f.name;
+  }catch(e){}
+  el.innerHTML = esc(name || 'Unnamed ground') + `<small>${Math.round(x)}, ${Math.round(z)}</small>`;
+}
+
+view.onStatus = s => {
+  const lib = s.library;
+  $('status').textContent = `${MapCore.plural(s.ground, 'chunk')} of ground · ${s.objects.toLocaleString()} objects`
+    + (lib ? ` · ${lib.readable} models` + (lib.queued ? `, ${lib.queued} exporting` : '') : '');
+  $('veil').textContent = s.unwalked ? 'Nobody has walked here yet, so there is nothing to show.'
+    : s.ground ? '' : 'Reading the ground…';
+};
+
+// ---------- controls ----------
+function setMode(m){
+  view.setMode(m);
+  $('street').classList.toggle('on', m === 'street');
+  $('overview').classList.toggle('on', m === 'orbit');
+  $('stage').classList.toggle('orbit', m === 'orbit');
+  $('modebtn').title = m === 'street' ? 'Overview' : 'Street';
+}
+$('street').onclick = () => setMode('street');
+$('overview').onclick = () => setMode('orbit');
+$('modebtn').onclick = () => setMode(view.mode === 'street' ? 'orbit' : 'street');
+function applyTime(){
+  const f = TIME === 'server' ? (STATE && STATE.time ? STATE.time.frac : 0.5) : +TIME;
+  view.setTime(f);
+}
+$('time').querySelectorAll('.chip').forEach(el => el.onclick = () => {
+  TIME = el.dataset.t;
+  $('time').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === el));
+  applyTime();
+});
+let SHADOWS = !PHONE;
+$('shadows').classList.toggle('on', SHADOWS);
+$('shadows').onclick = () => { SHADOWS = !SHADOWS; $('shadows').classList.toggle('on', SHADOWS); view.setShadows(SHADOWS); };
+$('cats').querySelectorAll('.chip').forEach(el => el.onclick = () => {
+  el.classList.toggle('on');
+  view.setCategories([...$('cats').querySelectorAll('.chip.on')].map(b => b.dataset.c));
+});
+
+// ---------- the server ----------
+async function tick(){
+  let s;
+  try{ s = await MapCore.fetchState(API); }catch(e){ $('note').textContent = 'The server is not answering.'; return; }
+  $('note').textContent = '';
+  STATE = s;
+  view.setRevs(s.rev || {});
+  view.setPlayers((s.players && s.players.players) || []);
+  applyTime();
+}
+
+async function boot(){
+  let start = fromHash();
+  if(!start){
+    let c = null;
+    try{ c = await MapCore.fetchConfig(API); }catch(e){}
+    const sp = String((c && c.world_start_pos) || '0,0,0').split(',').map(Number);
+    start = {x: sp[0] || 0, z: sp[2] || 0};
+  } else MapCore.fetchConfig(API).catch(() => {});
+  await tick();
+  view.goTo(start.x, start.z, start.look ?? 0);
+  view.start();
+  view.settle();
+  setInterval(() => { if(document.visibilityState === 'visible') tick(); }, 5000);
+}
+addEventListener('hashchange', () => {
+  const p = fromHash();
+  if(p && (!SPOT || Math.hypot(p.x - SPOT.x, p.z - SPOT.z) > 1)) view.goTo(p.x, p.z, p.look);
+});
+boot();
+</script>
+</body>
+</html>

@@ -1,15 +1,16 @@
 # Serve a packaged web/ folder and forward everything else to the live mod:
-# what a browser sees when the mod serves the site itself.
+# what a browser sees when the mod serves the site itself. Files in subfolders
+# (js/, vendor/three/) are served from disk too, as the mod does.
 import http.server, urllib.request, sys, os
-ROOT, UP, PORT = sys.argv[1], sys.argv[2], int(sys.argv[3])
+ROOT, UP, PORT = os.path.realpath(sys.argv[1]), sys.argv[2], int(sys.argv[3])
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=ROOT, **k)
     def do_GET(self):
         path = self.path.split("?")[0]
-        name = os.path.basename(path) or "index.html"
         if path in ("", "/"): path = "/index.html"
-        if os.path.isfile(os.path.join(ROOT, name)) and "." in name:
-            self.path = "/" + name + (("?" + self.path.split("?",1)[1]) if "?" in self.path else "")
+        local = os.path.realpath(os.path.join(ROOT, path.lstrip("/")))
+        if local.startswith(ROOT + os.sep) and os.path.isfile(local) and "." in os.path.basename(local):
+            self.path = path + (("?" + self.path.split("?",1)[1]) if "?" in self.path else "")
             return super().do_GET()
         try:
             with urllib.request.urlopen(UP + self.path, timeout=60) as r:

@@ -822,7 +822,8 @@ function renderCard(){
         : `<div class="nm">${esc(f.name)}${me ? ' <a href="#" class="edit" id="nameEdit" title="Rename">\u270e</a>' : ""}</div>`)
     + (facts.length ? `<div class="facts">${esc(facts.join(" \u00b7 "))}</div>` : "")
     + (others ? `<div class="others">${others}</div>` : "")
-    + (me && c.walked && !c.editing ? `<div class="btnrow"><button class="btn" id="pinHere">${pinIcon("dot")}Pin here</button></div>` : "")
+    + (c.walked && !c.editing ? `<div class="btnrow">${me ? `<button class="btn" id="pinHere">${pinIcon("dot")}Pin here</button>` : ""}`
+        + `<a class="btn" href="${see3d(c.tap.x, c.tap.z)}">See in 3D</a></div>` : "")
     + `<div class="note" id="nameNote">${f.by ? "named by " + esc(f.by) : (me ? "the world's own name" : "the world's own name \u00b7 sign in to rename")}</div>`;
   placeCard(c);
   const ph = document.getElementById("pinHere"); if(ph) ph.onclick = () => { c.adding = true; renderCard(); };
@@ -845,6 +846,8 @@ function placeCard(c){
   namer.style.top  = Math.max(8, Math.min(r.height - namer.offsetHeight - 8, c.y + 14)) + "px";
 }
 function closeCard(){ namer.hidden = true; CARD = null; stage.classList.remove("placing"); }
+// the 3D page stands you on the spot, facing north
+const see3d = (x, z) => `view.html#at=${Math.round(x)},${Math.round(z)}`;
 async function saveName(name){
   const c = CARD; if(!c) return;
   const f = c.here[c.i];
@@ -908,7 +911,8 @@ function renderPin(c){
   } else if(c.mode === "confirm"){
     body = title + by + `<div class="btnrow"><button class="btn" id="pinDelete">Delete</button><button class="btn quiet" id="pinCancel">Keep</button></div>`;
   } else {
-    body = title + by + (me ? `<div class="btnrow"><button class="btn" id="pinMove">Move</button><button class="btn" id="pinAsk">Delete</button></div>` : "");
+    body = title + by + `<div class="btnrow">` + (me ? `<button class="btn" id="pinMove">Move</button><button class="btn" id="pinAsk">Delete</button>` : "")
+      + `<a class="btn" href="${see3d(p.x, p.z)}">See in 3D</a></div>`;
     note = note || (me ? "" : "sign in to change it");
   }
   namer.innerHTML = `<div class="eyebrow">${esc(head)}</div>` + body

@@ -96,6 +96,7 @@ a.card{display:block;color:var(--ink)}
 .btn svg{width:18px;height:18px;overflow:visible;pointer-events:none;flex:0 0 auto}
 .btn.sq{width:34px;padding:0}
 .btn.quiet{background:transparent;color:var(--muted)}
+a.btn,a.btn:hover{text-decoration:none}   /* a link that looks like a button: See in 3D */
 /* floating over the map: a size of its own, glassed, lifted off the ground */
 .btn.map{width:var(--ctl);height:var(--ctl);padding:0;background:var(--glass);font-size:1rem;box-shadow:var(--shadow)}
 .chip{padding:.2rem .6rem;border-radius:var(--pill);border:1px solid var(--line);background:var(--hair);

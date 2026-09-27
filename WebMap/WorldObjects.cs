@@ -36,7 +36,10 @@ namespace WebMap
         private static HashSet<string> enabledCats;
         private static readonly ConcurrentDictionary<int, Chunk> chunks = new ConcurrentDictionary<int, Chunk>();
         private static readonly ConcurrentDictionary<int, int> chunkHash = new ConcurrentDictionary<int, int>();
-        private static Dictionary<int, List<Obj>> building;
+        // Per-chunk lists kept from sweep to sweep and refilled: a world holds most of a
+        // million of these, and fresh lists every minute were a heap of garbage a sweep.
+        private static readonly Dictionary<int, List<Obj>> lists = new Dictionary<int, List<Obj>>();
+        private static bool building;
         private static readonly int hashScale = "scale".GetStableHashCode();
         private static readonly int hashScaleScalar = "scaleScalar".GetStableHashCode();
 
@@ -52,7 +55,11 @@ namespace WebMap
         }
 
         // Game thread, at the start of the walk.
-        public static void Begin() { building = new Dictionary<int, List<Obj>>(chunks.Count + 16); }
+        public static void Begin()
+        {
+            foreach (var l in lists.Values) l.Clear();
+            building = true;
+        }
 
         private static bool Enabled(Cat c)
         {
@@ -69,7 +76,7 @@ namespace WebMap
         // costs one array read and no ZDO lookups.
         public static void Observe(ZDO zdo, int prefabHash, Vector3 pos, long creator)
         {
-            if (building == null) return;
+            if (!building) return;
             int cx = ChunkOf(pos.x), cz = ChunkOf(pos.z);
             if (cx < -64 || cz < -64 || cx > 63 || cz > 63 || !MapFog.ChunkExplored(cx, cz)) return;
             Cat cat = Classify(prefabHash);
@@ -85,7 +92,7 @@ namespace WebMap
             }
             catch { }
             int key = Key(cx, cz);
-            if (!building.TryGetValue(key, out var list)) building[key] = list = new List<Obj>(256);
+            if (!lists.TryGetValue(key, out var list)) lists[key] = list = new List<Obj>(256);
             list.Add(o);
         }
 
@@ -125,14 +132,14 @@ namespace WebMap
         // The sweep's pool thread, after the walk. Returns the number of chunks that changed.
         public static int Finish()
         {
-            var built = building;
-            building = null;
-            if (built == null) return 0;
+            if (!building) return 0;
+            building = false;
             int changed = 0, total = 0;
             var seen = new HashSet<int>();
-            foreach (var kv in built)
+            foreach (var kv in lists)
             {
                 var list = kv.Value;
+                if (list.Count == 0) continue;
                 total += list.Count;
                 list.Sort((a, b) => a.prefab != b.prefab ? a.prefab.CompareTo(b.prefab) : a.x != b.x ? a.x.CompareTo(b.x) : a.z.CompareTo(b.z));
                 int h = 17;

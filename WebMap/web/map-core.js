@@ -711,10 +711,10 @@ function ago(iso){
 function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 // ---------- the site chrome ----------
-// Four pages wear the same bar, so a link added here reaches all of them; the
+// Five pages wear the same bar, so a link added here reaches all of them; the
 // rules it needs are in site.css. Whose name it carries and where it points out
 // to are the deployment's, not this file's.
-const NAV_PAGES = [["index", "Map"], ["portals", "Portals"], ["plan", "Plan"], ["players", "Players"]];
+const NAV_PAGES = [["index", "Map"], ["view", "3D"], ["portals", "Portals"], ["plan", "Plan"], ["players", "Players"]];
 let navEl = null, navPage = "";
 // Nameless until the world names itself, and "Valheim" until even that arrives.
 function brand(){ return cfg.brand || worldName || "Valheim"; }
