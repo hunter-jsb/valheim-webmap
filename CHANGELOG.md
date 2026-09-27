@@ -16,6 +16,9 @@
   The tour visits the records too: the tallest peak circled, the biggest lake from above,
   and the longest river flown along its own course. The nav reads Map, World, Portals,
   Players, Plan.
+* The tour has more to visit: the pins players placed, the places they named, a mountain,
+  a bay, a walked corner with no build near it, and the sacrificial stones at the centre;
+  a dozen stops a cycle with no more than two of a kind.
 * A cinematic, for a screen left open: the ▶ among the map's buttons (or a link ending in
   `#tour`) starts a tour of the world's places one after another -- who is on, the portal
   hubs, the biggest build, where people die, the graves, the traders, a boat, the largest
