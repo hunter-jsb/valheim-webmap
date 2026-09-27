@@ -357,8 +357,10 @@
        tap the map), or pick <b>3D</b> under View in the <b>Layers</b> card, or <b>See in 3D</b>
        on a place or a pin, and you stand there at eye height. Drag to look around, scroll or
        pinch to zoom the eye, <b>W A S D</b> or the arrows to walk (<b>Shift</b> runs), click the
-       ground to walk there; &#8645; circles the spot from above. <b>Map</b> or <b>Esc</b> brings
-       you back to the map where you stood. Buildings, trees and rocks are the game's own models.</p>
+       ground to walk there; &#8645; circles the spot from above, where the same keys fly you
+       over the land (<b>E</b> or <b>Space</b> rise, <b>Q</b> or <b>Shift</b> sink). <b>Map</b> or
+       <b>Esc</b> brings you back to the map where you stood. Buildings, trees and rocks are the
+       game's own models, mined rocks as far as they have been mined.</p>
 
     <h3>Show yourself on the map</h3>
     <p>Press <b>M</b> in game and turn on <b>visible to other players</b>. Without it you
@@ -1142,9 +1144,12 @@ function status3D(s){
     : s.ground ? "" : "Reading the ground…");
 }
 let hintT = 0;
-function hint3D(){
+function hint3D(orbit){
   const h = v3d$("v3dHint");
-  h.textContent = PHONE3D ? "Drag to look around · tap the ground to walk there"
+  h.textContent = orbit
+    ? (PHONE3D ? "Drag to pan · two fingers to turn and zoom"
+               : "Drag to pan, right-drag to turn · W A S D to fly over · E and Q up and down · Shift faster")
+    : PHONE3D ? "Drag to look around · tap the ground to walk there"
     : "Drag to look · W A S D to walk · click the ground to go there · Esc for the map";
   h.classList.remove("gone");
   clearTimeout(hintT); hintT = setTimeout(() => h.classList.add("gone"), 6000);
@@ -1156,6 +1161,7 @@ v3d$("v3dMode").onclick = () => {
   V3D.setMode(m);
   v3dEl.classList.toggle("orbit", m === "orbit");
   v3d$("v3dMode").title = m === "street" ? "Overview: circle the spot from above" : "Street: stand on the spot";
+  hint3D(m === "orbit");
 };
 v3d$("v3dOpts").onclick = () => v3d$("v3dTray").classList.toggle("open");
 v3d$("v3dTime").addEventListener("click", e => {

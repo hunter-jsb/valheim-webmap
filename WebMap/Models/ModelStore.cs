@@ -20,12 +20,14 @@ namespace WebMap.Models
     // never leave the server.
     internal static class ModelStore
     {
-        public const int FORMAT = 5;   // 5: locked meshes come from the mesh cache; index records which ones each prefab needs
+        public const int FORMAT = 6;   // 5: locked meshes come from the mesh cache; 6: a mineable rock names the hit area of each part
 
         public sealed class Info
         {
             public int hash; public string name; public string cat; public bool ok; public int tris; public bool tex; public float[] bounds = new float[6]; public int renderers, unreadable;
             public int ver;                   // hash of the .glb: the page's ?v=, so a re-export is fetched anew and the rest stay cached
+            public int rockKind;              // 5 MineRock5, 1 MineRock, 0 not a rock mined in pieces
+            public int[] partAreas;           // per glTF primitive, its hit area (-1 none, -2 MineRock's whole rock)
             public List<string> wants = new List<string>();   // texture names its materials reference
             public List<string> meshWants = new List<string>();     // locked meshes it uses from the mesh cache (MeshCache.Key)
             public List<string> meshMissing = new List<string>();   // those the cache did not have when it was exported
@@ -87,6 +89,9 @@ namespace WebMap.Models
                                 var mm = JsonParser.Arr(d, "mm");
                                 if (mm != null) foreach (var o in mm) if (o is string ms) info.meshMissing.Add(ms);
                                 info.renderers = (int)JsonParser.Num(d, "r"); info.unreadable = (int)JsonParser.Num(d, "u"); info.ver = (int)JsonParser.Num(d, "v");
+                                info.rockKind = (int)JsonParser.Num(d, "rk");
+                                var pa = JsonParser.Arr(d, "pa");
+                                if (pa != null) { info.partAreas = new int[pa.Count]; for (int i = 0; i < pa.Count; i++) info.partAreas[i] = pa[i] is double x ? (int)x : -1; }
                                 var k = JsonParser.Arr(d, "k");
                                 if (k != null && k.Count == 6) { info.canopy = new float[6]; for (int i = 0; i < 6; i++) info.canopy[i] = (float)(k[i] is double x ? x : 0); }
                                 info.canopyTex = JsonParser.Str(d, "kt", null);
@@ -305,6 +310,7 @@ namespace WebMap.Models
                     var fallback = FallbackColor(hash, go.name, cat);
                     var r = PrefabExporter.Export(go, root, fallback, cat);
                     info.renderers = r.renderers; info.unreadable = r.unreadable; info.wants = r.wants; info.meshWants = r.meshWants; info.meshMissing = r.meshMissing;
+                    if (r.rockKind > 0) { info.rockKind = r.rockKind; info.partAreas = r.partAreas.ToArray(); }
                     if (r.hasCanopy) { info.canopy = r.canopy; info.canopyTex = r.canopyTexture; info.canopyColor = r.canopyColor; }
                     if (r.glb != null)
                     {
@@ -392,6 +398,11 @@ namespace WebMap.Models
             j.Key(i.hash.ToString(CultureInfo.InvariantCulture)).BeginObject();
             j.Prop("n", i.name).Prop("c", i.cat).Prop("m", i.ok).Prop("t", i.tris).Prop("x", i.tex);
             if (i.ok) j.Prop("v", i.ver);
+            if (i.rockKind > 0 && i.partAreas != null)
+            {
+                j.Prop("rk", i.rockKind);
+                j.Key("pa").BeginArray(); foreach (int a in i.partAreas) j.Value(a); j.End();
+            }
             if (full)
             {
                 j.Prop("r", i.renderers).Prop("u", i.unreadable);

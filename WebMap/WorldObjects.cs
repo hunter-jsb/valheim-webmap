@@ -28,7 +28,14 @@ namespace WebMap
         public struct Obj
         {
             public int prefab; public float x, y, z; public float qx, qy, qz, qw; public float sx, sy, sz; public bool creator;
+            public byte[] gone;   // a mined rock: bit i set when hit area i is broken off
         }
+
+        // Rocks mined in pieces: MineRock5 keeps every area's health in one packed value
+        // (MineRock5.LoadHealth), MineRock one float per area under "Health<i>".
+        private struct Rock { public int kind, areas; }
+        private static readonly Dictionary<int, Rock> rocks = new Dictionary<int, Rock>();
+        private static readonly List<int> healthKeys = new List<int>();
 
         private sealed class Chunk { public int rev; public Obj[] objs; public byte[] bytes; }
 
@@ -91,9 +98,49 @@ namespace WebMap
                 if (ss > 0 && Math.Abs(ss - 1f) > 0.001f) { o.sx *= ss; o.sy *= ss; o.sz *= ss; }
             }
             catch { }
+            if (rocks.TryGetValue(prefabHash, out var rock))
+                try { o.gone = rock.kind == 5 ? GoneFromHealth(Packed(zdo)) : GoneFromFloats(zdo, rock.areas); } catch { }
             int key = Key(cx, cz);
             if (!lists.TryGetValue(key, out var list)) lists[key] = list = new List<Obj>(256);
             list.Add(o);
+        }
+
+        // MineRock5's value: a ZPackage of an int count and a float per area, once a base64
+        // string, read as bytes too in case a later game stores it so
+        private static byte[] Packed(ZDO zdo)
+        {
+            byte[] raw = zdo.GetByteArray(ZDOVars.s_health);
+            if (raw != null) return raw;
+            string s = zdo.GetString(ZDOVars.s_health, "");
+            return s.Length > 0 ? Convert.FromBase64String(s) : null;
+        }
+
+        // bit i for each area at or below zero health; null when none is
+        internal static byte[] GoneFromHealth(byte[] raw)
+        {
+            if (raw == null || raw.Length < 4) return null;
+            int n = Math.Min(BitConverter.ToInt32(raw, 0), Math.Min((raw.Length - 4) / 4, 4096));
+            byte[] gone = null;
+            for (int i = 0; i < n; i++)
+                if (BitConverter.ToSingle(raw, 4 + i * 4) <= 0f)
+                {
+                    if (gone == null) gone = new byte[(n + 7) / 8];
+                    gone[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            return gone;
+        }
+
+        private static byte[] GoneFromFloats(ZDO zdo, int areas)
+        {
+            byte[] gone = null;
+            while (healthKeys.Count < areas) healthKeys.Add(("Health" + healthKeys.Count).GetStableHashCode());
+            for (int i = 0; i < areas; i++)
+                if (zdo.GetFloat(healthKeys[i], 1f) <= 0f)
+                {
+                    if (gone == null) gone = new byte[(areas + 7) / 8];
+                    gone[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            return gone;
         }
 
         // Game thread (ZNetScene), once per prefab.
@@ -105,6 +152,10 @@ namespace WebMap
             try { go = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(prefabHash) : null; } catch { }
             if (go != null && PrefabExporter.IsVisibleThing(go))
             {
+                // counted as the game counts its hit areas (PrefabExporter names each part's)
+                var r5 = go.GetComponent<MineRock5>();
+                var r1 = r5 == null ? go.GetComponent<MineRock>() : null;
+                if (r5 != null || r1 != null) rocks[prefabHash] = new Rock { kind = r5 != null ? 5 : 1, areas = PrefabExporter.HitAreas(go).Length };
                 string n = go.name.ToLowerInvariant();
                 if (go.GetComponent("Piece") != null || go.GetComponent("WearNTear") != null) c = Cat.Piece;
                 else if (n.Contains("_log") || n.EndsWith("logs") || n.Contains("_trunk") || n.Contains("_stub") || n.Contains("stubbe")
@@ -144,7 +195,10 @@ namespace WebMap
                 list.Sort((a, b) => a.prefab != b.prefab ? a.prefab.CompareTo(b.prefab) : a.x != b.x ? a.x.CompareTo(b.x) : a.z.CompareTo(b.z));
                 int h = 17;
                 foreach (var o in list)
+                {
                     h = unchecked(h * 31 + o.prefab + (int)(o.x * 10) * 7 + (int)(o.z * 10) * 13 + (int)(o.y * 10) * 3 + (int)(o.qy * 1000) * 101 + (int)(o.sx * 100));
+                    if (o.gone != null) foreach (byte b in o.gone) h = unchecked(h * 31 + b + 1);   // a piece mined off moves the chunk
+                }
                 seen.Add(kv.Key);
                 if (chunkHash.TryGetValue(kv.Key, out int old) && old == h) continue;
                 chunkHash[kv.Key] = h;
@@ -164,12 +218,15 @@ namespace WebMap
             return changed;
         }
 
-        // Any thread. A walked chunk with nothing in it is an empty OBJ1; an unwalked
+        // Any thread. A walked chunk with nothing in it is an empty OBJ2; an unwalked
         // one is null, and the caller answers 404. rev is the chunk's own revision.
         //
-        // Little-endian: 'OBJ1', u32 count, u32 prefabCount, i32[prefabCount] prefab
-        // hashes, then per object: u16 prefab index, u8 flags (1 = player-built), u8 pad,
-        // f32 x y z, f32 qx qy qz qw, f32 sx sy sz (44 bytes). Unity's frame: y up, z north.
+        // Little-endian: 'OBJ2', u32 count, u32 prefabCount, i32[prefabCount] prefab
+        // hashes, then per object: u16 prefab index, u8 flags (1 = player-built, 2 = pieces
+        // mined off), u8 pad, f32 x y z, f32 qx qy qz qw, f32 sx sy sz (44 bytes; Unity's
+        // frame, y up, z north). Then the mined rocks: u32 count, and per rock u32 object
+        // index, u16 bits, bits/8 bytes, bit i (byte i>>3, bit i&7) set when hit area i is
+        // gone. OBJ1 was the same without the flag and the table.
         public static byte[] ChunkBytes(int cx, int cz, out int rev)
         {
             rev = 0;
@@ -178,28 +235,43 @@ namespace WebMap
             rev = c.rev;
             byte[] cached = c.bytes;
             if (cached != null) return cached;
+            return c.bytes = Encode(c.objs);
+        }
+
+        private static byte[] Encode(Obj[] objs)
+        {
             var table = new Dictionary<int, int>();
             var order = new List<int>();
-            foreach (var o in c.objs) if (!table.ContainsKey(o.prefab)) { table[o.prefab] = order.Count; order.Add(o.prefab); }
-            using (var ms = new MemoryStream(12 + order.Count * 4 + c.objs.Length * 44))
+            foreach (var o in objs) if (!table.ContainsKey(o.prefab)) { table[o.prefab] = order.Count; order.Add(o.prefab); }
+            using (var ms = new MemoryStream(16 + order.Count * 4 + objs.Length * 44))
             using (var bw = new BinaryWriter(ms))
             {
-                bw.Write((byte)'O'); bw.Write((byte)'B'); bw.Write((byte)'J'); bw.Write((byte)'1');
-                bw.Write(c.objs.Length); bw.Write(order.Count);
+                bw.Write((byte)'O'); bw.Write((byte)'B'); bw.Write((byte)'J'); bw.Write((byte)'2');
+                bw.Write(objs.Length); bw.Write(order.Count);
                 foreach (int p in order) bw.Write(p);
-                foreach (var o in c.objs)
+                int mined = 0;
+                foreach (var o in objs)
                 {
-                    bw.Write((ushort)table[o.prefab]); bw.Write((byte)(o.creator ? 1 : 0)); bw.Write((byte)0);
+                    if (o.gone != null) mined++;
+                    bw.Write((ushort)table[o.prefab]); bw.Write((byte)((o.creator ? 1 : 0) | (o.gone != null ? 2 : 0))); bw.Write((byte)0);
                     bw.Write(o.x); bw.Write(o.y); bw.Write(o.z);
                     bw.Write(o.qx); bw.Write(o.qy); bw.Write(o.qz); bw.Write(o.qw);
                     bw.Write(o.sx); bw.Write(o.sy); bw.Write(o.sz);
                 }
+                bw.Write(mined);
+                for (int i = 0; i < objs.Length; i++)
+                {
+                    if (objs[i].gone == null) continue;
+                    bw.Write(i); bw.Write((ushort)(objs[i].gone.Length * 8)); bw.Write(objs[i].gone);
+                }
                 bw.Flush();
-                c.bytes = ms.ToArray();
-                return c.bytes;
+                return ms.ToArray();
             }
         }
 
-        private static readonly byte[] Empty = { (byte)'O', (byte)'B', (byte)'J', (byte)'1', 0, 0, 0, 0, 0, 0, 0, 0 };
+        // for the tests: a chunk's bytes from objects as the walk would find them
+        internal static byte[] EncodeForTests(Obj[] objs) => Encode(objs);
+
+        private static readonly byte[] Empty = { (byte)'O', (byte)'B', (byte)'J', (byte)'2', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     }
 }

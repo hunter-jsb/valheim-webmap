@@ -404,10 +404,13 @@ if (uFogOn > 0.5) {
       const cat = info ? info.c : 'other';
       const shadows = !this.phone;
       if (parts) {
-        for (const part of parts) {
-          const im = new THREE.InstancedMesh(part.geometry, part.material, list.length);
+        for (const [p, part] of parts.entries()) {
+          // a part the mining took off stands on none of the rocks it is gone from
+          const on = info && info.pa ? list.filter((o) => partShows(info, p, o)) : list;
+          if (!on.length) continue;
+          const im = new THREE.InstancedMesh(part.geometry, part.material, on.length);
           im.castShadow = shadows; im.receiveShadow = true;
-          list.forEach((o, i) => im.setMatrixAt(i, place(o)));
+          on.forEach((o, i) => im.setMatrixAt(i, place(o)));
           im.instanceMatrix.needsUpdate = true;
           im.computeBoundingSphere();
           group.add(im);
@@ -603,6 +606,7 @@ if (uFogOn > 0.5) {
     const y = this.standAt(this.me.x, this.me.z) ?? this.waterLevel, h = this.me.heading * Math.PI / 180, d = 140;
     this.orbit.target.set(this.me.x, y, -this.me.z);
     this.camera.position.set(this.me.x - Math.sin(h) * d * 0.7, y + d * 0.7, -this.me.z + Math.cos(h) * d * 0.7);
+    this.lift = 0;                   // metres the circled point rides above the ground (E and Q)
     this.orbit.update();
   }
 
@@ -681,9 +685,35 @@ if (uFogOn > 0.5) {
     this.glide = { x: p.x, z: -p.z, t0: performance.now(), x0: this.me.x, z0: this.me.z };
   }
 
+  // The overview flies on the same keys: W A S D or the arrows carry the point it circles,
+  // and the camera with it, over the ground the way the camera faces; E or Space raise it,
+  // Q or Shift on its own lower it; Shift with any other key goes three times as fast.
+  orbitKeys(dt) {
+    const K = this.keys, t = this.orbit.target, cam = this.camera.position;
+    const off = _v2.copy(cam).sub(t), dist = off.length();
+    const moving = ['w', 's', 'a', 'd', 'e', ' ', 'q', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => K.has(k));
+    const speed = Math.max(25, dist) * 0.8 * (K.has('Shift') && moving ? 3 : 1) * dt;
+    let fx = -off.x, fz = -off.z;
+    const l = Math.hypot(fx, fz) || 1; fx /= l; fz /= l;            // forward on the ground; right is (-fz, fx)
+    let f = 0, s = 0, up = 0;
+    if (K.has('w') || K.has('ArrowUp')) f += 1;
+    if (K.has('s') || K.has('ArrowDown')) f -= 1;
+    if (K.has('d') || K.has('ArrowRight')) s += 1;
+    if (K.has('a') || K.has('ArrowLeft')) s -= 1;
+    if (K.has('e') || K.has(' ')) up += 1;
+    if (K.has('q') || (K.has('Shift') && !moving)) up -= 1;
+    if (f || s) {
+      const n = Math.hypot(f, s), dx = (fx * f - fz * s) / n * speed, dz = (fz * f + fx * s) / n * speed;
+      t.x += dx; t.z += dz; cam.x += dx; cam.z += dz;
+    }
+    if (up) this.lift = Math.min(800, Math.max(0, this.lift + up * speed * 0.6));
+    if (f || s || up) this.scheduleUpdate();
+  }
+
   handleKeys(dt) {
     const K = this.keys;
-    if (this.mode !== 'street' || K.size === 0) return;
+    if (K.size === 0) return;
+    if (this.mode === 'orbit') return this.orbitKeys(dt);
     const speed = (K.has('Shift') ? RUN : WALK) * dt, h = this.me.heading * Math.PI / 180;
     let f = 0, s = 0;
     if (K.has('w') || K.has('ArrowUp')) f += 1;
@@ -776,9 +806,14 @@ if (uFogOn > 0.5) {
     this.lastFrame = now;
     if (this.mode === 'street') { this.handleKeys(dt); this.placeCamera(dt); }
     else {
+      this.handleKeys(dt);
       this.orbit.update();
+      // the circled point follows the ground, lifted by what E and Q have made of it
       const t = this.orbit.target, h = this.heightAt(t.x, -t.z);
-      if (h !== null && Math.abs(h - t.y) > 0.5) { const d = (h - t.y) * 0.2; t.y += d; this.camera.position.y += d; }
+      if (h !== null) {
+        const want = Math.max(h, this.waterLevel) + (this.lift || 0);
+        if (Math.abs(want - t.y) > 0.05) { const d = (want - t.y) * Math.min(1, dt * 10); t.y += d; this.camera.position.y += d; }
+      }
     }
     for (const p of this.players.values()) p.label.quaternion.copy(this.camera.quaternion);
     // the shadow box stands a little ahead of you, where the eye is
@@ -836,15 +871,18 @@ if (uFogOn > 0.5) {
   }
 }
 
-const KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e', 'Shift', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e', ' ', 'Shift', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 const IDENTITY = new THREE.Matrix4();
-const _ahead = new THREE.Vector3();
+const _ahead = new THREE.Vector3(), _v2 = new THREE.Vector3();
 
 // OBJ1, little-endian: 'OBJ1', u32 count, u32 prefabs, i32[prefabs] hashes, then per object
 // u16 prefab index, u8 flags (1 = player-built), u8 pad, f32 x y z, qx qy qz qw, sx sy sz.
+// OBJ2 then carries the mined rocks: u32 count, and per rock u32 object index, u16 bits and
+// bits/8 bytes, bit i set when hit area i is broken off. OBJ1, from an older mod, has no table.
 function decodeObjects(buf) {
   const dv = new DataView(buf), objs = [];
-  if (buf.byteLength < 12 || String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== 'OBJ1') return objs;
+  const magic = buf.byteLength >= 12 ? String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) : '';
+  if (magic !== 'OBJ1' && magic !== 'OBJ2') return objs;
   const n = dv.getUint32(4, true), np = dv.getUint32(8, true), table = new Int32Array(np);
   let o = 12;
   for (let i = 0; i < np; i++) { table[i] = dv.getInt32(o, true); o += 4; }
@@ -854,7 +892,27 @@ function decodeObjects(buf) {
     objs.push({ prefab: table[pi], creator: (flags & 1) !== 0, x: f(0), y: f(1), z: f(2), qx: f(3), qy: f(4), qz: f(5), qw: f(6), sx: f(7), sy: f(8), sz: f(9) });
     o += 40;
   }
+  if (magic === 'OBJ2' && o + 4 <= buf.byteLength) {
+    const mined = dv.getUint32(o, true); o += 4;
+    for (let k = 0; k < mined && o + 6 <= buf.byteLength; k++) {
+      const i = dv.getUint32(o, true), bits = dv.getUint16(o + 4, true); o += 6;
+      if (objs[i]) objs[i].gone = new Uint8Array(buf.slice(o, o + bits / 8));
+      o += bits / 8;
+    }
+  }
   return objs;
+}
+
+// Does this part of the model stand on this object? A mined rock's broken-off areas do not;
+// MineRock (rk 1) with a whole-rock model (area -2) shows that until the first piece falls, and its
+// pieces only after.
+function partShows(info, part, o) {
+  const a = info && info.pa ? info.pa[part] ?? -1 : -1;
+  if (a === -1) return true;
+  const gone = o.gone;
+  if (a === -2) return !gone;
+  if (info.rk === 1 && !gone && (info.whole ??= info.pa.includes(-2))) return false;
+  return !(gone && (gone[a >> 3] >> (a & 7)) & 1);
 }
 
 // FNV-1a over the bytes, a word at a time: is this the chunk we already have?

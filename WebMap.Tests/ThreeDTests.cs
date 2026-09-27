@@ -19,8 +19,33 @@ namespace WebMap.Tests
             Assert.True(MapFog.ChunkExplored(0, 0));
             Assert.False(MapFog.ChunkExplored(1, 0));
             Assert.Null(WorldObjects.ChunkBytes(1, 0, out _));
-            Assert.Equal("OBJ1", System.Text.Encoding.ASCII.GetString(WorldObjects.ChunkBytes(0, 0, out _), 0, 4));
+            Assert.Equal("OBJ2", System.Text.Encoding.ASCII.GetString(WorldObjects.ChunkBytes(0, 0, out _), 0, 4));
             MapFog.RebuildChunks(null);
+        }
+
+        // A rock mined out for a base must not stand there whole in 3D.
+        [Fact]
+        public void AMinedRocksFallenPiecesLeaveTheServerWithIt()
+        {
+            byte[] Health(params float[] hp)
+            {
+                var ms = new MemoryStream(); var w = new BinaryWriter(ms);
+                w.Write(hp.Length); foreach (float h in hp) w.Write(h);   // MineRock5.SaveHealth's package
+                return ms.ToArray();
+            }
+            Assert.Null(WorldObjects.GoneFromHealth(Health(5f, 5f, 5f)));
+            byte[] gone = WorldObjects.GoneFromHealth(Health(5f, 0f, -2f, 3f));
+            Assert.Equal(new byte[] { 0b0110 }, gone);
+
+            var bytes = WorldObjects.EncodeForTests(new[] {
+                new WorldObjects.Obj { prefab = 1, qw = 1, sx = 1, sy = 1, sz = 1 },
+                new WorldObjects.Obj { prefab = 2, qw = 1, sx = 1, sy = 1, sz = 1, gone = gone } });
+            int rec = 12 + 2 * 4, table = rec + 2 * 44;
+            Assert.Equal(2, bytes[rec + 44 + 2]);                       // the second object's flag
+            Assert.Equal(1, BitConverter.ToInt32(bytes, table));        // one mined rock
+            Assert.Equal(1, BitConverter.ToInt32(bytes, table + 4));    // it is object 1
+            Assert.Equal(8, BitConverter.ToUInt16(bytes, table + 8));   // eight areas' bits
+            Assert.Equal(0b0110, bytes[table + 10]);
         }
 
         // A misread terraform blob puts the ground wrong under every build on it.

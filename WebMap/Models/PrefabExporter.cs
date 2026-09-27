@@ -28,6 +28,9 @@ namespace WebMap.Models
             public List<string> meshWants = new List<string>();     // keys of locked meshes (MeshCache.Key) this prefab uses
             public List<string> meshMissing = new List<string>();   // those with no cache file yet (drawn without that part)
             // canopy: the foliage the model does NOT carry, summarised for the viewer's billboard leaves
+            // a mineable rock: which hit area each written part belongs to (-1 none, -2 MineRock's
+            // whole-rock model), in the order the game counts its areas; rockKind 5 MineRock5, 1 MineRock
+            public List<int> partAreas = new List<int>(); public int rockKind, areaCount;
             public string category = "other"; public bool hasCanopy; public bool canopyLeafNamed; public float[] canopy = { 1e9f, 1e9f, 1e9f, -1e9f, -1e9f, -1e9f }; public string canopyTexture; public float[] canopyColor = { 0.35f, 0.55f, 0.25f };
         }
 
@@ -38,6 +41,19 @@ namespace WebMap.Models
         // engine (readable textures) or from TextureExtractor (everything else).
         public static string TextureFileName(string texName) => "tex_" + System.Text.RegularExpressions.Regex.Replace(texName ?? "", "[^a-zA-Z0-9_-]", "_") + ".png";
         private static readonly string[] skipComponents = { "Character", "Player", "ItemDrop", "Projectile", "Ragdoll", "Fish", "Procreation", "Tameable", "MonsterAI", "AnimalAI" };
+
+        // A mineable rock's hit areas, in the game's own order: MineRock5 counts every
+        // collider under it (Awake), MineRock those under its area root (Start). Collider
+        // lives in UnityEngine.PhysicsModule, which the mod does not build against, so it
+        // is found by name; the non-generic call walks in the same order as the generic one.
+        private static readonly Type colliderType = Type.GetType("UnityEngine.Collider, UnityEngine.PhysicsModule");
+        internal static Component[] HitAreas(GameObject rock)
+        {
+            if (colliderType == null || rock == null) return new Component[0];
+            var r1 = rock.GetComponent<MineRock>();
+            var root = r1 != null && rock.GetComponent<MineRock5>() == null && r1.m_areaRoot != null ? r1.m_areaRoot : rock;
+            return root.GetComponentsInChildren(colliderType);
+        }
 
         // Does the prefab render anything at all (and is it a thing, not a creature or an item)?
         public static bool IsVisibleThing(GameObject go)
@@ -70,6 +86,33 @@ namespace WebMap.Models
             }
             foreach (var r in lodZero) hidden.Remove(r);
 
+            // A mineable rock loses pieces as it is mined, and the world keeps a health per hit
+            // area. The areas are the colliders, counted as the game counts them: MineRock5 all
+            // under the rock (Awake), MineRock those under its area root (Start). MineRock also
+            // has a whole-rock model shown until the first piece falls, and pieces whose
+            // renderers start switched off; both are exported, told apart per part.
+            var areas = new Dictionary<Transform, int>();
+            Transform wholeModel = null;
+            var rock5 = prefab.GetComponent<MineRock5>();
+            var rock1 = rock5 == null ? prefab.GetComponent<MineRock>() : null;
+            if (rock5 != null || rock1 != null)
+            {
+                Component[] cols = HitAreas(prefab);
+                for (int i = 0; i < cols.Length; i++) if (!areas.ContainsKey(cols[i].transform)) areas[cols[i].transform] = i;
+                res.rockKind = rock5 != null ? 5 : 1; res.areaCount = cols.Length;
+                if (rock1 != null && rock1.m_baseModel != null) wholeModel = rock1.m_baseModel.transform;
+            }
+            // the hit area a renderer goes with: its own collider or the nearest one above it
+            int AreaOf(Transform t)
+            {
+                for (var p = t; p != null && p != prefab.transform.parent; p = p.parent)
+                {
+                    if (areas.TryGetValue(p, out int i)) return i;
+                    if (p == wholeModel) return -2;
+                }
+                return -1;
+            }
+
             Matrix4x4 toRoot = prefab.transform.worldToLocalMatrix;
             int tris = 0;
             var stack = new Stack<Transform>();
@@ -81,7 +124,9 @@ namespace WebMap.Models
                 foreach (Transform c in t) stack.Push(c);
 
                 var mr = t.GetComponent<MeshRenderer>();
-                if (mr == null || !mr.enabled || hidden.Contains(mr)) continue;
+                int area = areas.Count > 0 ? AreaOf(t) : -1;
+                if (mr == null || hidden.Contains(mr)) continue;
+                if (!mr.enabled && !(rock1 != null && area >= 0)) continue;   // MineRock's pieces wait switched off
                 var mf = t.GetComponent<MeshFilter>();
                 if (mf == null || mf.sharedMesh == null) continue;
                 Mesh mesh = mf.sharedMesh;
@@ -191,7 +236,9 @@ namespace WebMap.Models
                         if (prim.textureUri == null) { res.canopyColor[0] = prim.r; res.canopyColor[1] = prim.g; res.canopyColor[2] = prim.b; }
                         continue;
                     }
+                    int before = writer.Count;
                     writer.Add(prim);
+                    if (writer.Count > before) res.partAreas.Add(area);   // one per glTF primitive, in order
                     tris += raw.Length / 3;
                 }
             }
