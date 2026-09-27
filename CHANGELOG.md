@@ -32,7 +32,10 @@
   with light armour a rogue, the other weapons a fighter, the hammer a builder, the pickaxe a
   harvester; under ten minutes holding anything, nobody is anything yet. The class sits on
   the roster row and the player's page with its reason, a Gear group shows what they were
-  last seen wearing, and the spotlight turns through it.
+  last seen wearing, and the spotlight turns through it. The class is read three ways and
+  summed -- what is worn, what is carried, held and landed, and what has been done as shares
+  of the roster's best -- so it shows from the first sample, faint until the hands or the
+  hits have said their piece; the worn set carries the two back slots for it.
 * A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
   two to three are what people call continents. A land that grew into one keeps its stem
   (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
