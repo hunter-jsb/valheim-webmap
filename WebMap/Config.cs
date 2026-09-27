@@ -34,6 +34,14 @@ namespace WebMap
         public static string ANNOUNCE_NAME = "Server";
         public static string DISCORD_WEBHOOK = "";
 
+        // The bot side: the audit log and the two-way chat relay. Empty token turns
+        // all of it off; a deployment that never sets these keeps working as before.
+        public static string DISCORD_BOT_TOKEN = "";
+        public static string DISCORD_GUILD = "";
+        public static string DISCORD_LOG_CHANNEL = "";
+        public static string DISCORD_CHAT_CHANNEL = "";
+        public static bool CHAT_RELAY = true;
+
         public static string URL = "";
 
         // The 3D view's model library. The host rewrites the .cfg on every restart,
@@ -120,6 +128,27 @@ namespace WebMap
             DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
                 WebMapConfig.DISCORD_WEBHOOK,
                 "Discord webhook URL").Value;
+
+            DISCORD_BOT_TOKEN = config.Bind("Server", "discord_bot_token",
+                WebMapConfig.DISCORD_BOT_TOKEN,
+                "Discord bot token (Bot ...). Empty turns off the audit log, the chat "
+                + "relay and the settings picker; the webhook above keeps working either way.").Value;
+
+            DISCORD_GUILD = config.Bind("Server", "discord_guild",
+                WebMapConfig.DISCORD_GUILD,
+                "The guild (server) id the settings picker lists channels from.").Value;
+
+            DISCORD_LOG_CHANNEL = config.Bind("Server", "discord_log_channel",
+                WebMapConfig.DISCORD_LOG_CHANNEL,
+                "Channel that gets what people do on the site: names, pins, settings changes.").Value;
+
+            DISCORD_CHAT_CHANNEL = config.Bind("Server", "discord_chat_channel",
+                WebMapConfig.DISCORD_CHAT_CHANNEL,
+                "Channel relayed both ways with in-game chat.").Value;
+
+            CHAT_RELAY = config.Bind("Server", "chat_relay",
+                WebMapConfig.CHAT_RELAY,
+                "Relay chat between the game and discord_chat_channel.").Value;
 
             URL = config.Bind("Server", "webmap_url",
                 WebMapConfig.URL,

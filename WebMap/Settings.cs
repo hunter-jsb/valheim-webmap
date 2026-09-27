@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace WebMap
 {
@@ -42,6 +43,7 @@ namespace WebMap
         private static Func<string, string> Text(Action<string> put, int max, Func<string, bool> ok, string want) => s =>
             s.Length <= max && ok(s) ? Run(() => put(s)) : want;
         private static string Run(Action a) { a(); return null; }
+        private static bool DigitsOrEmpty(string v) => v.Length == 0 || Regex.IsMatch(v, @"^\d+$");
 
         private static readonly Entry[] entries = {
             new Entry { key = "explore_radius", kind = "float", live = true, desc = "How far around a player the fog lifts, in metres.",
@@ -69,6 +71,17 @@ namespace WebMap
             new Entry { key = "discord_webhook", kind = "string", secret = true, desc = "The Discord webhook that gets joins, leaves and deaths. Empty turns it off.",
                         get = () => WebMapConfig.DISCORD_WEBHOOK, set = Text(v => WebMapConfig.DISCORD_WEBHOOK = v, 300,
                             v => v.Length == 0 || v.StartsWith("https://discord.com/api/webhooks/") || v.StartsWith("https://discordapp.com/api/webhooks/"), "a Discord webhook URL, or empty") },
+            new Entry { key = "discord_bot_token", kind = "string", live = true, secret = true,
+                        desc = "The bot token behind the audit log, the chat relay and the settings picker. Empty turns all three off.",
+                        get = () => WebMapConfig.DISCORD_BOT_TOKEN, set = Text(v => WebMapConfig.DISCORD_BOT_TOKEN = v, 100, v => true, "a bot token, or empty") },
+            new Entry { key = "discord_guild", kind = "string", live = true, desc = "The guild (server) id the settings picker lists channels from.",
+                        get = () => WebMapConfig.DISCORD_GUILD, set = Text(v => WebMapConfig.DISCORD_GUILD = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
+            new Entry { key = "discord_log_channel", kind = "string", live = true, desc = "Channel that gets what people do on the site: names, pins, settings changes.",
+                        get = () => WebMapConfig.DISCORD_LOG_CHANNEL, set = Text(v => WebMapConfig.DISCORD_LOG_CHANNEL = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
+            new Entry { key = "discord_chat_channel", kind = "string", live = true, desc = "Channel relayed both ways with in-game chat.",
+                        get = () => WebMapConfig.DISCORD_CHAT_CHANNEL, set = Text(v => WebMapConfig.DISCORD_CHAT_CHANNEL = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
+            new Entry { key = "chat_relay", kind = "bool", live = true, desc = "Relay chat both ways between the game and discord_chat_channel.",
+                        get = () => B(WebMapConfig.CHAT_RELAY), set = Bool(v => WebMapConfig.CHAT_RELAY = v) },
             new Entry { key = "texture_size", kind = "int", desc = "Pixels across the fog, forest and structure layers. 2048 is the world at 12 m a pixel; changing it starts the fog over.",
                         get = () => I(WebMapConfig.TEXTURE_SIZE), set = OneOf(v => WebMapConfig.TEXTURE_SIZE = v, 1024, 2048, 4096) },
             new Entry { key = "pixel_size", kind = "int", desc = "Metres a texture pixel covers.",
@@ -165,6 +178,7 @@ namespace WebMap
                 string shown = e.secret ? (value.Length == 0 ? "off" : "set") : (value.Length == 0 ? defaults[key] + " (the config's own)" : value);
                 log = $"{(string.IsNullOrEmpty(by) ? "someone" : by)} set {key} to {shown}" + (e.live ? "" : ", from the next restart");
                 ZLog.Log("WebMap: " + log);
+                Discord.Tell(log);
             }
             return null;
         }

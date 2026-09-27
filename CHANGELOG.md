@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* Discord moves into the mod, and talks back. `discord_bot_token` (with `discord_guild`,
+  `discord_log_channel`, `discord_chat_channel`) posts what admins do on the site --
+  a name, a pin, a setting -- straight from the mod, so the Worker no longer relays it.
+  `chat_relay` (on by default) carries in-game chat to `discord_chat_channel` as
+  **name**: text, and reads it back every three seconds, speaking a human's line in
+  game as `[Discord] name: text` (bots, webhooks and the mod's own posts never echo
+  back; at most five a poll, so a flood in Discord cannot flood the server; a restart
+  never replays history). Joins, leaves and deaths keep going out the existing
+  `discord_webhook`. `settings.html` offers a picker for the guild and its channels
+  (`GET /discord/guilds`, `GET /discord/channels?guild=`) once a token is set, and
+  falls back to a plain field otherwise; the token itself stays a masked field.
 * Admins, and settings from the site. A signed-in member who owns the Discord guild, holds
   a role with its administrator permission, or holds the role the deployment names is an
   admin: the bar shows a gear, and `settings.html` lists the mod's settings with what each

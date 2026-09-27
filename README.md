@@ -127,6 +127,32 @@ tap walked ground and **Pin here**, or tap a pin to relabel, retype, move or del
 `announce.token` beside the DLL — not in the BepInEx config, which is rewritten on
 shutdown and would discard it. No token file means the route is closed.
 
+### Discord
+
+Set `discord_bot_token` (from the site's settings page, or the config) and the mod talks
+to Discord on its own, over the bot API rather than a webhook:
+
+* **The audit log.** Every name, pin and setting change made from the site is posted to
+  `discord_log_channel` as it happens (`Discord.Tell`, from the same code that already
+  logs it to the console). Joins, leaves and deaths are unaffected — they keep going out
+  the existing `discord_webhook`.
+* **Chat, both ways.** With `discord_chat_channel` set and `chat_relay` on (the default),
+  in-game chat is posted there as **name**: text, and the mod polls the channel every
+  three seconds for the reverse: a human's line (bots, webhooks and the mod's own posts
+  are skipped) is spoken in game as `[Discord] name: text`, by guild nickname where the
+  member has one. A restart never replays history — the poll starts from the newest
+  message it finds — and at most five messages a poll are spoken, so a flood on the
+  Discord side cannot flood the server.
+* **The settings picker.** Once a token is set, `discord_guild` and the two channel
+  settings offer a dropdown on the settings page instead of a bare id field
+  (`GET /discord/guilds`, `GET /discord/channels?guild=`, behind the same token and
+  `X-Admin` gate as `/settings`); without a token they're just a plain field.
+* Discord's bot API needs the **Message Content** privileged intent turned on for the
+  chat relay to read anything (Discord blanks `content` on every message otherwise):
+  the app's page, Bot → Privileged Gateway Intents → Message Content Intent.
+
+An empty `discord_bot_token` turns all three off; nothing here touches `discord_webhook`.
+
 ## Configuration
 
 Standard BepInEx config, plus:
@@ -167,6 +193,8 @@ defaults are what runs):
 | `/pins` (POST) | `{"op":"add","x","z","type","text"}`, `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text`, or `{"op":"delete","id"}`: places, changes or takes up a pin, only ever on walked ground; answers `{"ok","id","pins"}`, 400 with `{"error"}`. Needs `X-Announce-Token`; `X-User` owns a new pin and is logged for every write |
 | `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
 | `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs `X-Announce-Token` and `X-Admin: 1`, credits `X-User` |
+| `/discord/guilds` | the bot's guilds, `{"guilds":[{"id","name"}]}`, for the settings picker; same gate as `/settings` |
+| `/discord/channels` | `?guild=` a guild's text and announcement channels, `{"channels":[{"id","name"}]}`; same gate |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw]` against a table of prefab footprint and colour; a torch, fire pit or hearth carries a fifth field, `1` while it has fuel (JSON, about 60 KB for a world) |
 | `/portals` | portals with their tag and the portal each is linked to, as the game has connected them (JSON) |
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |

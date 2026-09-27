@@ -62,6 +62,38 @@ function row(s){
 function render(){
   document.getElementById("rows").innerHTML = SETTINGS.settings.map(row).join("");
   document.getElementById("restart").hidden = !SETTINGS.restart;
+  upgradePickers();
+}
+
+// The guild and channel fields get a <select> once a token is set and the picker
+// answers; a fresh field, or one that fails to load, just keeps the plain input.
+const CHANNEL_KEYS = ["discord_log_channel", "discord_chat_channel"];
+function fillPicker(key, options, current){
+  const card = document.querySelector(`.set[data-key="${key}"] .field`);
+  if(!card || !options.length) return;
+  const sel = document.createElement("select");
+  sel.className = "field"; sel.name = "value";
+  sel.innerHTML = `<option value="">— none —</option>` + options.map(o =>
+    `<option value="${esc(o.id)}"${o.id === current ? " selected" : ""}>${esc(o.name)}</option>`).join("");
+  card.replaceWith(sel);
+}
+async function upgradePickers(){
+  const tokenRow = SETTINGS.settings.find(s => s.key === "discord_bot_token");
+  const guildRow = SETTINGS.settings.find(s => s.key === "discord_guild");
+  if(!tokenRow || !tokenRow.set || !guildRow) return;   // no token yet: nothing to pick from
+  try{
+    const gr = await fetch(API + "/discord/guilds", {headers: MapCore.authHeaders(), cache: "no-store"});
+    const guilds = gr.ok ? (await gr.json()).guilds || [] : [];
+    fillPicker("discord_guild", guilds, guildRow.value);
+    const guildId = guildRow.value || (guilds[0] && guilds[0].id) || "";
+    if(!guildId) return;
+    const cr = await fetch(API + "/discord/channels?guild=" + encodeURIComponent(guildId), {headers: MapCore.authHeaders(), cache: "no-store"});
+    const channels = cr.ok ? (await cr.json()).channels || [] : [];
+    for(const key of CHANNEL_KEYS){
+      const row = SETTINGS.settings.find(s => s.key === key);
+      if(row) fillPicker(key, channels, row.value);
+    }
+  }catch(e){ /* the plain fields still work */ }
 }
 async function load(){
   const me = await MapCore.whoami();

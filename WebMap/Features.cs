@@ -594,6 +594,7 @@ namespace WebMap
                 Save();
                 log = $"{(by.Length > 0 ? by : "someone")} named the {f.kind} '{was}' " + (name.Length == 0 ? "back to its own name" : $"'{name}'");
                 ZLog.Log("WebMap: " + log);
+                Discord.Tell(log);
             }
             return null;
         }
@@ -630,6 +631,7 @@ namespace WebMap
                 Save();
                 log = $"{(by.Length > 0 ? by : "someone")} named the hub " + (was.Length > 0 ? $"'{was}' " : "") + (name.Length == 0 ? "back to its gates" : $"'{name}'");
                 ZLog.Log("WebMap: " + log);
+                Discord.Tell(log);
             }
             return null;
         }

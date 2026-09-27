@@ -688,6 +688,26 @@ namespace WebMap
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
                         return true;
                     }
+                case "/discord/guilds":
+                    // The bot's own guilds, for the settings picker; same gate as /settings.
+                    // Empty (never an error) when there is no token yet, so the picker
+                    // just falls back to the plain field.
+                    {
+                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
+                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        Answer(res, 200, "{\"guilds\":" + RefsJson(Discord.Guilds()) + "}");
+                        return true;
+                    }
+                case "/discord/channels":
+                    // A guild's text channels, for the same picker.
+                    {
+                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
+                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        string guild = req.QueryString["guild"];
+                        if (string.IsNullOrEmpty(guild)) { Answer(res, 400, "{\"error\":\"guild is required\"}"); return true; }
+                        Answer(res, 200, "{\"channels\":" + RefsJson(Discord.Channels(guild)) + "}");
+                        return true;
+                    }
                 case "/at":
                     // what is at a spot, for a click on the map; nothing for unwalked ground
                     {
@@ -859,6 +879,18 @@ namespace WebMap
             SendBytes(req, res, body, glb ? "model/gltf-binary" : "image/png", compressible: glb);
         }
 
+        // [{"id","name"}, ...] for the settings picker's two Discord lookups.
+        private static string RefsJson(List<DiscordRef> refs)
+        {
+            var sb = new StringBuilder("[");
+            for (int i = 0; i < refs.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"id\":\"").Append(JsonEscape(refs[i].Id)).Append("\",\"name\":\"").Append(JsonEscape(refs[i].Name)).Append("\"}");
+            }
+            return sb.Append(']').ToString();
+        }
+
         private static void Answer(HttpListenerResponse res, int status, string json)
         {
             res.ContentType = "application/json";
@@ -966,6 +998,7 @@ namespace WebMap
                 log = $"{who} changed {was[3]}'s pin '{PinText(was)}': " + (what.Count > 0 ? string.Join(", ", what) : "no change");
             }
             ZLog.Log("WebMap: " + log + " from the site");
+            Discord.Tell(log);
             return null;
         }
         // under lock (pins); a line is placer,id,type,owner,x,z,text

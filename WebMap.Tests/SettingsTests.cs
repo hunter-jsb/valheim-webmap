@@ -41,4 +41,17 @@ public class SettingsTests
         Assert.Contains("\"set\":true", WebMap.Settings.Json());
         WebMapConfig.TEXTURE_SIZE = 2048; WebMapConfig.DISCORD_WEBHOOK = "";
     }
+
+    [Fact]
+    public void ADiscordIdMustBeDigitsAndTheBotTokenIsMasked()
+    {
+        Fresh();
+        Assert.NotNull(WebMap.Settings.Set("discord_chat_channel", "not-an-id", "tester", out _, out _));
+        Assert.Null(WebMap.Settings.Set("discord_chat_channel", "1547323143084056706", "tester", out _, out _));
+        Assert.Equal("1547323143084056706", WebMapConfig.DISCORD_CHAT_CHANNEL);
+        Assert.Null(WebMap.Settings.Set("discord_bot_token", "super-secret-token", "tester", out _, out _));
+        Assert.DoesNotContain("super-secret-token", WebMap.Settings.Json());
+        Assert.Contains("\"set\":true", WebMap.Settings.Json());
+        WebMapConfig.DISCORD_CHAT_CHANNEL = ""; WebMapConfig.DISCORD_BOT_TOKEN = "";
+    }
 }

@@ -83,6 +83,7 @@ namespace WebMap
             // and the fallback for height sampling should the engine want it on this thread
             if (WebMapConfig.EXPORT_MODELS) StaticCoroutine.Start(Models.ModelStore.Pump());
             StaticCoroutine.Start(Heights.Pump());
+            ChatRelay.Start();          // Discord -> game, its own pool-thread timer
             NotifyOnline();
         }
 
@@ -812,6 +813,7 @@ namespace WebMap
                             {
                                 mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
                                 Stats.Chat(userInfo.Name);
+                                Discord.PostChat(userInfo.Name, message);
                             }
                             // one console line per chat message and per ping is spam on a
                             // busy server; the web feed is where these are meant to be read
@@ -849,6 +851,7 @@ namespace WebMap
                             mapDataServer.AddMessage(data.m_senderPeerID, messageType, userInfo.Name, message);
 
                             Stats.Chat(userInfo.Name);
+                            Discord.PostChat(userInfo.Name, message);
                             if (WebMapConfig.DEBUG)
                                 ZLog.Log($"WebMap: (chat) {pos} | {messageType} | {userInfo.Name} | {message}");
                         }

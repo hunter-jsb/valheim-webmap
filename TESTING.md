@@ -63,3 +63,9 @@ guards against; there is one per failure, not one per branch.
    starts a coroutine) are not reached.
 10. **The cosmetic layers** -- `Pieces`, `Trails`, `ForestMap`, the structures raster,
     `Chart`: **nothing**. A regression is a wrong picture, seen at once.
+11. **Discord.** The REST client's retry-once-on-429 and the message parser (display
+    name priority, bot/webhook detection): **dotnet test**, against a faked
+    `Discord.Transport`. The relay's skip and its five-a-poll cap: **dotnet test**, on
+    `ChatRelay.LinesToSpeak` directly. The `Timer` loop itself, the Harmony hookup that
+    calls `Discord.PostChat`, and the settings picker's two routes: **nothing**; those
+    need a running server and a real bot token.
