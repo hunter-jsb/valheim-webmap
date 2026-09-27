@@ -359,6 +359,10 @@ function drawDeaths(g, v, deaths, now){
 // screens; bigger kinds win the ground when two would overlap.
 // features: /features rows (world metres). Returns the boxes drawn, for a tap.
 const FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const DISPLAY = '"Cinzel", Georgia, serif';          // the capitals: continents, islands, ranges
+// the face arrives after the first paint; the scene windows listen and paint again
+if(typeof document !== "undefined" && document.fonts && document.fonts.load)
+  document.fonts.load('600 20px "Cinzel"').then(() => dispatchEvent(new Event("fontready"))).catch(() => {});
 const WATER_INK = "#9fd0e6";
 const NAME_STYLE = {
   continent: {tier: 0, caps: true, space: .28, weight: 700, ink: "#f1ecdc", min: 13, max: 30, div: 9},
@@ -377,7 +381,7 @@ const NAME_STYLE = {
   holm:      {tier: 6, ink: "#d8d2c2", min: 10, max: 13, div: 6, lo: 36},
 };
 const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
-function font(st, fs){ return `${st.italic ? "italic " : ""}${st.weight || 500} ${fs}px ${FONT}`; }
+function font(st, fs){ return `${st.italic ? "italic " : ""}${st.weight || 500} ${fs}px ${st.caps ? DISPLAY : FONT}`; }
 function halo(g, fs){ g.lineJoin = "round"; g.lineWidth = Math.max(2, fs/4.5); g.strokeStyle = "rgba(10,12,10,.82)"; }
 // letters set apart by hand: the canvas property is not everywhere yet
 function spacedWidth(g, text, gap){ let w = 0; for(const ch of text) w += g.measureText(ch).width + gap; return w - gap; }
@@ -612,6 +616,7 @@ function viewCache(render, fresh){
     return true;
   }
   function invalidate(){ at = null; clearTimeout(timer); }
+  addEventListener("fontready", () => { invalidate(); fresh(); });
   return {draw, invalidate, cost: () => cost};
 }
 
