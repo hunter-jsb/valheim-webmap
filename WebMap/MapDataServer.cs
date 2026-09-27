@@ -330,7 +330,7 @@ namespace WebMap
                 // how they look is no spoiler of where they are: kept for their page either way
                 int yaw = (int)Math.Round(zdoData.GetRotation().eulerAngles.y);
                 string look = null;
-                try { look = Models.RigExporter.LookJson(zdoData); } catch (Exception e) { if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: a player's look failed: " + e.Message); }
+                try { look = Models.RigExporter.LookJson(zdoData); } catch (Exception e) { WarnOnce(ref lookWarned, "a player's look failed, they stand as a plain figure", e); }
                 Stats.Looked(player.m_playerName, look, yaw);
 
                 var sb = new StringBuilder();
@@ -1042,14 +1042,25 @@ namespace WebMap
                     Gear.Sample(player.m_playerName, z, PLAYER_UPDATE_INTERVAL);
                     Trails.Mark(pid != 0L ? pid : player.m_playerName.GetHashCode(), z.GetPosition());
                 }
+            }
+            catch (Exception ex) { WarnOnce(ref snapshotWarned, "player snapshot failed", ex); }
+            // a failing snapshot must not also stop the tallies being saved
+            try
+            {
                 Stats.MaybeSave();
                 Trails.MaybeSave();
                 timeJson = BuildTimeJson();
             }
-            catch (Exception ex)
-            {
-                if (WebMapConfig.DEBUG) ZLog.LogWarning("WebMap: player snapshot failed: " + ex.Message);
-            }
+            catch (Exception ex) { WarnOnce(ref saveWarned, "player snapshot's saves failed", ex); }
+        }
+
+        // Once a run: these run every second, and a fault that repeats would flood the log.
+        private bool snapshotWarned, saveWarned, lookWarned;
+        private static void WarnOnce(ref bool warned, string what, Exception e)
+        {
+            if (warned) return;
+            warned = true;
+            ZLog.LogWarning("WebMap: " + what + ": " + e);
         }
 
         // EnvMan.RescaleDayFraction's rule: the clock's 0.15..0.85 is daylight, stretched

@@ -340,12 +340,15 @@ namespace WebMap
         }
 
         // Pins are counted from the live pin list at read time; they are the one
-        // tally kept elsewhere.
+        // tally kept elsewhere, so a pin placed from the site while nobody is on
+        // must rebuild the JSON too.
+        private static Dictionary<string, int> jsonPins;
         public static string Json(Dictionary<string, int> pinsByName)
         {
-            if (!jsonStale) return json;
+            if (!jsonStale && SamePins(pinsByName, jsonPins)) return json;
             lock (gate)
             {
+                jsonPins = pinsByName;
                 var list = new List<P>(byName.Values);
                 list.Sort((a, b) => b.lastSeen.CompareTo(a.lastSeen));
                 var sb = new StringBuilder();
@@ -398,6 +401,13 @@ namespace WebMap
                 jsonStale = false;
                 return json;
             }
+        }
+
+        private static bool SamePins(Dictionary<string, int> a, Dictionary<string, int> b)
+        {
+            if (a == null || b == null || a.Count != b.Count) return a == b;
+            foreach (var kv in a) if (!b.TryGetValue(kv.Key, out int n) || n != kv.Value) return false;
+            return true;
         }
 
         private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");

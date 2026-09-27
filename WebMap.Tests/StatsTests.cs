@@ -168,6 +168,16 @@ namespace WebMap.Tests
             Assert.Equal("HelmetBronze", Me().GetProperty("look").GetProperty("slots").Str("helmet"));
         }
 
+        // Nobody online marks the tally stale, so a pin placed from the site went uncounted.
+        [Fact]
+        public void APinPlacedWhileNobodyMovesIsCounted()
+        {
+            At(0, 0);
+            Stats.Json(new Dictionary<string, int> { [A] = 1 });
+            var pins = J.Parse(Stats.Json(new Dictionary<string, int> { [A] = 2 })).GetProperty("players").EnumerateArray().First(p => p.Str("name") == A);
+            Assert.Equal(2, pins.Int("pins"));
+        }
+
         [Fact]
         public void AWalkAtSeaIsOcean()
         {
