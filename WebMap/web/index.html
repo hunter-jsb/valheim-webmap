@@ -57,7 +57,8 @@
   .tourcap.show{opacity:1;transform:translateX(-50%)}
   .tourcap .tt{font-size:1.3rem;font-weight:700;color:var(--bright);margin-top:.15rem;line-height:1.2}
   .tourcap .tl{font-size:.8rem;color:var(--ink-2);margin-top:.25rem}
-  body.tour .mapctl,body.tour #mini,body.tour .layers,body.tour .v3d .hint,body.tour .v3d .where{opacity:.3;transition:opacity .6s}
+  body.tour .mapctl,body.tour #mini,body.tour .layers,body.tour .v3d .where{opacity:.3;transition:opacity .6s}
+  body.tour .v3d .hint{display:none}
   body.tour .mapctl:hover,body.tour .layers:hover{opacity:1}
   #tourBtn.on{color:var(--gold);border-color:var(--gold)}
   .online{font-size:.78rem;color:var(--muted);margin-top:.7rem}
@@ -1297,12 +1298,12 @@ const tourBtn = document.getElementById("tourBtn"), tourCap = document.getElemen
 const sleepT = ms => new Promise(r => setTimeout(r, ms));
 function flyTo(px, py, scale, ms){
   return new Promise(res => {
-    const W = stage.clientWidth, H = stage.clientHeight, s0 = V.scale, c0 = V.at(W/2, H/2), t0 = performance.now();
+    const W = stage.clientWidth, H = stage.clientHeight, s0 = V.scale, c0 = V.at(W/2, H/2), t0 = performance.now(), run = TOUR.run;
     const step = () => {
       const t = Math.min(1, (performance.now() - t0)/ms), e = t < .5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
       const s = Math.exp(Math.log(s0) + (Math.log(scale) - Math.log(s0))*e), cx = c0.px + (px - c0.px)*e, cy = c0.py + (py - c0.py)*e;
       V.scale = s; V.tx = W/2 - cx*s; V.ty = H/2 - cy*s; V.request();
-      if(t < 1 && TOUR.on) requestAnimationFrame(step); else res();
+      if(t < 1 && TOUR.on && TOUR.run === run) requestAnimationFrame(step); else res();   // a stopped tour lets its flight go
     };
     requestAnimationFrame(step);
   });
@@ -1342,8 +1343,14 @@ function tourStops(){
   const boats = (VEHICLES || []).filter(v => v.kind === "boat");
   if(boats.length){ const b = boats[Math.floor(Math.random()*boats.length)], w = W(b.px, b.py);
     rest.push({kind: "Afloat", title: MapCore.vehicleStyle(b).label, line: `lies at ${nameAt(w.x, w.z) || "sea"}`, x: w.x, z: w.z, zoom: 40, dist: 70, layer: "vehicles"}); }
-  (FEATURES || []).filter(f => (f.kind === "continent" || f.kind === "island") && f.w).sort((a, b) => b.w*b.h - a.w*a.h).slice(0, 2).forEach(f =>
-    rest.push({kind: f.kind === "continent" ? "A continent" : "An island", title: f.name, line: `${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2`, x: f.x, z: f.z, fit: {w: f.w, h: f.h}, dist: Math.min(2600, Math.max(700, Math.max(f.w, f.h)*0.9)), detail: "names", far: true}));
+  // a land from far up, circled about the middle of what is walked of it; one still under fog is left out
+  const fog = MapCore.explored(LAYERS.imgs.fog), walked = fog && ((x, z) => { const p = toPx(x, z); return fog(p.px, p.py); });   // the sampler reads texture px
+  if(walked) (FEATURES || []).filter(f => (f.kind === "continent" || f.kind === "island") && f.w).sort((a, b) => b.w*b.h - a.w*a.h).slice(0, 4).forEach(f => {
+    let n = 0, sx = 0, sz = 0; const N = 14;
+    for(let i = 0; i < N; i++) for(let j = 0; j < N; j++){ const x = f.x - f.w/2 + f.w*(i + .5)/N, z = f.z - f.h/2 + f.h*(j + .5)/N; if(walked(x, z)){ n++; sx += x; sz += z; } }
+    if(n < N*N*0.08) return;
+    rest.push({kind: f.kind === "continent" ? "A continent" : "An island", title: f.name, line: `${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2 \u00b7 ${Math.round(100*n/(N*N))}% of it walked`,
+               x: sx/n, z: sz/n, fit: {w: f.w, h: f.h, cx: f.x, cz: f.z}, dist: Math.min(2600, Math.max(700, Math.sqrt(n/(N*N))*Math.max(f.w, f.h)*1.1)), detail: "names", far: true}); });
   for(let i = rest.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
   const seen = new Set();   // one visit per place a cycle
   return S.concat(rest.filter(s => { const k = s.kind + "|" + s.title; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 9));
@@ -1362,11 +1369,11 @@ async function tourStop(s, run){
   if(s.layer) showLayer(s.layer);
   if(s.detail && !showDetail(s.detail)) setDetail(s.detail, true);
   const q = toPx(s.x, s.z);
-  if(s.fit){ const W = stage.clientWidth, H = stage.clientHeight; await flyTo(q.px, q.py, Math.min(W/(s.fit.w/GEOM.pixel*1.4), H/(s.fit.h/GEOM.pixel*1.4)), 5000); }
+  if(s.fit){ const W = stage.clientWidth, H = stage.clientHeight, c = toPx(s.fit.cx, s.fit.cz); await flyTo(c.px, c.py, Math.min(W/(s.fit.w/GEOM.pixel*1.4), H/(s.fit.h/GEOM.pixel*1.4)), 5000); }
   else { await flyTo(q.px, q.py, Math.min(6, s.zoom), 3500); if(!alive()) return; await flyTo(q.px, q.py, s.zoom, 3000); }
   if(!alive()) return; await sleepT(2500); if(!alive()) return;
-  const walked = MapCore.explored(LAYERS.imgs.fog);
-  if(s.dist && (s.far || (walked && walked(s.x, s.z)))){
+  const fog = MapCore.explored(LAYERS.imgs.fog);
+  if(s.dist && (s.far || (fog && fog(q.px, q.py)))){
     await enter3D(s.x, s.z, Math.random()*360); if(!alive()) return;
     if(V3D){ V3D.setOrbitDist(s.dist); V3D.setMode("orbit"); v3dEl.classList.add("orbit"); V3D.setSpin(s.far ? 2.5 : 6); }
     await sleepT(s.far ? 22000 : 15000);
