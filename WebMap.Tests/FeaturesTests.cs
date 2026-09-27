@@ -23,6 +23,29 @@ namespace WebMap.Tests
         }
 
         [Fact]
+        public void ALandOfTwoSquareKilometresIsAContinentAndASmallerOneAnIsland()
+        {
+            // cells are 24 m: 60 x 60 is 2.07 km², 50 x 50 is 1.44
+            var fs = new Grid().Box(100, 100, 160, 160).Box(300, 300, 350, 350).Read();
+            Assert.Single(OfKind(fs, "continent"));
+            Assert.Single(OfKind(fs, "island"));
+            Assert.EndsWith("land", OfKind(fs, "continent")[0].Str("name").ToLowerInvariant());
+        }
+
+        [Fact]
+        public void ANameGivenWhileALandWasAnIslandStillHoldsAsAContinent()
+        {
+            var big = Assert.Single(OfKind(new Grid().Box(100, 100, 160, 160).Read(), "continent"));
+            string id = big.Str("id");
+            // the names file as an older build wrote it, keyed by the kind the land was then
+            System.IO.File.WriteAllText(System.IO.Path.Combine(Dir, "names.tsv"), "island" + id.Substring(id.IndexOf('@')) + "\tMidgard\tWithers\t1790000000\n");
+            Features.ResetForTests(Dir);
+            var now = Assert.Single(OfKind(new Grid().Box(100, 100, 160, 160).Read(), "continent"));
+            Assert.Equal("Midgard", now.Str("name"));
+            Assert.Equal("Withers", now.Str("by"));
+        }
+
+        [Fact]
         public void ACShapedIslandIsNamedOnItsLandNotInItsBight()
         {
             // the C's middle, where a centroid would put the name, is sea

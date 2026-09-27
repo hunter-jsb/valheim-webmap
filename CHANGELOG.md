@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* A continent from 2 km², not 4: this world's lands top out near 4.6, and the home lands of
+  two to three are what people call continents. A land that grew into one keeps its stem
+  (Ragnsey is Ragnsland), and a name given while it counted as an island still holds.
 * A World page, second in the nav: the world at a glance (its day, explored share, what
   stands, what fell, the gates, the boats, the names, the deaths and the graves), the bosses,
   and its records -- largest continent and island, most and least explored land, tallest

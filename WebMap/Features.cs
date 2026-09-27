@@ -51,24 +51,25 @@ namespace WebMap
         public static void Load(string worldDataPath)
         {
             dir = worldDataPath;
-            lock (gate)
-            {
-                names.Clear();
-                try
-                {
-                    string p = Path.Combine(dir, NamesFile);
-                    if (File.Exists(p))
-                        foreach (string line in File.ReadAllLines(p))
-                        {
-                            var f = line.Split('\t');
-                            if (f.Length < 2 || f[0].Length == 0) continue;
-                            long t = 0; if (f.Length > 3) long.TryParse(f[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out t);
-                            names[f[0]] = new Named { name = f[1], by = f.Length > 2 ? f[2] : "", t = t };
-                        }
-                }
-                catch (Exception e) { ZLog.LogWarning("WebMap: names not loaded: " + e.Message); }
-            }
+            lock (gate) LoadNames();
             StaticCoroutine.Start(Build());
+        }
+        private static void LoadNames()      // under gate
+        {
+            names.Clear();
+            try
+            {
+                string p = Path.Combine(dir, NamesFile);
+                if (File.Exists(p))
+                    foreach (string line in File.ReadAllLines(p))
+                    {
+                        var f = line.Split('\t');
+                        if (f.Length < 2 || f[0].Length == 0) continue;
+                        long t = 0; if (f.Length > 3) long.TryParse(f[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out t);
+                        names[f[0]] = new Named { name = f[1], by = f.Length > 2 ? f[2] : "", t = t };
+                    }
+            }
+            catch (Exception e) { ZLog.LogWarning("WebMap: names not loaded: " + e.Message); }
         }
 
         // ---------- reading the world (game thread, one row per frame) ----------
@@ -165,7 +166,8 @@ namespace WebMap
             // landmasses
             var land = new bool[n];
             for (int i = 0; i < n; i++) land[i] = cls[i] != 0;
-            Regions(land, cell, 20, area => area * cellKm2 >= 4f ? "continent" : area * cellKm2 >= 0.1f ? "island" : "holm", feats, hgt, false, g.land);
+            // a continent from 2 km²: this world's lands top out near 4.6, and the home lands of 2 to 3 are what people call continents
+            Regions(land, cell, 20, area => area * cellKm2 >= 2f ? "continent" : area * cellKm2 >= 0.1f ? "island" : "holm", feats, hgt, false, g.land);
 
             // still water: the outer sea is whatever touches the edge; the rest are lakes
             var water = new bool[n];
@@ -420,9 +422,12 @@ namespace WebMap
         private static string Generate(string seed, Feature f, HashSet<string> used)
         {
             string name = null;
+            // a continent's stem is hashed as the island it was counted as before the bar
+            // moved, so a land that grew into a continent keeps its stem: Ragnsey, Ragnsland
+            string key = f.kind == "continent" ? "island" + f.id.Substring(f.id.IndexOf('@')) : f.id;
             for (int salt = 0; salt < 24; salt++)
             {
-                uint h = (uint)Fnv.Of(seed + "|" + f.id + "|" + salt);
+                uint h = (uint)Fnv.Of(seed + "|" + key + "|" + salt);
                 string stem = Stems[h % (uint)Stems.Length], end = Suffix(f.kind);
                 bool vowel = "aeiouy".IndexOf(char.ToLowerInvariant(stem[stem.Length - 1])) >= 0;
                 // two vowels meeting read badly (Isaá, Ravnuá): before a vowel ending the
@@ -439,9 +444,23 @@ namespace WebMap
 
         // ---------- the document ----------
         // one feature as JSON, without its closing brace so a caller can add to it
+        // A given name keyed under the kind a land was counted as before the bar moved
+        // (island@x,z for what is now continent@x,z, or the other way) still belongs to it.
+        private static string Alt(string id)
+        {
+            int at = id.IndexOf('@'); if (at < 0) return null;
+            string kind = id.Substring(0, at);
+            return kind == "continent" ? "island" + id.Substring(at) : kind == "island" ? "continent" + id.Substring(at) : null;
+        }
+        private static bool Given(string id, out Named nm)      // under gate
+        {
+            if (names.TryGetValue(id, out nm) && !string.IsNullOrEmpty(nm.name)) return true;
+            string alt = Alt(id);
+            return alt != null && names.TryGetValue(alt, out nm) && !string.IsNullOrEmpty(nm.name);
+        }
         private static void Open(StringBuilder sb, Feature f)      // under gate
         {
-            bool given = names.TryGetValue(f.id, out var nm) && !string.IsNullOrEmpty(nm.name);
+            bool given = Given(f.id, out var nm);
             string name = given ? nm.name : (generated.TryGetValue(f.id, out var g) ? g : f.kind);
             sb.Append(Inv($"{{\"id\":\"{Esc(f.id)}\",\"kind\":\"{f.kind}\",\"name\":\"{Esc(name)}\",\"x\":{f.x:0.#},\"z\":{f.z:0.#},\"w\":{f.w:0.#},\"h\":{f.h:0.#},\"area\":{f.area:0.##}"));
             if (given) sb.Append(Inv($",\"by\":\"{Esc(nm.by)}\",\"t\":{nm.t}"));
@@ -587,7 +606,8 @@ namespace WebMap
                 Feature f = null;
                 foreach (var g in found) if (g.id == id) { f = g; break; }
                 if (f == null) return "no such place";
-                string was = names.TryGetValue(id, out var old) && !string.IsNullOrEmpty(old.name) ? old.name : (generated.TryGetValue(id, out var gn) ? gn : "");
+                string was = Given(id, out var old) ? old.name : (generated.TryGetValue(id, out var gn) ? gn : "");
+                string alt = Alt(id); if (alt != null) names.Remove(alt);      // the name lives under the land's current kind from here
                 if (name.Length == 0) names.Remove(id);
                 else names[id] = new Named { name = name, by = by, t = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
                 Rebuild();
@@ -678,7 +698,7 @@ namespace WebMap
         internal const int Cells = N;
         internal static void ResetForTests(string worldDataPath)
         {
-            lock (gate) { names.Clear(); generated.Clear(); found = new Feature[0]; grids = null; dir = worldDataPath; }
+            lock (gate) { generated.Clear(); found = new Feature[0]; grids = null; dir = worldDataPath; LoadNames(); }   // the names file, if the case wrote one
         }
         internal static void AnalyseForTests(byte[] cls, float[] hgt, List<List<Vector2>> rivers, string seed) =>
             Analyse(cls, hgt, rivers, TEXTURE_SIZE * PIXEL_SIZE / (float)N, seed);
