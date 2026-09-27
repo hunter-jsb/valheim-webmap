@@ -112,6 +112,14 @@ async function portals() {
   await p.done("portals");
 }
 
+async function world() {
+  const p = await open("/world.html");
+  const loaded = await p.until(`RECORDS.length && document.querySelectorAll("#lands tbody tr").length`);
+  const w = await p.ev(`({records: RECORDS.length, lands: document.querySelectorAll("#lands tbody tr").length, glance: document.querySelectorAll("#glance .stat").length, spot: !document.getElementById("spot").hidden})`) || {};
+  check("world: its records, lands and glance are built", loaded && w.records >= 6 && w.lands > 0 && w.glance >= 8 && w.spot, `${w.records} records, ${w.lands} lands shown`);
+  await p.done("world");
+}
+
 async function players() {
   const want = (await (await fetch(BASE + "/stats/players")).json()).players.length;
   const p = await open("/players.html");
@@ -160,7 +168,7 @@ async function plan() {
   await p.done("plan");
 }
 
-for (const page of [map, view3d, portals, players, plan]) {
+for (const page of [map, view3d, world, portals, players, plan]) {
   try { await page(); } catch (e) { check(`${page.name}: runs`, false, e.message); }
 }
 process.exit(failed ? 1 : 0);

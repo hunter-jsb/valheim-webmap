@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
+<title>Valheim WebMap</title>
+<meta name="description" content="The world's own page: what stands, what has fallen, and its records.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪓</text></svg>">
+<link rel="stylesheet" href="site.css">
+<script src="site-config.js"></script>
+<script src="map-core.js"></script>
+<style>
+  body{min-height:100%}
+  .wrap{max-width:900px;margin:0 auto;padding:1.3rem .9rem 3rem}
+  /* the world at a glance: small figures, four to a row */
+  .glance{display:grid;gap:.5rem;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-top:1rem}
+  .glance .stat{padding:.55rem .7rem}
+  .glance .stat .v{font-size:1.15rem}
+  .glance .stat .k{font-size:.58rem}
+  .row2{display:grid;gap:.8rem;grid-template-columns:minmax(0,1fr) 260px;align-items:start;margin-top:1rem}
+  /* the bosses, as on the players page */
+  .bosses{display:flex;flex-wrap:wrap;gap:.25rem}
+  .boss{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;width:60px;padding:.4rem .15rem .3rem;border:1px solid transparent;border-radius:var(--r)}
+  .boss svg{width:28px;height:28px;overflow:visible;filter:var(--shadow-ink)}
+  .boss .bn{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
+  .boss.down{border-color:var(--line);background:var(--hair)}
+  .boss.down .bn{color:var(--gold)}
+  .boss.up{opacity:.38;filter:grayscale(.7)}
+  .boss .n{position:absolute;top:1px;right:5px;font-size:.58rem;font-weight:600;color:var(--gold)}
+  /* the records: one row each, its figure, and the way to the spot */
+  .records{display:grid;gap:.4rem;margin-top:.6rem}
+  .rec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.1rem .8rem;align-items:center;padding:.5rem .7rem}
+  .rec .k,.rec .t{grid-column:1}
+  .rec .k{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .rec .t{font-size:.98rem;font-weight:700;color:var(--bright);margin-top:.1rem}
+  .rec .t small{font-weight:500;font-size:.78rem;color:var(--ink-2);margin-left:.4rem}
+  .rec .links{display:flex;gap:.3rem;grid-column:2;grid-row:1 / span 2}
+  .rec .links .btn{height:28px;padding:0 .5rem;font-size:.7rem}
+  /* danger by biome, for everyone together */
+  .biomes{display:grid;grid-template-columns:minmax(5rem,auto) 1fr auto auto;gap:.35rem .6rem;align-items:center;margin-top:.6rem;font-size:.76rem}
+  .biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+  .biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
+  .biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
+  .biomes .km{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .biomes .dx b{color:var(--off);font-weight:600}
+  .biomes .dx.safe b{color:var(--ok)}
+  /* the lands: a table that sorts by its heads */
+  table.lands{width:100%;border-collapse:collapse;margin-top:.6rem;font-size:.78rem}
+  .lands th{text-align:right;font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:.35rem .4rem;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
+  .lands th:first-child,.lands td:first-child{text-align:left}
+  .lands th.on{color:var(--gold)}
+  .lands td{padding:.32rem .4rem;border-bottom:1px solid var(--hair);text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+  .lands td a{color:var(--bright);font-weight:600}
+  .lands td .kind{color:var(--faint);font-size:.66rem;margin-left:.35rem;font-weight:400}
+  .lands tr.nil td{color:var(--faint)}
+  .more{margin-top:.5rem}
+  @media (max-width:700px){
+    .row2{grid-template-columns:1fr}
+    .lands .hide{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav" data-page="world"></nav>
+<script>MapCore.nav();</script>
+<svg id="icons" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
+<script>document.getElementById("icons").innerHTML = MapCore.spriteSVG(MapCore.BOSS_ICON);</script>
+
+<main class="wrap">
+  <h1 class="title">World</h1>
+  <p class="sub" id="sub">reading the world…</p>
+  <p class="note bad" id="note"></p>
+
+  <div class="glance" id="glance"></div>
+  <div class="row2">
+    <div>
+      <h2 class="eyebrow section">Bosses</h2>
+      <div class="bosses" id="bosses"></div>
+      <h2 class="eyebrow section">Records <small>among the places anyone has seen</small></h2>
+      <div class="records" id="records"></div>
+    </div>
+    <div class="card spot" id="spot" hidden title="Next"></div>
+  </div>
+
+  <section class="section">
+    <h2 class="eyebrow">Danger by biome <small>everyone together</small></h2>
+    <div class="biomes" id="biomes"></div>
+  </section>
+
+  <section class="section">
+    <h2 class="eyebrow">Lands <small>the continents and islands someone has set foot on, with what stands on them</small></h2>
+    <table class="lands" id="lands"><thead><tr>
+      <th data-sort="name">Land</th><th data-sort="area" class="on">km²</th><th data-sort="walked">walked</th>
+      <th data-sort="builds" class="hide">pieces</th><th data-sort="gates" class="hide">gates</th><th data-sort="deaths">deaths</th><th data-sort="peak" class="hide">peak</th>
+    </tr></thead><tbody></tbody></table>
+    <p class="note more" id="more"></p>
+  </section>
+
+  <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
+</main>
+
+<script>
+const API = MapCore.cfg.api, esc = MapCore.esc, plural = MapCore.plural, pic = MapCore.pic, toPx = MapCore.toPx, toWorld = MapCore.toWorld;
+MapCore.fetchConfig(API).catch(() => {});
+const num = v => Number.isFinite(+v) ? +v : 0;
+const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+const at = (x, z, zoom) => `index.html#at=${Math.round(x)},${Math.round(z)}${zoom ? "," + zoom : ""}`;
+const in3d = (x, z) => `index.html#3d=${Math.round(x)},${Math.round(z)}`;
+const SEA = 30;                                              // the game's water stands at y = 30
+
+let STATE = null, STATS = null, FEATURES = null, PIECES = null, FOG = null, FOG_BITS = null;
+const LAY = MapCore.layers(API, k => { if(k === "fog"){ FOG = MapCore.explored(LAY.imgs.fog); readFog(); render(); } });
+let REVS = {};
+
+// ---------- the fog, read whole: the walked share of a box, and the walked extremes
+const FOGN = 256;                                            // the map's own sampling, so the share agrees with its tile
+function readFog(){
+  try{ const c = document.createElement("canvas"); c.width = c.height = FOGN; const g = c.getContext("2d", {willReadFrequently: true});
+       g.drawImage(LAY.imgs.fog, 0, 0, FOGN, FOGN); FOG_BITS = g.getImageData(0, 0, FOGN, FOGN).data; }catch(e){ FOG_BITS = null; }
+}
+const walkedAt = (x, z) => { if(!FOG) return false; const p = toPx(x, z); return FOG(p.px, p.py); };
+// the share of a feature's box that is walked, and the middle of that walked part
+function walkedBox(f, N){
+  N = N || Math.min(28, Math.max(10, Math.round(Math.sqrt(f.area || 1)*9)));   // a big land is sampled finer, so a thin walked strip still counts
+  let n = 0, sx = 0, sz = 0;
+  for(let i = 0; i < N; i++) for(let j = 0; j < N; j++){ const x = f.x - f.w/2 + f.w*(i + .5)/N, z = f.z - f.h/2 + f.h*(j + .5)/N; if(walkedAt(x, z)){ n++; sx += x; sz += z; } }
+  return {share: n/(N*N), x: n ? sx/n : f.x, z: n ? sz/n : f.z};
+}
+function walkedExtremes(){
+  if(!FOG_BITS) return null;
+  let n = null, s = null, e = null, w = null;
+  for(let y = 0; y < FOGN; y++) for(let x = 0; x < FOGN; x++){
+    if(FOG_BITS[(y*FOGN + x)*4] <= 40) continue;
+    if(!n || y < n.y) n = {x, y}; if(!s || y > s.y) s = {x, y}; if(!e || x > e.x) e = {x, y}; if(!w || x < w.x) w = {x, y};
+  }
+  if(!n) return null;
+  const k = MapCore.geom.size/FOGN, W = p => toWorld((p.x + .5)*k, (p.y + .5)*k);
+  return {north: W(n), south: W(s), east: W(e), west: W(w)};
+}
+
+// ---------- places: the most particular named ground a point lies in
+const LAND = new Set(["continent", "island", "holm"]), GROUND = new Set(["continent", "island", "holm", "meadows", "forest", "swamp", "mountain", "plains", "mistlands", "ashlands", "north", "range"]);
+function placeAt(x, z, kinds){
+  let best = null;
+  for(const f of FEATURES || []){
+    if(!kinds.has(f.kind) || f.w == null) continue;
+    if(x < f.x - f.w/2 || x > f.x + f.w/2 || z < f.z - f.h/2 || z > f.z + f.h/2) continue;
+    if(!best || f.w*f.h < best.w*best.h) best = f;
+  }
+  return best;
+}
+const riverLen = f => (f.line || []).reduce((t, p, i) => i ? t + Math.hypot(p[0] - f.line[i-1][0], p[1] - f.line[i-1][1]) : 0, 0);
+// The honour rule: a page shows what a player's own map shows. A place counts once the
+// fog has lifted somewhere on it; the rest of the geography stays unspoken here.
+const KNOWN = new Map();
+function known(f){
+  if(!FOG) return false;
+  if(!KNOWN.has(f)) KNOWN.set(f, f.kind === "river" ? (f.line || []).some(p => walkedAt(p[0], p[1])) : f.w != null && walkedBox(f).share > 0);
+  return KNOWN.get(f);
+}
+
+// ---------- the records
+function records(){
+  const F = (FEATURES || []).filter(known), R = [], S = STATE || {};
+  const lands = F.filter(f => (f.kind === "continent" || f.kind === "island") && f.w);
+  const top = (list, get) => list.slice().sort((a, b) => get(b) - get(a));
+  const rec = (k, f, figure, x, z, zoom, rows) => R.push({k, title: f ? f.name : "", figure, x, z, zoom, rows});
+  const c = top(lands.filter(f => f.kind === "continent"), f => f.area); if(c[0]) rec("Largest continent", c[0], `${c[0].area.toFixed(1)} km²`, c[0].x, c[0].z, 1.2, c.slice(0, 3).map(f => ({frac: f.area/c[0].area, label: `${f.area.toFixed(1)} ${f.name}`})));
+  const i = top(lands.filter(f => f.kind === "island"), f => f.area); if(i[0]) rec("Largest island", i[0], `${i[0].area.toFixed(1)} km²`, i[0].x, i[0].z, 1.6, i.slice(0, 3).map(f => ({frac: f.area/i[0].area, label: `${f.area.toFixed(1)} ${f.name}`})));
+  if(FOG){
+    const walked = lands.filter(f => f.area >= 0.3).map(f => ({f, w: walkedBox(f).share})).filter(r => r.w > 0);
+    const most = walked.slice().sort((a, b) => b.w - a.w), least = walked.slice().sort((a, b) => a.w - b.w);
+    if(most[0]) rec("Most explored land", most[0].f, `${Math.round(most[0].w*100)}% walked`, most[0].f.x, most[0].f.z, 1.6, most.slice(0, 3).map(r => ({frac: r.w, label: `${Math.round(r.w*100)}% ${r.f.name}`})));
+    if(least[0] && least[0] !== most[0]) rec("Least explored land", least[0].f, `${Math.round(least[0].w*100)}% walked, and someone has set foot there`, least[0].f.x, least[0].f.z, 1.6, least.slice(0, 3).map(r => ({frac: Math.max(.02, r.w), label: `${Math.round(r.w*100)}% ${r.f.name}`})));
+  }
+  const peaks = top(F.filter(f => f.kind === "range" && f.peak), f => f.peak.y); if(peaks[0]) rec("Tallest peak", peaks[0], `${Math.round(peaks[0].peak.y - SEA)} m above the sea`, peaks[0].peak.x, peaks[0].peak.z, 20, peaks.slice(0, 3).map(f => ({frac: (f.peak.y - SEA)/(peaks[0].peak.y - SEA), label: `${Math.round(f.peak.y - SEA)} m ${f.name}`})));
+  const rivers = top(F.filter(f => f.kind === "river" && f.line), riverLen); if(rivers[0]) rec("Longest river", rivers[0], `${(riverLen(rivers[0])/1000).toFixed(1)} km`, rivers[0].x, rivers[0].z, 3, rivers.slice(0, 3).map(f => ({frac: riverLen(f)/riverLen(rivers[0]), label: `${(riverLen(f)/1000).toFixed(1)} km ${f.name}`})));
+  const lakes = top(F.filter(f => f.kind === "lake"), f => f.area); if(lakes[0]) rec("Biggest lake", lakes[0], `${lakes[0].area.toFixed(2)} km²`, lakes[0].x, lakes[0].z, 3, lakes.slice(0, 3).map(f => ({frac: f.area/lakes[0].area, label: `${f.area.toFixed(2)} ${f.name}`})));
+  const bays = top(F.filter(f => f.kind === "bay"), f => f.area); if(bays[0]) rec("Widest bay", bays[0], `${bays[0].area.toFixed(2)} km²`, bays[0].x, bays[0].z, 3, bays.slice(0, 3).map(f => ({frac: f.area/bays[0].area, label: `${f.area.toFixed(2)} ${f.name}`})));
+  // what stands and what fell, by the ground it lies on
+  const tally = (list, get) => { const by = new Map(); for(const it of list){ const w = get(it), p = placeAt(w.x, w.z, GROUND); if(!p) continue; const r = by.get(p) || {f: p, n: 0, x: 0, z: 0}; r.n++; r.x += w.x; r.z += w.z; by.set(p, r); } return [...by.values()].map(r => ({f: r.f, n: r.n, x: r.x/r.n, z: r.z/r.n})).sort((a, b) => b.n - a.n); };
+  if(PIECES){ const b = tally(PIECES, p => toWorld(p.px, p.py)); if(b[0]) rec("Most built place", b[0].f, `${b[0].n.toLocaleString()} pieces standing`, b[0].x, b[0].z, 24, b.slice(0, 3).map(r => ({frac: r.n/b[0].n, label: `${r.n.toLocaleString()} ${r.f.name}`}))); }
+  const deaths = ((S.deaths || {}).deaths) || [];
+  if(deaths.length){ const d = tally(deaths, q => q); if(d[0]) rec("Deadliest place", d[0].f, `${plural(d[0].n, "death")}`, d[0].x, d[0].z, 18, d.slice(0, 3).map(r => ({frac: r.n/d[0].n, label: `${r.n} ${r.f.name}`, colour: "var(--off)"}))); }
+  const portals = ((S.portals || {}).portals) || [];
+  if(portals.length){ const g = tally(portals, q => q); if(g[0]) rec("Most gated place", g[0].f, `${plural(g[0].n, "gate")}`, g[0].x, g[0].z, 24, g.slice(0, 3).map(r => ({frac: r.n/g[0].n, label: `${r.n} ${r.f.name}`, colour: "var(--portal)"}))); }
+  if(PIECES && PIECES.length){ let far = null, fd = 0; for(const p of PIECES){ const w = toWorld(p.px, p.py), d = Math.hypot(w.x, w.z); if(d > fd){ fd = d; far = w; } }
+    if(far){ const p = placeAt(far.x, far.z, GROUND); rec("Farthest build from the centre", p || {name: "the wild"}, `${km(fd)} km out`, far.x, far.z, 30, [{frac: 1, label: `${km(fd)} km`}]); } }
+  const ex = walkedExtremes();
+  if(ex){ for(const [k, w] of [["Northernmost walked ground", ex.north], ["Southernmost walked ground", ex.south]]){ const p = placeAt(w.x, w.z, GROUND); rec(k, p || {name: "open sea"}, `${Math.round(Math.abs(w.z))} m ${w.z >= 0 ? "north" : "south"} of the centre`, w.x, w.z, 12, [{frac: Math.min(1, Math.abs(w.z)/10000), label: `${km(Math.abs(w.z))} km of the world's ten`}]); } }
+  const graves = ((S.graves || {}).graves) || [];
+  if(graves.length){ const g = graves.slice().sort((a, b) => num(b.age) - num(a.age))[0]; rec("Oldest grave", {name: `${g.name}'s`}, `${MapCore.ago(Date.now() - num(g.age)*1000)} and still holding gear`, g.x, g.z, 24, graves.slice(0, 3).map(q => ({frac: num(q.age)/Math.max(1, num(g.age)), label: `${MapCore.ago(Date.now() - num(q.age)*1000)} ${q.name}`}))); }
+  const named = (FEATURES || []).filter(f => f.by).sort((a, b) => num(b.t) - num(a.t)); if(named[0]) rec("Latest name given", named[0], `by ${named[0].by}, ${MapCore.ago(num(named[0].t)*1000)}`, named[0].x, named[0].z, 3, named.slice(0, 3).map(f => ({frac: 1, label: `${f.name} · ${f.by}`})));
+  return R;
+}
+
+// ---------- the page
+function glance(){
+  const S = STATE || {}, P = (STATS && STATS.players) || [], sum = get => P.reduce((t, q) => t + get(q), 0);
+  const portals = ((S.portals || {}).portals) || [], by = new Map(portals.map(p => [p.id, p]));
+  const linked = portals.filter(p => p.to && p.to !== "0" && p.to !== p.id && by.has(p.to)).length;
+  const boats = ((S.vehicles || {}).vehicles || []).filter(v => v.kind === "boat").length;
+  const tile = (k, v, sub) => `<div class="card stat"><div class="k">${k}</div><div class="v">${v}${sub ? ` <small>${sub}</small>` : ""}</div></div>`;
+  let explored = null; if(FOG_BITS){ let n = 0; for(let i = 0; i < FOGN*FOGN; i++) if(FOG_BITS[i*4] > 40) n++; explored = n/(FOGN*FOGN); }
+  const day = S.time && S.time.day != null ? S.time.day : null;
+  document.getElementById("glance").innerHTML =
+    tile("Day", day != null ? day : "—", day != null ? (S.time.frac < .25 || S.time.frac > .75 ? "night" : "daylight") : "")
+    + tile("Explored", explored == null ? "—" : (explored*100).toFixed(1), "%")
+    + tile("Standing", PIECES ? PIECES.length.toLocaleString() : "—", "pieces")
+    + tile("Felled", S.forest && S.forest.stumps != null ? num(S.forest.stumps).toLocaleString() : "—", "trees")
+    + tile("Gates", portals.length, `${Math.floor(linked/2)} pairs`)
+    + tile("Afloat", boats, boats === 1 ? "boat" : "boats")
+    + tile("Named", (FEATURES || []).filter(f => f.by).length, "places")
+    + tile("Deaths", sum(q => num(q.deaths)) || "—", "")
+    + tile("Graves", (((S.graves || {}).graves) || []).length, "out there");
+  const sub = document.getElementById("sub");
+  const world = MapCore.geom.world || "";
+  sub.innerHTML = `<b>${esc(world)}</b> · ${plural(P.length, "player")}${P.filter(q => q.online).length ? ` · ${P.filter(q => q.online).length} online now` : ""}${STATS && STATS.since ? ` · tallied since ${new Date(STATS.since*1000).toLocaleDateString(undefined, {month: "short", day: "numeric", year: "numeric"})}` : ""}`;
+}
+function bosses(){
+  const el = document.getElementById("bosses"), B = MapCore.BOSSES, list = STATS && Array.isArray(STATS.bosses) ? STATS.bosses : null;
+  const down = B.down(list), keys = B.order.concat(down.filter(k => !B.order.includes(k)));
+  el.innerHTML = keys.map(k => { const i = down.indexOf(k), name = B.label(k);
+    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${MapCore.ord(i + 1)}` : "still standing"}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${B.icon(k)}"></use></svg><span class="bn">${esc(name)}</span></span>`; }).join("");
+}
+let RECORDS = [];
+function renderRecords(){
+  RECORDS = records();
+  document.getElementById("records").innerHTML = RECORDS.map(r =>
+    `<div class="card rec"><div class="k">${esc(r.k)}</div><div class="t">${esc(r.title)}<small>${esc(r.figure)}</small></div>`
+    + `<div class="links"><a class="btn quiet" href="${at(r.x, r.z, r.zoom)}">Map</a>${walkedAt(r.x, r.z) ? `<a class="btn quiet" href="${in3d(r.x, r.z)}">3D</a>` : ""}</div></div>`).join("")
+    || `<p class="empty">The world has not named itself yet.</p>`;
+}
+function biomes(){
+  const P = (STATS && STATS.players) || [], by = {};
+  P.forEach(q => (q.biomes || []).forEach(b => { const r = by[b.biome] || (by[b.biome] = {m: 0, d: 0}); r.m += num(b.m); r.d += num(b.deaths); }));
+  const rows = Object.entries(by).filter(([, r]) => r.m >= 500 || r.d).sort((a, b) => (b[1].d/(b[1].m || 1)) - (a[1].d/(a[1].m || 1)) || b[1].m - a[1].m);
+  const most = Math.max(...rows.map(([, r]) => r.m), 1);
+  const per = (d, m) => { const k = m/1000; if(!d) return ""; const n = k/d; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
+  document.getElementById("biomes").innerHTML = rows.map(([b, r]) => `<span class="b"><i style="background:${MapCore.BIOME_INK[b] || "#9aa093"}"></i>${esc(b)}</span>`
+    + `<span class="bar" style="width:${Math.max(1, 100*r.m/most).toFixed(1)}%" title="${esc(b)}: ${km(r.m)} km walked, ${plural(r.d, "death")}"></span><span class="km">${km(r.m)} km</span>`
+    + `<span class="dx${r.d ? "" : " safe"}"><b>${r.d ? "× " + r.d : "✓"}</b> ${per(r.d, r.m)}</span>`).join("") || `<p class="empty">No walking tallied yet.</p>`;
+}
+let SORT = "area", SHOW_ALL = false, LANDS = [];
+function lands(){
+  const F = FEATURES || [], S = STATE || {};
+  const list = F.filter(f => (f.kind === "continent" || f.kind === "island") && f.w);
+  const bin = (items, get) => { const by = new Map(); for(const it of items){ const w = get(it), p = placeAt(w.x, w.z, LAND); if(p) by.set(p, (by.get(p) || 0) + 1); } return by; };
+  const builds = PIECES ? bin(PIECES, p => toWorld(p.px, p.py)) : new Map();
+  const gates = bin(((S.portals || {}).portals) || [], q => q), deaths = bin(((S.deaths || {}).deaths) || [], q => q);
+  LANDS = list.filter(known).map(f => ({f, name: f.name, kind: f.kind, area: f.area, walked: FOG ? walkedBox(f).share : 0, builds: builds.get(f) || 0, gates: gates.get(f) || 0, deaths: deaths.get(f) || 0, peak: f.elev ? f.elev.max - SEA : 0}));
+  renderLands();
+}
+function renderLands(){
+  const rows = LANDS.slice().sort((a, b) => SORT === "name" ? a.name.localeCompare(b.name) : b[SORT] - a[SORT] || b.area - a.area);
+  const shown = SHOW_ALL ? rows : rows.slice(0, 20);
+  document.querySelector("#lands tbody").innerHTML = shown.map(r => `<tr class="${r.walked ? "" : "nil"}"><td><a href="${at(r.f.x, r.f.z, 1.6)}">${esc(r.name)}</a><span class="kind">${r.kind}</span></td>`
+    + `<td>${r.area.toFixed(2)}</td><td>${r.walked ? Math.round(r.walked*100) + "%" : "—"}</td><td class="hide">${r.builds ? r.builds.toLocaleString() : "—"}</td><td class="hide">${r.gates || "—"}</td><td>${r.deaths || "—"}</td><td class="hide">${Math.round(r.peak)} m</td></tr>`).join("");
+  document.querySelectorAll("#lands th").forEach(th => th.classList.toggle("on", th.dataset.sort === SORT));
+  const more = document.getElementById("more");
+  more.innerHTML = rows.length > 20 && !SHOW_ALL ? `${rows.length - 20} more · <a href="#" id="showAll">show every land</a>` : "";
+}
+document.querySelector("#lands thead").addEventListener("click", e => { const th = e.target.closest("th[data-sort]"); if(!th) return; SORT = th.dataset.sort; renderLands(); });
+document.getElementById("more").addEventListener("click", e => { if(e.target.id === "showAll"){ e.preventDefault(); SHOW_ALL = true; renderLands(); } });
+
+// ---------- the spotlight: the records, one at a time, each against its runners-up
+const SPOT = {i: -1, timer: 0, held: false, html: ""};
+function spotlight(){
+  const el = document.getElementById("spot"), list = RECORDS.filter(r => r.rows && r.rows.length);
+  el.hidden = !list.length; if(el.hidden) return;
+  if(SPOT.i < 0) SPOT.i = Math.floor(Math.random()*list.length);
+  SPOT.i %= list.length;
+  const show = advance => {
+    const L = RECORDS.filter(r => r.rows && r.rows.length); if(!L.length) return;
+    if(advance) SPOT.i = (SPOT.i + 1) % L.length;
+    const r = L[SPOT.i];
+    const html = `<div class="in${advance ? " out" : ""}"><div class="eyebrow"><span>${esc(r.k)}</span><span class="n">${SPOT.i + 1}/${L.length}</span></div>`
+      + `<div class="v">${esc(r.title)}</div><div class="c">${esc(r.figure)}</div>${pic.bars(r.rows)}</div>`
+      + `<div class="dots">${L.map((_, i) => `<i${i === SPOT.i ? ' class="on"' : ""}></i>`).join("")}</div>`;
+    if(!advance && html === SPOT.html) return;
+    el.innerHTML = html; SPOT.html = html;
+    if(advance) requestAnimationFrame(() => requestAnimationFrame(() => { const i = el.querySelector(".in"); if(i) i.classList.remove("out"); SPOT.html = el.innerHTML; }));
+  };
+  show(false);
+  if(!SPOT.timer){
+    SPOT.timer = setInterval(() => { if(!SPOT.held && document.visibilityState === "visible") show(true); }, 7000);
+    el.onmouseenter = () => { SPOT.held = true; }; el.onmouseleave = () => { SPOT.held = false; };
+    el.onclick = () => show(true);
+  }
+}
+
+function render(){
+  KNOWN.clear();
+  glance(); bosses(); renderRecords(); biomes(); lands(); spotlight();
+  document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
+}
+async function load(){
+  try{
+    STATE = await MapCore.fetchState(API);
+    const rev = STATE.rev || {};
+    if(rev.fog !== REVS.fog){ REVS.fog = rev.fog; LAY.load("fog", "/fog", rev.fog); }
+    if(rev.features !== REVS.features){ REVS.features = rev.features; const j = await MapCore.fetchJSON(API, "/features?v=" + rev.features); if(j && j.features) FEATURES = j.features; }
+    if(rev.pieces !== REVS.pieces){ REVS.pieces = rev.pieces; const pj = await MapCore.fetchJSON(API, "/pieces?v=" + rev.pieces); if(pj && pj.pieces) PIECES = MapCore.parsePieces(pj); }
+    try{ STATS = await MapCore.fetchJSON(API, "/stats/players"); }catch(e){}
+    document.getElementById("note").textContent = "";
+    render();
+  }catch(e){
+    document.getElementById("note").textContent = "server unreachable — this page may be out of date";
+    if(!STATE) document.getElementById("sub").textContent = "the server is not answering right now";
+  }
+}
+load();
+setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") load(); });
+</script>
+</body>
+</html>

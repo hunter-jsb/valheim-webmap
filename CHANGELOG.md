@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* A World page, second in the nav: the world at a glance (its day, explored share, what
+  stands, what fell, the gates, the boats, the names, the deaths and the graves), the bosses,
+  and its records -- largest continent and island, most and least explored land, tallest
+  peak, longest river, biggest lake, widest bay, most built, deadliest and most gated place,
+  the farthest build, the northern- and southernmost walked ground, the oldest grave, the
+  latest name -- each with the way to the spot on the map and in 3D; danger by biome for
+  everyone together; and every land in a table that sorts by area, walked share, pieces,
+  gates, deaths or peak. A spotlight turns through the records against their runners-up.
+  The tour visits the records too: the tallest peak circled, the biggest lake from above,
+  and the longest river flown along its own course. The nav reads Map, World, Portals,
+  Players, Plan.
 * A cinematic, for a screen left open: the ▶ among the map's buttons (or a link ending in
   `#tour`) starts a tour of the world's places one after another -- who is on, the portal
   hubs, the biggest build, where people die, the graves, the traders, a boat, the largest

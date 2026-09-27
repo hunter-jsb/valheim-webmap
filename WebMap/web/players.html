@@ -233,53 +233,15 @@ const rate = p => { const d = num(p.deaths), k = num(p.dist_m)/1000; return d &&
 const INK = MapCore.BIOME_INK;
 const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
 
-// ---------- the bosses ----------
-// Silhouettes of our own in the marker icons' style: a stag, the tree, the heap,
-// the dragon, the crowned skull, the queen, the burning one. A key the page does
-// not know -- the Deep North's, once it falls -- shows with the ring and its name.
-const BOSS = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
-const BOSS_ORDER = ["eikthyr", "gdking", "bonemass", "dragon", "goblinking", "queen", "fader"];
-const NOT_BOSS = new Set(["serpent", "writhan"]);     // the sea serpent and the writhan set keys too, but they are prey
-const BOSS_ICON = {
-  "boss-eikthyr":[["M10.4 11.2 7.4 8.2 5.6 9.8 6.6 6.6 3.8 4.2 7.6 5 7 1.6 9.6 5.8 11.6 8.8z","#d9c7a6"],
-                  ["M13.6 11.2 16.6 8.2 18.4 9.8 17.4 6.6 20.2 4.2 16.4 5 17 1.6 14.4 5.8 12.4 8.8z","#d9c7a6"],
-                  ["M12 8.6 8.4 12.4 9.4 21.4h5.2l1-9z","#8a6a48"],
-                  ["M10.2 14a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M12 14a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#14130e",1]],
-  "boss-gdking":[["M12 1.8C6.4 1.8 3.2 6.4 4.2 11.4 2.2 13.6 4.2 17.8 8.2 17V22h7.6v-5c4 .8 6-3.4 4-5.6 1-5-2.2-9.6-7.8-9.6z","#6f8f57"],
-                 ["M10.2 14.4h3.6V22h-3.6z","#4a5a38",1],
-                 ["M8.6 10.2a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0M13.2 10.2a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0","#e8b45f",1]],
-  "boss-bonemass":[["M12 3.4C5.4 3.4 3 9.4 3.8 14.6 4.2 19 8 21.4 12 21.4s7.8-2.4 8.2-6.8C21 9.4 18.6 3.4 12 3.4z","#7ea24a"],
-                   ["M7.6 11a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0M13 11a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0","#14130e",1],
-                   ["M8.8 15.2h6.4v2.2H8.8z","#14130e",1]],
-  "boss-dragon":[["M3.4 15.2C5.4 9.4 9.6 7 15 7l6.4 3.2-6 1.8 2 4.2-5.4 2.2-4-1.4z","#c9d6e2"],
-                 ["M12.6 7.2 14.2 2 16.6 7z","#8fa3b5"],
-                 ["M14.2 10.4a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#e8b45f",1]],
-  "boss-goblinking":[["M5 7.2 7.6 3.4 10 7 12 2.4 14 7l2.4-3.6L19 7.2z","#e8b45f"],
-                     ["M12 6C7.4 6 5 9.4 5 13.2c0 2.6 1.4 4.6 3 5.6V22h8v-3.2c1.6-1 3-3 3-5.6C19 9.4 16.6 6 12 6z","#d9c7a6"],
-                     ["M7.6 12.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0M13 12.6a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0-3.4 0","#14130e",1],
-                     ["M12 15.2 13.2 17.4h-2.4z","#14130e",1]],
-  "boss-queen":[["M9.4 5.4 6.2 1.4h2l2.6 3.6zM14.6 5.4l3.2-4h-2l-2.6 3.6z","#c4a4dc"],
-                ["M12 4.2C7 4.2 5 8.2 5 12.2c0 4.8 3 8 7 8s7-3.2 7-8c0-4-2-8-7-8z","#6b5d8f"],
-                ["M6.2 16 2 21.4 8.4 19.2zM17.8 16l4.2 5.4-6.4-2.2z","#c4a4dc"],
-                ["M7.8 10.6a1.6 2.2 0 1 0 3.2 0a1.6 2.2 0 1 0-3.2 0M13 10.6a1.6 2.2 0 1 0 3.2 0a1.6 2.2 0 1 0-3.2 0","#f2c46d",1]],
-  "boss-fader":[["M12 1.6c2 4.2 6.2 6.2 6.2 11.6 0 4.8-2.8 8-6.2 8s-6.2-3.2-6.2-8c0-5.4 4.2-7.4 6.2-11.6z","#ef8b3f"],
-                ["M12 9.2c1.4 2.8 3.6 3.8 3.6 6.8 0 2.4-1.6 4-3.6 4s-3.6-1.6-3.6-4c0-3 2.2-4 3.6-6.8z","#f8cf72",1],
-                ["M9.9 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0M12.3 14.6a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0","#14130e",1]],
-  "boss-other":[["M12 2.4a9.6 9.6 0 1 0 0 19.2a9.6 9.6 0 1 0 0-19.2z","#4a5548"],
-                ["M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z","#0f1310",1],
-                ["M12 10.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z","#e8b45f",1]],
-};
-document.getElementById("icons").innerHTML = MapCore.spriteSVG(BOSS_ICON);
+document.getElementById("icons").innerHTML = MapCore.spriteSVG(MapCore.BOSS_ICON);
 function renderBosses(list){
-  const el = document.getElementById("bosses");
-  const down = (list || []).map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => !NOT_BOSS.has(k));
-  const keys = BOSS_ORDER.concat(down.filter(k => !BOSS_ORDER.includes(k)));
+  const el = document.getElementById("bosses"), B = MapCore.BOSSES;
+  const down = B.down(list), keys = B.order.concat(down.filter(k => !B.order.includes(k)));
   el.hidden = !list;
   const html = keys.map(k => {
-    const i = down.indexOf(k), name = BOSS[k] || k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    const ic = BOSS_ICON["boss-" + k] ? "boss-" + k : "boss-other";
-    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${i + 1}${["st", "nd", "rd"][i] || "th"}` : "still standing"}">`
-      + `${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${ic}"></use></svg><span class="bn">${esc(name)}</span></span>`;
+    const i = down.indexOf(k), name = B.label(k);
+    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${MapCore.ord(i + 1)}` : "still standing"}">`
+      + `${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${B.icon(k)}"></use></svg><span class="bn">${esc(name)}</span></span>`;
   }).join("");
   if(el.innerHTML !== html) el.innerHTML = html;
 }

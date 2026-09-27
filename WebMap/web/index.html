@@ -792,7 +792,6 @@ const ago = MapCore.ago, toPx = MapCore.toPx;
 let STATS = null;
 const WSPOT = {list: [], i: -1, timer: 0, held: false, html: ""};
 const num = v => Number.isFinite(+v) ? +v : 0;
-const BOSS_NAME = {eikthyr: "Eikthyr", gdking: "The Elder", bonemass: "Bonemass", dragon: "Moder", goblinking: "Yagluth", queen: "The Queen", fader: "Fader"};
 async function tickStats(){
   try{ STATS = await MapCore.fetchJSON(API, "/stats/players"); }catch(e){}
   renderSpot();
@@ -813,8 +812,8 @@ function worldSpots(){
     out.push({k: "Afloat", v: `${boats.length} <small>${boats.length === 1 ? "boat" : "boats"}</small>`, c: rows.map(([k, n]) => `${n} ${k.toLowerCase()}${n > 1 ? "s" : ""}`).join(" \u00b7 "), svg: pic.bars(rows.slice(0, 3).map(([k, n]) => ({frac: n/boats.length, label: `${n} ${k}`})))}); }
   if(PORTALS.length){ const by = new Map(PORTALS.map(p => [p.id, p])); const linked = PORTALS.filter(p => p.to && p.to !== "0" && p.to !== p.id && by.has(p.to)).length;
     out.push({k: "Gates", v: `${PORTALS.length} <small>portals</small>`, c: `${Math.floor(linked/2)} pairs linked \u00b7 ${PORTALS.length - linked} waiting for a twin`, svg: pic.ring(linked/PORTALS.length, "linked to another")}); }
-  if(STATS && Array.isArray(STATS.bosses)){ const down = STATS.bosses.map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => k !== "serpent" && k !== "writhan"), N = Math.max(7, down.length);
-    out.push({k: "Bosses", v: `${down.length} <small>of ${N} fallen</small>`, c: down.length ? `the last to fall: ${esc(BOSS_NAME[down[down.length - 1]] || down[down.length - 1])}` : "every one still standing", svg: pic.ring(down.length/N, "of the bosses")}); }
+  if(STATS && Array.isArray(STATS.bosses)){ const down = MapCore.BOSSES.down(STATS.bosses), N = Math.max(MapCore.BOSSES.order.length, down.length);
+    out.push({k: "Bosses", v: `${down.length} <small>of ${N} fallen</small>`, c: down.length ? `the last to fall: ${esc(MapCore.BOSSES.label(down[down.length - 1]))}` : "every one still standing", svg: pic.ring(down.length/N, "of the bosses")}); }
   const deaths = sum(q => num(q.deaths));
   if(deaths){ const by = {}; P.forEach(q => (q.biomes || []).forEach(b => { by[b.biome] = (by[b.biome] || 0) + num(b.deaths); }));
     const rows = Object.entries(by).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).slice(0, 3), placed = rows.reduce((t, r) => t + r[1], 0);
@@ -1345,12 +1344,28 @@ function tourStops(){
     rest.push({kind: "Afloat", title: MapCore.vehicleStyle(b).label, line: `lies at ${nameAt(w.x, w.z) || "sea"}`, x: w.x, z: w.z, zoom: 40, dist: 70, layer: "vehicles"}); }
   // a land from far up, circled about the middle of what is walked of it; one still under fog is left out
   const fog = MapCore.explored(LAYERS.imgs.fog), walked = fog && ((x, z) => { const p = toPx(x, z); return fog(p.px, p.py); });   // the sampler reads texture px
-  if(walked) (FEATURES || []).filter(f => (f.kind === "continent" || f.kind === "island") && f.w).sort((a, b) => b.w*b.h - a.w*a.h).slice(0, 4).forEach(f => {
-    let n = 0, sx = 0, sz = 0; const N = 14;
+  const middle = f => { let n = 0, sx = 0, sz = 0; const N = 14;   // the walked middle of a feature's box, and how much of it is walked
     for(let i = 0; i < N; i++) for(let j = 0; j < N; j++){ const x = f.x - f.w/2 + f.w*(i + .5)/N, z = f.z - f.h/2 + f.h*(j + .5)/N; if(walked(x, z)){ n++; sx += x; sz += z; } }
-    if(n < N*N*0.08) return;
-    rest.push({kind: f.kind === "continent" ? "A continent" : "An island", title: f.name, line: `${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2 \u00b7 ${Math.round(100*n/(N*N))}% of it walked`,
-               x: sx/n, z: sz/n, fit: {w: f.w, h: f.h, cx: f.x, cz: f.z}, dist: Math.min(2600, Math.max(700, Math.sqrt(n/(N*N))*Math.max(f.w, f.h)*1.1)), detail: "names", far: true}); });
+    return {share: n/(N*N), x: n ? sx/n : f.x, z: n ? sz/n : f.z}; };
+  const F = FEATURES || [];
+  if(walked) F.filter(f => (f.kind === "continent" || f.kind === "island") && f.w).sort((a, b) => b.w*b.h - a.w*a.h).slice(0, 4).forEach(f => {
+    const m = middle(f); if(m.share < 0.08) return;
+    rest.push({kind: f.kind === "continent" ? "A continent" : "An island", title: f.name, line: `${(f.area || f.w*f.h/1e6).toFixed(1)} km\u00b2 \u00b7 ${Math.round(100*m.share)}% of it walked`,
+               x: m.x, z: m.z, fit: {w: f.w, h: f.h, cx: f.x, cz: f.z}, dist: Math.min(2600, Math.max(700, Math.sqrt(m.share)*Math.max(f.w, f.h)*1.1)), detail: "names", far: true}); });
+  // the world's records: the tallest peak circled, the biggest lake from above, the longest river flown along its course
+  // the records among what anyone has seen: the tallest peak climbed, the biggest lake known, the longest river known
+  if(walked){
+    const peak = F.filter(f => f.kind === "range" && f.peak && walked(f.peak.x, f.peak.z)).sort((a, b) => b.peak.y - a.peak.y)[0];
+    if(peak) rest.push({kind: "The tallest peak climbed", title: peak.name, line: `${Math.round(peak.peak.y - 30)} m above the sea`, x: peak.peak.x, z: peak.peak.z, zoom: 20, dist: 340, far: true, detail: "names"});
+    const lake = F.filter(f => f.kind === "lake" && f.w).map(f => ({f, m: middle(f)})).filter(r => r.m.share >= 0.08).sort((a, b) => b.f.area - a.f.area)[0];
+    if(lake) rest.push({kind: "The biggest lake known", title: lake.f.name, line: `${lake.f.area.toFixed(2)} km\u00b2`, x: lake.m.x, z: lake.m.z, fit: {w: lake.f.w, h: lake.f.h, cx: lake.f.x, cz: lake.f.z}, dist: Math.max(500, Math.max(lake.f.w, lake.f.h)*0.8), far: true, detail: "names"});
+    const riverLen = f => f.line.reduce((t, p, i) => i ? t + Math.hypot(p[0] - f.line[i-1][0], p[1] - f.line[i-1][1]) : 0, 0);
+    const river = F.filter(f => f.kind === "river" && f.line && f.line.length > 2 && f.line.some(p => walked(p[0], p[1]))).sort((a, b) => riverLen(b) - riverLen(a))[0];
+    if(river){   // flown along the stretch someone has seen: from its first walked point to its last
+      const seen = river.line.map(p => walked(p[0], p[1])), i0 = seen.indexOf(true), i1 = seen.lastIndexOf(true), path = river.line.slice(i0, i1 + 1);
+      if(path.length > 1) rest.push({kind: "The longest river known", title: river.name, line: `${(riverLen(river)/1000).toFixed(1)} km from source to sea`, x: path[0][0], z: path[0][1], path, zoom: 14, detail: "names"});
+    }
+  }
   for(let i = rest.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
   const seen = new Set();   // one visit per place a cycle
   return S.concat(rest.filter(s => { const k = s.kind + "|" + s.title; if(seen.has(k)) return false; seen.add(k); return true; }).slice(0, 9));
@@ -1387,7 +1402,12 @@ async function tourLegs(s, alive){
   const c = s.fit ? toPx(s.fit.cx, s.fit.cz) : q;
   if(high < V.scale*0.8){ await flyTo(c.px, c.py, high, 3200); if(!alive()) return; }
   await flyTo(c.px, c.py, down, s.fit ? 4500 : 4200);
-  if(!alive()) return; await sleepT(2500); if(!alive()) return;
+  if(!alive()) return; await sleepT(s.path ? 1200 : 2500); if(!alive()) return;
+  if(s.path){   // along the course, at a pace that reads: about a kilometre every four seconds
+    for(let i = 1; i < s.path.length; i++){ const a = s.path[i-1], b = s.path[i], p = toPx(b[0], b[1]);
+      await flyTo(p.px, p.py, down, Math.max(400, Math.hypot(b[0] - a[0], b[1] - a[1])*4)); if(!alive()) return; }
+    await sleepT(2000); return;
+  }
   const fog = MapCore.explored(LAYERS.imgs.fog);
   if(s.dist && (s.far || (fog && fog(q.px, q.py)))){
     await enter3D(s.x, s.z, Math.random()*360); if(!alive()) return;
