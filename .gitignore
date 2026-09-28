@@ -297,9 +297,6 @@ paket-files/
 __pycache__/
 *.pyc
 
-# Cake - Uncomment if you are using it
-# tools/**
-# !tools/packages.config
 
 # Tabs Studio
 *.tss
@@ -335,7 +332,6 @@ libs/BepInEx
 WebMap.dll
 WebMap.zip
 
-tools/
 dist/
 
 # the announce shared secret lives beside the DLL, never in the repo
@@ -344,5 +340,3 @@ announce.token
 # thunderstore service account token, local only
 .env
 
-# the viewer check scripts are ours, not a build output
-!tools/

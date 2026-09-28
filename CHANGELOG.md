@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* The upstream fork's Cake build path is gone -- `build.cake`, `build.sh`, the `Dockerfile` and
+  `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
+  publicises the game assemblies itself, and `libs/README.md` now says so (and names the
+  library folder correctly).
+
 ## 2.15.0
 
 * The tour grows to about twenty stops a cycle, drawn through every kind of place before any
