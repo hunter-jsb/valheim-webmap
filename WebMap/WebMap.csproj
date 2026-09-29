@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- One version, manifest.json's: the assembly carries it and ManifestVersion below
+       hands it to the plugin, so a release bumps the manifest alone. -->
   <PropertyGroup>
-    <Version>2.7.1</Version>
+    <ManifestVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../manifest.json')), '"version_number"\s*:\s*"([0-9.]+)"').Groups[1].Value)</ManifestVersion>
+    <Version>$(ManifestVersion)</Version>
     <OutputType>Library</OutputType>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>9.0</LangVersion>
@@ -42,4 +45,15 @@
     <Reference Include="steamworks"><HintPath>..\libs\valheim\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="WebsocketSharp"><HintPath>..\libs\websocket-sharp.dll</HintPath></Reference>
   </ItemGroup>
+
+  <!-- BepInPlugin wants a constant, so the manifest's version is compiled in as one -->
+  <Target Name="ManifestVersion" BeforeTargets="CoreCompile">
+    <Error Condition="'$(ManifestVersion)' == ''" Text="manifest.json has no version_number" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)Manifest.g.cs" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="namespace WebMap { internal static class Manifest { public const string Version = &quot;$(ManifestVersion)&quot;%3B } }" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)Manifest.g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)Manifest.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

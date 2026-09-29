@@ -28,7 +28,7 @@ namespace WebMap
     {
         public const string GUID = "com.github.h0tw1r3.valheim.webmap";
         public const string NAME = "WebMap";
-        public const string VERSION = "2.7.1";
+        public const string VERSION = Manifest.Version;        // manifest.json's, compiled in by WebMap.csproj
 
         internal static readonly string[] ALLOWED_PINS = { "dot", "fire", "mine", "house", "cave" };
 

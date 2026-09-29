@@ -23,6 +23,8 @@
   `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
   publicises the game assemblies itself, and `libs/README.md` now says so (and names the
   library folder correctly).
+* BepInEx logs the mod's real version at load, where it had said 2.7.1 since 2.7.1: the build
+  takes it from `manifest.json`, the one place a release bumps.
 
 ## 2.15.0
 
