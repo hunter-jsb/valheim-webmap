@@ -14,19 +14,19 @@ namespace WebMap.Tests
     // must believe only its own server's members, on its own map, until they expire.
     public class AuthTests
     {
-        private const string Guild = "1400000000000000001", Map = "http://104.224.55.78:3000";
+        internal const string Guild = "1400000000000000001", Map = "http://104.224.55.78:3000";
         private static readonly List<string> Here = new List<string> { Map };
         private static readonly long Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        private static readonly RSA Service = RSA.Create(2048);
-        private static string KeyOf(RSA rsa)
+        internal static readonly RSA Service = RSA.Create(2048);
+        internal static string KeyOf(RSA rsa)
         {
             var p = rsa.ExportParameters(false);
             return Convert.ToBase64String(p.Modulus) + "." + Convert.ToBase64String(p.Exponent);
         }
         private static string B64u(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        private static string Sign(RSA rsa, string body) =>
+        internal static string Sign(RSA rsa, string body) =>
             body + "." + B64u(rsa.SignData(Encoding.ASCII.GetBytes(body), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
-        private static string Body(bool owner = false, string guild = Guild, string aud = Map, long? exp = null, long? iat = -60)
+        internal static string Body(bool owner = false, string guild = Guild, string aud = Map, long? exp = null, long? iat = -60)
         {
             var b = new Dictionary<string, object>
             {

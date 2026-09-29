@@ -81,7 +81,7 @@ namespace WebMap
             {"txt", "text/plain"}
         };
 
-        private readonly System.Threading.Timer broadcastTimer;
+        private System.Threading.Timer broadcastTimer;
         // Written from HTTP threads, and a browser opens several connections at once
         // on the first page load: a plain Dictionary can corrupt under that.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> fileCache;
@@ -192,63 +192,19 @@ namespace WebMap
         private readonly WebSocketServiceHost webSocketHandler;
         private static MapDataServer __instance;
 
-        // for the tests (WebMap.Tests): the pin logic without a listening socket or a timer
-        internal MapDataServer(bool forTests) { }
+        // Nothing here listens or ticks: ListenAsync does both, so a test can build one.
+        public MapDataServer() : this(null) { }
 
-        public MapDataServer()
+        // the tests': bound to loopback alone
+        internal MapDataServer(System.Net.IPAddress address)
         {
             __instance = this;
 
-            httpServer = new HttpServer(SERVER_PORT);
+            httpServer = address == null ? new HttpServer(SERVER_PORT) : new HttpServer(address, SERVER_PORT);
             httpServer.AddWebSocketService<WebSocketHandler>("/");
             httpServer.KeepClean = true;
 
             webSocketHandler = httpServer.WebSocketServices["/"];
-
-            broadcastTimer = new System.Threading.Timer(e =>
-            {
-                string dataString = "";
-                if (forceReload)
-                {
-                    webSocketHandler.Sessions.Broadcast("reload\n");
-                    forceReload = false;
-                }
-                else
-                {
-                    dataString = playersWs;
-                    if (dataString != lastPlayerResponse)
-                    {
-                        webSocketHandler.Sessions.Broadcast(dataString);
-                        lastPlayerResponse = dataString;
-                    }
-
-                    List<string> tosend = null;
-                    lock (messageLock)
-                    {
-                        if (newMessages.Count > 0)
-                        {
-                            tosend = new List<string>();
-                            newMessages.ForEach(message =>
-                            {
-                                tosend.Add(message.ToJson());
-                                sentMessages.Add(message);
-                            });
-                            newMessages.Clear();
-                            newMessages.TrimExcess();
-                            // Per kind, not over the whole list: a quiet evening of
-                            // joins and deaths would otherwise push every line of
-                            // chat out of a feed someone is reading for the chat.
-                            TrimToDepth(sentMessages, 0, WebMapConfig.MAX_MESSAGES);
-                            TrimToDepth(sentMessages, 1, WebMapConfig.MAX_MESSAGES);
-                            var all = new List<string>(sentMessages.Count);
-                            sentMessages.ForEach(m => all.Add(m.ToJson()));
-                            messagesJson = "[" + string.Join(", ", all) + "]";
-                        }
-                    }
-                    if (tosend != null && tosend.Count > 0)
-                        webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
-                }
-            }, null, TimeSpan.Zero, TimeSpan.FromSeconds(PLAYER_UPDATE_INTERVAL));
 
             publicRoot = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty, "web");
 
@@ -365,7 +321,7 @@ namespace WebMap
         }
         public void Stop()
         {
-            broadcastTimer.Dispose();
+            broadcastTimer?.Dispose();
             httpServer.Stop();
         }
 
@@ -1169,6 +1125,55 @@ namespace WebMap
                 ZLog.Log($"WebMap: HTTP Server Listening on port {SERVER_PORT}");
             else
                 ZLog.LogError("WebMap: HTTP Server Failed To Start !!!");
+            // after Start: a broadcast before it throws, as every tick did until the server listened
+            if (broadcastTimer == null)
+                broadcastTimer = new System.Threading.Timer(_ => Tick(), null, TimeSpan.Zero, TimeSpan.FromSeconds(PLAYER_UPDATE_INTERVAL));
+        }
+
+        // Pool thread, every player_update_interval: the players and new chat to every open socket.
+        private void Tick()
+        {
+            string dataString = "";
+            if (forceReload)
+            {
+                webSocketHandler.Sessions.Broadcast("reload\n");
+                forceReload = false;
+            }
+            else
+            {
+                dataString = playersWs;
+                if (dataString != lastPlayerResponse)
+                {
+                    webSocketHandler.Sessions.Broadcast(dataString);
+                    lastPlayerResponse = dataString;
+                }
+
+                List<string> tosend = null;
+                lock (messageLock)
+                {
+                    if (newMessages.Count > 0)
+                    {
+                        tosend = new List<string>();
+                        newMessages.ForEach(message =>
+                        {
+                            tosend.Add(message.ToJson());
+                            sentMessages.Add(message);
+                        });
+                        newMessages.Clear();
+                        newMessages.TrimExcess();
+                        // Per kind, not over the whole list: a quiet evening of
+                        // joins and deaths would otherwise push every line of
+                        // chat out of a feed someone is reading for the chat.
+                        TrimToDepth(sentMessages, 0, WebMapConfig.MAX_MESSAGES);
+                        TrimToDepth(sentMessages, 1, WebMapConfig.MAX_MESSAGES);
+                        var all = new List<string>(sentMessages.Count);
+                        sentMessages.ForEach(m => all.Add(m.ToJson()));
+                        messagesJson = "[" + string.Join(", ", all) + "]";
+                    }
+                }
+                if (tosend != null && tosend.Count > 0)
+                    webSocketHandler.Sessions.Broadcast("messages\n[" + string.Join(",", tosend) + "]");
+            }
         }
 
         public void BroadcastPing(long id, string name, Vector3 position)

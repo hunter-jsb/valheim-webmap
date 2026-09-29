@@ -10,7 +10,7 @@ namespace WebMap.Tests
     public class PinsTests : WithDir
     {
         const string Game = "Steam_76561198055335685,1789275213-7472,dot,Grant,10.00,20.00,camp";
-        readonly MapDataServer server = new MapDataServer(true);
+        readonly MapDataServer server = new MapDataServer();
         string File_ => Path.Combine(Dir, "pins.csv");
 
         public PinsTests()

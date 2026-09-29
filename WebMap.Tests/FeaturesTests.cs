@@ -132,7 +132,7 @@ namespace WebMap.Tests
         public void AWalkedSpotNamesThePlacesItLiesInMostParticularFirstAndUnwalkedGroundNothing()
         {
             new Grid().Box(400, 400, 500, 500).Box(440, 440, 460, 460, Grid.Mountain).Read();
-            var fog = new MapDataServer(true);
+            var fog = new MapDataServer();
             int size = WebMapConfig.TEXTURE_SIZE;
             fog.fogRgba = new byte[size * size * 4];
             float x = Grid.W(450), z = Grid.W(450);

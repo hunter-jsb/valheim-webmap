@@ -27,6 +27,11 @@
   takes it from `manifest.json`, the one place a release bumps.
 * A push builds once: `ci` builds, packages and tests every push and pull request, and the
   release workflow runs on `v*` tags alone, on the same .NET SDK.
+* The write routes are under test, over real HTTP on a loopback port: no credentials, the
+  proxy's token and the `X-User` it names, `X-User` and `X-Admin` without it, a member's and an
+  admin's session, and one for another Discord server or another map. The server's broadcast
+  timer now starts when it listens rather than when it is built, which is what let a test
+  build one; before, every tick until the server listened threw.
 
 ## 2.15.0
 
