@@ -7,10 +7,15 @@
   its Discord application, so no operator makes an app or a bot for it. Members name places
   and pin the map from the browser; the server's owner, its administrators and
   `discord_admin_role` change the settings. The mod checks each session with the service's
-  public key -- signed for this Discord server and this map's address, thirty days -- at
-  `/auth/me` and on every write, where the proxy's token keeps working as before.
-  `/auth/login` returns only to this map; `public_url` names it behind a proxy, and
-  `auth_url` and `auth_public_key` (config file only) point it at a service of your own.
+  public key -- signed for this Discord server and this map's address, a week -- at
+  `/auth/me` and on every write, where the proxy's token keeps working as before. The map's
+  address is never taken from the request: it is the server's public address at the map's
+  port, as Steam or the crossplay lookup gives it, or `public_url`, which a map reached by a
+  name or through a proxy must set; the address visited at counts only on the server's own
+  machine or its LAN. `/auth/login` returns only to this map. **Sign everyone out** on the
+  settings page (`sign_out_before`) refuses every session signed in before it, for a demoted
+  admin or a lost device. `auth_url` and `auth_public_key` (config file only) point sign-in
+  at a service of your own. The announce token is compared in constant time.
 * The upstream fork's Cake build path is gone -- `build.cake`, `build.sh`, the `Dockerfile` and
   `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
   publicises the game assemblies itself, and `libs/README.md` now says so (and names the

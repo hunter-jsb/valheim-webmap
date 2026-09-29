@@ -19,6 +19,7 @@ namespace WebMap
             public string key, kind, desc;
             public bool live, secret;
             public Func<string> get; public Func<string, string> set;   // set returns what was wrong, or null
+            public Func<string, string> norm;                           // a value from the site as it is kept
         }
         private class Given { public string value, by; public long t; }
 
@@ -80,8 +81,13 @@ namespace WebMap
             // session could send every sign-in to a page of its own, or believe sessions it signs itself
             new Entry { key = "discord_admin_role", kind = "string", live = true, desc = "A role id whose members are the map's admins too, beside the server's owner and administrators.",
                         get = () => WebMapConfig.DISCORD_ADMIN_ROLE, set = Text(v => WebMapConfig.DISCORD_ADMIN_ROLE = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
-            new Entry { key = "public_url", kind = "string", live = true, desc = "The map's address when it is reached through a proxy or a name (https://map.example.com). Empty: the address it is visited at.",
+            new Entry { key = "public_url", kind = "string", live = true, desc = "The map's address, for sign-in: needed when it is reached by a name or through a proxy (https://map.example.com). Empty: the server's public address at the map's port.",
                         get = () => WebMapConfig.PUBLIC_URL, set = Text(v => WebMapConfig.PUBLIC_URL = v, 200, v => v.Length == 0 || Auth.Origin(v) != null, "an http or https address, or empty") },
+            // "now" by the server's clock, which the sign-in service's shares, not the admin's browser's
+            new Entry { key = "sign_out_before", kind = "time", live = true, desc = "Sessions signed in before this are refused: everyone signs in again, you too. For a demoted admin or a lost device.",
+                        norm = v => v == "now" ? DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(Inv) : v,
+                        get = () => WebMapConfig.SIGN_OUT_BEFORE.ToString(Inv),
+                        set = s => long.TryParse(s, NumberStyles.Integer, Inv, out long v) && v >= 0 ? Run(() => WebMapConfig.SIGN_OUT_BEFORE = v) : "unix seconds, or now" },
             new Entry { key = "discord_log_channel", kind = "string", live = true, desc = "Channel that gets what people do on the site: names, pins, settings changes.",
                         get = () => WebMapConfig.DISCORD_LOG_CHANNEL, set = Text(v => WebMapConfig.DISCORD_LOG_CHANNEL = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
             new Entry { key = "discord_chat_channel", kind = "string", live = true, desc = "Channel relayed both ways with in-game chat.",
@@ -172,6 +178,7 @@ namespace WebMap
             foreach (var x in entries) if (x.key == key) { e = x; break; }
             if (e == null) return "no such setting";
             value = (value ?? "").Trim();
+            if (e.norm != null && value.Length > 0) value = e.norm(value);
             lock (gate)
             {
                 string want = value.Length == 0 ? defaults[key] : value;

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -44,8 +46,10 @@ namespace WebMap
         }
 
         // The session a token carries, or null when it is forged, expired, for another
-        // Discord server or for another map. origins: the addresses this map answers at.
-        internal static Session Verify(string token, string key, string guild, ICollection<string> origins, long now)
+        // Discord server or for another map, or issued before signedOutBefore (a sign-out of
+        // everyone; a session without its issue time is older than that rule and refused too).
+        // origins: the addresses this map answers at.
+        internal static Session Verify(string token, string key, string guild, ICollection<string> origins, long now, long signedOutBefore = 0)
         {
             var shape = TokenShape.Match(token ?? "");
             var k = Key(key);
@@ -65,6 +69,7 @@ namespace WebMap
             catch { return null; }
 
             if (!(Body.Num(json, "exp") > now)) return null;
+            if (!(Body.Num(json, "iat") >= signedOutBefore)) return null;
             if (Body.Str(json, "guild") != guild) return null;
             string aud = Origin(Body.Str(json, "aud"));
             if (aud == null || !origins.Contains(aud)) return null;
@@ -101,15 +106,45 @@ namespace WebMap
             return u.Scheme + "://" + u.Host.ToLowerInvariant() + (u.IsDefaultPort ? "" : ":" + u.Port.ToString(CultureInfo.InvariantCulture));
         }
 
-        // The addresses this map answers at: the one it was asked at, and public_url.
-        internal static List<string> Origins(string host, bool secure, string publicUrl)
+        // The addresses this map answers at: public_url, and the server's public address at
+        // the mod's port. Host is anyone's to write, and a session's aud is only as good as
+        // the list it is checked against, so the address a visitor asked at counts only on
+        // this machine or a LAN -- a private peer asking at a private address. Behind a proxy
+        // or a Docker port every peer can look private; the address asked at cannot.
+        internal static List<string> Origins(string host, IPAddress peer, string publicUrl, string publicIp, int port)
         {
             var list = new List<string>();
-            string asked = string.IsNullOrEmpty(host) ? null : Origin((secure ? "https://" : "http://") + host);
-            if (asked != null) list.Add(asked);
-            string pub = Origin(publicUrl);
-            if (pub != null && pub != asked) list.Add(pub);
+            void Add(string o) { if (o != null && !list.Contains(o)) list.Add(o); }
+            Add(Origin(publicUrl));
+            if (IPAddress.TryParse(publicIp ?? "", out IPAddress ip))
+                Add(Origin("http://" + (ip.AddressFamily == AddressFamily.InterNetworkV6 ? "[" + ip + "]" : ip.ToString()) + ":" + port.ToString(CultureInfo.InvariantCulture)));
+            string asked = string.IsNullOrEmpty(host) ? null : Origin("http://" + host);
+            if (asked != null && Private(peer) && Uri.TryCreate(asked, UriKind.Absolute, out Uri u) && Local(u.Host)) Add(asked);
             return list;
+        }
+
+        // loopback, 10/8, 172.16/12, 192.168/16, fc00::/7
+        internal static bool Private(IPAddress a)
+        {
+            if (a == null) return false;
+            if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
+            if (IPAddress.IsLoopback(a)) return true;
+            byte[] b = a.GetAddressBytes();
+            if (a.AddressFamily == AddressFamily.InterNetwork)
+                return b[0] == 10 || (b[0] == 172 && (b[1] & 0xF0) == 16) || (b[0] == 192 && b[1] == 168);
+            return a.AddressFamily == AddressFamily.InterNetworkV6 && (b[0] & 0xFE) == 0xFC;
+        }
+        private static bool Local(string host) =>
+            host == "localhost" || IPAddress.TryParse(host.Trim('[', ']'), out IPAddress a) && Private(a);
+
+        // Equal, in a time that depends only on the secret's length: how fast a wrong guess
+        // is refused says nothing about how much of it was right.
+        internal static bool Same(string secret, string given)
+        {
+            if (string.IsNullOrEmpty(secret) || given == null) return false;
+            int diff = secret.Length ^ given.Length;
+            for (int i = 0; i < secret.Length; i++) diff |= secret[i] ^ (given.Length > 0 ? given[i % given.Length] : 0);
+            return diff == 0;
         }
 
         // Where a sign-in starts: the service, told which server gates this map and which

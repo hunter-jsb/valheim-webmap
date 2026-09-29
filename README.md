@@ -224,7 +224,10 @@ edit pins from the map, and its admins change the mod's settings on the settings
 1. In Discord, turn on Developer Mode (User Settings → Advanced), right-click your server
    and **Copy Server ID**.
 2. Stop the game server, put that id in `discord_guild` under `[Server]` in
-   `BepInEx/config/com.github.h0tw1r3.valheim.webmap.cfg`, and start it again.
+   `BepInEx/config/com.github.h0tw1r3.valheim.webmap.cfg`, and start it again. A host that
+   rewrites that file on every restart keeps it from you: put a line
+   `discord_guild<Tab><the id>` in `BepInEx/plugins/WebMap/map_data/settings.tsv` instead,
+   the file the settings page keeps.
 
 **Sign in** then shows in the map's bar, and anyone in that Discord server can use it. The
 server's owner and members whose roles carry Discord's Administrator permission are the
@@ -233,16 +236,31 @@ and no Discord application of your own are needed.
 
 Sign-in goes through the project's sign-in service (`valheim-proxy.hunterjsb.workers.dev`)
 and its Discord application, which therefore learns who signed in to which map. It hands
-back a session signed for your Discord server and your map's address, good for thirty days,
-and the mod checks it with the service's public key: nothing secret is kept on your server.
+back a session signed for your Discord server and your map's address, good for a week, and
+the mod checks it with the service's public key: nothing secret is kept on your server.
+
+**The map's address.** A session is good only at the map's own address, which the mod does
+not take from the visitor's request (anyone can write that): it is the server's public
+address, which the game learns from Steam or, on a crossplay server, looks up, at the map's
+port -- the log says `WebMap: the game says its public address is ...` -- or `public_url`.
+**A map reached by a name, through a proxy, or on another port than `server_port` must set
+`public_url`** (`https://map.example.com`); until one of the two is known, sign-in stays
+hidden from visitors outside. On the server's own machine or its LAN, the private address
+it is visited at works with no setting.
+
+**Signing everyone out.** **Sign everyone out** on the settings page (`sign_out_before`)
+refuses every session signed in before that moment, yours too. It is the answer to a
+demoted admin, a member who has left, or a lost device: a session otherwise stays good for
+its week, whatever changes in Discord.
 
 * **Plain HTTP.** Most Valheim servers serve the map over plain `http://`, where the session
   travels in the clear: anyone on the network path can read it and act as that member, or
-  admin, until it expires. If that matters, put the map behind HTTPS with a reverse proxy
-  and set `public_url`.
-* `public_url` — the map's address when visitors reach it through a proxy or a name
-  (`https://map.example.com`); a sign-in may return there as well as to the address the
-  visitor used.
+  admin, until it expires or everyone is signed out. If that matters, put the map behind
+  HTTPS with a reverse proxy and set `public_url`.
+* **Admins can move sign-in.** `discord_guild` and `discord_admin_role` can be changed from
+  the settings page, since some hosts rewrite the config file on restart and leave no other
+  way: an admin's session, or a stolen one, can hand the map to another Discord server or
+  role. Every change is logged, with who made it.
 * `auth_url` and `auth_public_key` — for running a sign-in service of your own: its base URL,
   and the public half of its RSA key as `<modulus base64>.<exponent base64>`. Empty is the
   project's own. They are read from the config file only, never set from the site.
@@ -313,8 +331,8 @@ defaults are what runs):
 | `/features` | the world's geography with its names: landmasses, ranges (with peaks), lakes, bays, rivers (with their course), biome regions; `?v=` from `rev.features` |
 | `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own) or, with an id of `hub@x,z`, a portal hub standing there; needs a signed-in session (`Authorization: Bearer`) or, from a proxy, `X-Announce-Token`, which credits `X-User` |
 | `/pins` (POST) | `{"op":"add","x","z","type","text"}`, `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text`, or `{"op":"delete","id"}`: places, changes or takes up a pin, only ever on walked ground; answers `{"ok","id","pins"}`, 400 with `{"error"}`. Needs a session or `X-Announce-Token` as `/names`; the member owns a new pin and is logged for every write |
-| `/auth/login` | `?to=<a page of this map>`: 302 to the sign-in service with this map's Discord server and address; 400 for a `to` anywhere else. 404 while `discord_guild` is empty |
-| `/auth/me` | the signed-in member, `{"id","name","avatar","admin"}`; 401 without a valid session, 404 while `discord_guild` is empty |
+| `/auth/login` | `?to=<a page of this map>`: 302 to the sign-in service with this map's Discord server and address; 400 for a `to` anywhere else. 404 while `discord_guild` is empty, or while the map knows no address of its own the caller could be at (see [The map's address](#signing-in-with-discord)) |
+| `/auth/me` | the signed-in member, `{"id","name","avatar","admin"}`; 401 without a valid session, 404 as `/auth/login` |
 | `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
 | `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs an admin's session, or `X-Announce-Token` with `X-Admin: 1` |
 | `/discord/guilds` | the bot's guilds, `{"guilds":[{"id","name"}]}`, for the settings picker; same gate as `/settings` |

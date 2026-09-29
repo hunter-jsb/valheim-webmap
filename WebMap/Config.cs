@@ -49,6 +49,7 @@ namespace WebMap
         public static string PUBLIC_URL = "";
         public static string AUTH_URL = "";
         public static string AUTH_PUBLIC_KEY = "";
+        public static long SIGN_OUT_BEFORE = 0;           // unix seconds: sessions issued earlier are refused
 
         public static string URL = "";
 
@@ -167,6 +168,11 @@ namespace WebMap
                 + "Empty: the project's own.").Value;
             if (AUTH_PUBLIC_KEY.Length > 0 && Auth.Key(AUTH_PUBLIC_KEY) == null)
                 ZLog.LogWarning("WebMap: auth_public_key is not an RSA key of 2048 bits or more; nobody can sign in");
+
+            SIGN_OUT_BEFORE = config.Bind("Server", "sign_out_before",
+                WebMapConfig.SIGN_OUT_BEFORE,
+                "Unix seconds: sessions signed in before this are refused, so everyone signs in again. "
+                + "The settings page's Sign everyone out sets it to now.").Value;
 
             DISCORD_LOG_CHANNEL = config.Bind("Server", "discord_log_channel",
                 WebMapConfig.DISCORD_LOG_CHANNEL,

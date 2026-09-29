@@ -50,21 +50,25 @@ let SETTINGS = null;
 function ago(t){ const d = Math.max(0, Math.floor(Date.now()/1000) - t); return d < 90 ? "just now" : d < 5400 ? Math.round(d/60) + " min ago" : d < 172800 ? Math.round(d/3600) + " h ago" : Math.round(d/86400) + " d ago"; }
 
 function row(s){
-  const input = s.kind === "bool"
+  // a moment the server stamps as its own now: sign_out_before, one button and no reset
+  const time = s.kind === "time";
+  const input = time
+    ? `<input type="hidden" name="value" value="now"><div class="note">${+s.value ? "Sessions from before " + esc(new Date(s.value * 1000).toLocaleString()) + " are refused." : "No sessions refused yet."}</div>`
+    : s.kind === "bool"
     ? `<select class="field" name="value"><option value="true"${s.value === "true" ? " selected" : ""}>true</option><option value="false"${s.value === "false" ? " selected" : ""}>false</option></select>`
     : `<input class="field" name="value" value="${esc(s.secret ? "" : s.value)}" placeholder="${esc(s.secret ? (s.set ? "set · paste a new one to replace it" : "not set") : s.default)}" autocomplete="off"${s.secret ? ' type="password"' : ""}>`;
   return `<div class="card set" data-key="${esc(s.key)}">
     <div><div class="k">${esc(s.key)}<span class="tag${s.live ? "" : " restart"}">${s.live ? "live" : "restart"}</span></div>
       <div class="d">${esc(s.desc)}</div>
       <div class="who">${s.given ? `set by <b>${esc(s.by || "someone")}</b> ${s.t ? ago(s.t) : ""} · the config says ${esc(s.secret ? (s.default ? "set" : "nothing") : s.default || "nothing")}` : "the config's own value"}</div></div>
-    <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">Save</button>${s.given ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
+    <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">${time ? "Sign everyone out" : "Save"}</button>${s.given && !time ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
   </div>`;
 }
 // the settings read in groups, as an admin thinks of them, not in the file's order
 const GROUPS = [
   ["The map", ["explore_radius", "update_fog_texture_interval", "save_fog_texture_interval", "texture_size", "pixel_size", "render_size", "default_zoom"]],
   ["Players", ["player_update_interval", "always_map", "always_visible", "show_vehicles", "max_pins_per_user"]],
-  ["Sign-in", ["discord_guild", "discord_admin_role", "public_url"]],
+  ["Sign-in", ["discord_guild", "discord_admin_role", "public_url", "sign_out_before"]],
   ["Chat & Discord", ["max_messages", "announce_name", "discord_webhook", "discord_bot_token", "discord_log_channel", "discord_chat_channel", "chat_relay"]],
   ["The 3D view", ["export_models", "extract_textures", "extract_meshes", "export_ms_per_frame", "texture_max_size", "object_categories"]],
   ["The mod", ["debug"]],
@@ -136,6 +140,12 @@ document.getElementById("rows").addEventListener("submit", async e => {
     const r = await MapCore.post(API, "/settings", {key, value: e.target.value.value});
     SETTINGS = r.settings; render();
     if(r.restart) document.getElementById("restart").hidden = false;
+    // this admin's session went with everyone's (one a proxy signed stays: it is the proxy's)
+    if(key === "sign_out_before" && !await MapCore.whoami()){
+      const note = document.getElementById("note");
+      document.getElementById("rows").innerHTML = "";
+      note.className = "note"; note.textContent = "Everyone is signed out, you too. Sign in again to come back here.";
+    }
   }catch(err){ n.className = "note bad"; n.textContent = err.message || "could not save"; }
 });
 document.getElementById("rows").addEventListener("click", async e => {

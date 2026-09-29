@@ -26,8 +26,10 @@ guards against; there is one per failure, not one per branch.
 3. **The write routes' gate** -- `Caller` (the proxy's token, or a signed-in session) and
    `/announce` in `ProcessSpecialRoutes`. A regression opens pin, name, settings and
    announcement writes to anyone. The session itself (`Auth.Verify`: the service's key,
-   expiry, the Discord server, the map's address; the admin rule; where `/auth/login` may
-   return to): **dotnet test**, on a key pair the test makes. The routes: **nothing**: the
+   expiry, a sign-out of everyone, the Discord server, the map's address; the admin rule;
+   the map's own addresses and when Host counts; where `/auth/login` may return to; the
+   token's constant-time compare): **dotnet test**, on a key pair the test makes, and one
+   session the Worker signed. The routes: **nothing**: the
    constructor starts the broadcast timer at once, and its first tick throws before the
    server listens, which kills a test host. Starting the timer in `ListenAsync` would make
    the routes testable over real HTTP.

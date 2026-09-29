@@ -762,8 +762,8 @@ namespace WebMap
                     // A sign-in starts at the service, which sends the person back to `to`
                     // with #session=; the viewer keeps that and sends it as a bearer.
                     {
-                        if (WebMapConfig.DISCORD_GUILD.Length == 0) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
-                        string url = Auth.LoginUrl(WebMapConfig.AUTH_URL, req.QueryString["to"] ?? "", WebMapConfig.DISCORD_GUILD, Origins(req));
+                        if (!SignInHere(req, out var origins)) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        string url = Auth.LoginUrl(WebMapConfig.AUTH_URL, req.QueryString["to"] ?? "", WebMapConfig.DISCORD_GUILD, origins);
                         if (url == null) { Answer(res, 400, "{\"error\":\"bad return address\"}"); return true; }
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
                         res.RedirectLocation = url;
@@ -774,7 +774,7 @@ namespace WebMap
                 case "/auth/me":
                     // a 404 keeps the viewer's Sign in hidden where sign-in is off
                     {
-                        if (WebMapConfig.DISCORD_GUILD.Length == 0) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        if (!SignInHere(req, out _)) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
                         var s = Signed(req, out bool admin);
                         if (s == null) { Answer(res, 401, "{\"error\":\"not signed in\"}"); return true; }
@@ -786,9 +786,7 @@ namespace WebMap
                     // Shared-secret only, and deliberately absent from the public
                     // Worker's allowlist: this writes into everyone's chat.
                     {
-                        string want = Announce.Token;
-                        string got = req.Headers["X-Announce-Token"] ?? "";
-                        if (want == null || got != want)
+                        if (!Auth.Same(Announce.Token, req.Headers["X-Announce-Token"] ?? ""))
                         {
                             res.StatusCode = 403;
                             textBytes = Encoding.UTF8.GetBytes("{\"error\":\"forbidden\"}");
@@ -862,8 +860,7 @@ namespace WebMap
         // through the sign-in service carries its session. False when neither.
         private static bool Caller(HttpListenerRequest req, out string who, out bool admin)
         {
-            string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
-            if (want != null && got == want)
+            if (Auth.Same(Announce.Token, req.Headers["X-Announce-Token"] ?? ""))
             {
                 who = req.Headers["X-User"] ?? "";
                 try { who = Uri.UnescapeDataString(who); } catch { }
@@ -880,16 +877,46 @@ namespace WebMap
         private static Auth.Session Signed(HttpListenerRequest req, out bool admin)
         {
             admin = false;
-            if (WebMapConfig.DISCORD_GUILD.Length == 0) return null;
             string h = req.Headers["Authorization"] ?? "";
-            if (!h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return null;
+            if (!h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) || !SignInHere(req, out var origins)) return null;
             var s = Auth.Verify(h.Substring(7).Trim(), WebMapConfig.AUTH_PUBLIC_KEY.Length > 0 ? WebMapConfig.AUTH_PUBLIC_KEY : Auth.BrokerKey,
-                                WebMapConfig.DISCORD_GUILD, Origins(req), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                                WebMapConfig.DISCORD_GUILD, origins, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), WebMapConfig.SIGN_OUT_BEFORE);
             if (s != null) admin = Auth.IsAdmin(s.Owner, s.Perms, s.Roles, WebMapConfig.DISCORD_ADMIN_ROLE);
             return s;
         }
-        private static List<string> Origins(HttpListenerRequest req) =>
-            Auth.Origins(req.Headers["Host"], req.IsSecureConnection, WebMapConfig.PUBLIC_URL);
+
+        // Whether this caller can sign in: discord_guild set, and an address of this map's
+        // own it can be at. A remote caller has none until public_url is set or the game
+        // knows its public address, and is told sign-in is off.
+        private static bool signInWarned;
+        private static bool SignInHere(HttpListenerRequest req, out List<string> origins)
+        {
+            origins = null;
+            if (WebMapConfig.DISCORD_GUILD.Length == 0) return false;
+            origins = Auth.Origins(req.Headers["Host"], req.RemoteEndPoint?.Address, WebMapConfig.PUBLIC_URL, publicIp, SERVER_PORT);
+            if (origins.Count > 0) return true;
+            if (!signInWarned)
+            {
+                signInWarned = true;
+                ZLog.LogWarning("WebMap: sign-in is off for visitors from outside until the game says its public address; a map reached by a name or through a proxy needs public_url");
+            }
+            return false;
+        }
+
+        // The server's public address as the game knows it: PlayFab looks it up for a
+        // crossplay server, Steam reports what it sees of a Steam one once logged on.
+        // Game thread only; the HTTP threads read the string.
+        private static volatile string publicIp;
+        private static void LearnPublicIp()
+        {
+            string ip = null;
+            try { ip = ZPlayFabMatchmaking.PublicIP; } catch { }
+            if (string.IsNullOrEmpty(ip))
+                try { if (Steamworks.SteamGameServer.BLoggedOn()) { var a = Steamworks.SteamGameServer.GetPublicIP(); if (a.IsSet()) ip = a.ToString(); } } catch { }
+            if (string.IsNullOrEmpty(ip) || ip == publicIp) return;
+            publicIp = ip;
+            ZLog.Log($"WebMap: the game says its public address is {ip}; sign-in answers at http://{(ip.Contains(":") ? "[" + ip + "]" : ip)}:{SERVER_PORT}");
+        }
 
         // A body, gzipped for a client that takes it: the 3D view's chunks are arrays of
         // numbers that shrink to a third. Each body is compressed once and kept with it.
@@ -1098,6 +1125,7 @@ namespace WebMap
             try
             {
                 Kitchen.Tick(Time.realtimeSinceStartup);    // catches its own, station by station
+                LearnPublicIp();
                 Stats.MaybeSave();
                 Trails.MaybeSave();
                 timeJson = BuildTimeJson();
