@@ -25,6 +25,8 @@
   library folder correctly).
 * BepInEx logs the mod's real version at load, where it had said 2.7.1 since 2.7.1: the build
   takes it from `manifest.json`, the one place a release bumps.
+* A push builds once: `ci` builds, packages and tests every push and pull request, and the
+  release workflow runs on `v*` tags alone, on the same .NET SDK.
 
 ## 2.15.0
 

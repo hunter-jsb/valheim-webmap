@@ -1,10 +1,12 @@
-# Every push and pull request: the mod builds, its logic passes dotnet test, and
-# the viewer's core passes node --test. The end-to-end checks want a live server
-# and a Chrome, so they stay a step run by hand (tools/check.mjs).
+# Every push to a branch and every pull request: the mod builds and packages as a
+# tag would publish it, its logic passes dotnet test, and the viewer's core passes
+# node --test. A tag is release.yml's alone. The end-to-end checks want a live
+# server and a Chrome, so they stay a step run by hand (tools/check.mjs).
 name: ci
 
 on:
   push:
+    branches: ['**']
   pull_request:
 
 jobs:
@@ -23,8 +25,8 @@ jobs:
 
       - uses: ./.github/actions/game-assemblies
 
-      - name: Build the mod
-        run: dotnet build WebMap/WebMap.csproj -c Release -v minimal
+      - name: Build and package
+        run: ./package.sh
 
       - name: dotnet test
         run: dotnet test WebMap.Tests
