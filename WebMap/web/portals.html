@@ -759,7 +759,9 @@ function render(list){
     if(!hubs.length) return null;
     if(spare.length === 1 && siteOf.get(p.id) !== spare[0]) return spare[0];
     if(p.last){ const n = nearest(p.last.x, p.last.z, hubs.filter(h => h !== siteOf.get(p.id))); if(n && n.d < HUB_R) return n.h; }
-    const n = nearest(p.x, p.z, (spare.length ? spare : hubs).filter(h => h !== siteOf.get(p.id)));
+    // the spare gate may be its own, at its own hub: then the nearest other hub
+    const others = hubs.filter(h => h !== siteOf.get(p.id)), spareOthers = spare.filter(h => others.includes(h));
+    const n = nearest(p.x, p.z, spareOthers.length ? spareOthers : others);
     return n ? n.h : null;
   };
   const elsewhere = pairs.filter(([a, b]) => !atHub(a) && !atHub(b));

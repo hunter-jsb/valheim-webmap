@@ -16,6 +16,9 @@
   settings page (`sign_out_before`) refuses every session signed in before it, for a demoted
   admin or a lost device. `auth_url` and `auth_public_key` (config file only) point sign-in
   at a service of your own. The announce token is compared in constant time.
+* The portal atlas draws the dashed dial line for a tagged, unlinked gate whose own hub is
+  the only one with a gate to spare: it goes to the nearest other hub, where before it was
+  left out.
 * The upstream fork's Cake build path is gone -- `build.cake`, `build.sh`, the `Dockerfile` and
   `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
   publicises the game assemblies itself, and `libs/README.md` now says so (and names the
