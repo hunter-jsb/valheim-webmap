@@ -42,6 +42,14 @@ namespace WebMap
         public static string DISCORD_CHAT_CHANNEL = "";
         public static bool CHAT_RELAY = true;
 
+        // Sign-in, through the project's sign-in service: DISCORD_GUILD set turns it on
+        // and gates it. Empty AUTH_URL and AUTH_PUBLIC_KEY mean the project's own, so a
+        // config written by an older build follows the service if it moves.
+        public static string DISCORD_ADMIN_ROLE = "";
+        public static string PUBLIC_URL = "";
+        public static string AUTH_URL = "";
+        public static string AUTH_PUBLIC_KEY = "";
+
         public static string URL = "";
 
         // The 3D view's model library. The host rewrites the .cfg on every restart,
@@ -136,7 +144,29 @@ namespace WebMap
 
             DISCORD_GUILD = config.Bind("Server", "discord_guild",
                 WebMapConfig.DISCORD_GUILD,
-                "The guild (server) id the settings picker lists channels from.").Value;
+                "Your Discord server's id (Developer Mode on, right-click the server, Copy Server ID). "
+                + "Its members can sign in to the map, and its owner and administrators are the map's "
+                + "admins; the settings picker lists its channels. Empty: no sign-in.").Value;
+
+            DISCORD_ADMIN_ROLE = config.Bind("Server", "discord_admin_role",
+                WebMapConfig.DISCORD_ADMIN_ROLE,
+                "A role id whose members are the map's admins too, beside the server's owner and administrators.").Value;
+
+            PUBLIC_URL = config.Bind("Server", "public_url",
+                WebMapConfig.PUBLIC_URL,
+                "The map's address when visitors reach it through a proxy or a name (https://map.example.com). "
+                + "Empty: whatever address it is visited at.").Value;
+
+            AUTH_URL = config.Bind("Server", "auth_url",
+                WebMapConfig.AUTH_URL,
+                "The sign-in service. Empty: the project's own, " + Auth.Broker + ". Only for running your own.").Value;
+
+            AUTH_PUBLIC_KEY = config.Bind("Server", "auth_public_key",
+                WebMapConfig.AUTH_PUBLIC_KEY,
+                "The public key that service signs sessions with, as <modulus base64>.<exponent base64>. "
+                + "Empty: the project's own.").Value;
+            if (AUTH_PUBLIC_KEY.Length > 0 && Auth.Key(AUTH_PUBLIC_KEY) == null)
+                ZLog.LogWarning("WebMap: auth_public_key is not an RSA key of 2048 bits or more; nobody can sign in");
 
             DISCORD_LOG_CHANNEL = config.Bind("Server", "discord_log_channel",
                 WebMapConfig.DISCORD_LOG_CHANNEL,

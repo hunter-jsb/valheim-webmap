@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* Sign in with Discord on any server running the mod: set `discord_guild` to your Discord
+  server's id and **Sign in** appears on the map, through the project's sign-in service and
+  its Discord application, so no operator makes an app or a bot for it. Members name places
+  and pin the map from the browser; the server's owner, its administrators and
+  `discord_admin_role` change the settings. The mod checks each session with the service's
+  public key -- signed for this Discord server and this map's address, thirty days -- at
+  `/auth/me` and on every write, where the proxy's token keeps working as before.
+  `/auth/login` returns only to this map; `public_url` names it behind a proxy, and
+  `auth_url` and `auth_public_key` (config file only) point it at a service of your own.
 * The upstream fork's Cake build path is gone -- `build.cake`, `build.sh`, the `Dockerfile` and
   `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
   publicises the game assemblies itself, and `libs/README.md` now says so (and names the

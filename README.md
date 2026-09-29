@@ -30,6 +30,8 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
   they wear. Look around, walk, or switch to an overview.
 * **Server announcements** on every player's screen, for restart warnings and the like.
 * Chat, deaths and joins in the message log; optional Discord notifications.
+* **Sign in with Discord**: members of your Discord server name places and pin the map
+  from the browser, and its admins change the settings there. No bot or Discord app needed.
 
 ## Install
 
@@ -204,7 +206,7 @@ Delete the folder to export everything again.
   unnamed pin.
 
 Not case sensitive. Past the configured limit a player's oldest pin is dropped.
-A deployment with a sign-in (see `/pins` below) lets members do the same from the map:
+Signed in (see [below](#signing-in-with-discord)), members do the same from the map:
 tap walked ground and **Pin here**, or tap a pin to relabel, retype, move or delete it.
 
 ### Server announcements
@@ -212,6 +214,40 @@ tap walked ground and **Pin here**, or tap a pin to relabel, retype, move or del
 `POST /announce`, message as the body, `X-Announce-Token` header. The secret lives in
 `announce.token` beside the DLL — not in the BepInEx config, which is rewritten on
 shutdown and would discard it. No token file means the route is closed.
+
+### Signing in with Discord
+
+Signed in, members of your Discord server name places and portal hubs and place, move and
+edit pins from the map, and its admins change the mod's settings on the settings page (the
+⚙ beside their name). To turn it on:
+
+1. In Discord, turn on Developer Mode (User Settings → Advanced), right-click your server
+   and **Copy Server ID**.
+2. Stop the game server, put that id in `discord_guild` under `[Server]` in
+   `BepInEx/config/com.github.h0tw1r3.valheim.webmap.cfg`, and start it again.
+
+**Sign in** then shows in the map's bar, and anyone in that Discord server can use it. The
+server's owner and members whose roles carry Discord's Administrator permission are the
+map's admins; `discord_admin_role`, a role id, makes that role's members admins too. No bot
+and no Discord application of your own are needed.
+
+Sign-in goes through the project's sign-in service (`valheim-proxy.hunterjsb.workers.dev`)
+and its Discord application, which therefore learns who signed in to which map. It hands
+back a session signed for your Discord server and your map's address, good for thirty days,
+and the mod checks it with the service's public key: nothing secret is kept on your server.
+
+* **Plain HTTP.** Most Valheim servers serve the map over plain `http://`, where the session
+  travels in the clear: anyone on the network path can read it and act as that member, or
+  admin, until it expires. If that matters, put the map behind HTTPS with a reverse proxy
+  and set `public_url`.
+* `public_url` — the map's address when visitors reach it through a proxy or a name
+  (`https://map.example.com`); a sign-in may return there as well as to the address the
+  visitor used.
+* `auth_url` and `auth_public_key` — for running a sign-in service of your own: its base URL,
+  and the public half of its RSA key as `<modulus base64>.<exponent base64>`. Empty is the
+  project's own. They are read from the config file only, never set from the site.
+
+The audit log and the chat relay below are another matter: they still want a bot of your own.
 
 ### Discord
 
@@ -231,8 +267,8 @@ to Discord on its own, over the bot API rather than a webhook:
   Discord side cannot flood the server.
 * **The settings picker.** Once a token is set, `discord_guild` and the two channel
   settings offer a dropdown on the settings page instead of a bare id field
-  (`GET /discord/guilds`, `GET /discord/channels?guild=`, behind the same token and
-  `X-Admin` gate as `/settings`); without a token they're just a plain field.
+  (`GET /discord/guilds`, `GET /discord/channels?guild=`, for admins only, as
+  `/settings`); without a token they're just a plain field.
 * Discord's bot API needs the **Message Content** privileged intent turned on for the
   chat relay to read anything (Discord blanks `content` on every message otherwise):
   the app's page, Bot → Privileged Gateway Intents → Message Content Intent.
@@ -275,10 +311,12 @@ defaults are what runs):
 | `/forest`, `/forest/stats` | forest overlay, tree and stump counts with density percentiles |
 | `/trails` | where players have walked: a count per map pixel, drawn as a faint blue band; 503 until the first sweep after someone walks (PNG) |
 | `/features` | the world's geography with its names: landmasses, ranges (with peaks), lakes, bays, rivers (with their course), biome regions; `?v=` from `rev.features` |
-| `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own) or, with an id of `hub@x,z`, a portal hub standing there; needs `X-Announce-Token`, credits `X-User` |
-| `/pins` (POST) | `{"op":"add","x","z","type","text"}`, `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text`, or `{"op":"delete","id"}`: places, changes or takes up a pin, only ever on walked ground; answers `{"ok","id","pins"}`, 400 with `{"error"}`. Needs `X-Announce-Token`; `X-User` owns a new pin and is logged for every write |
+| `/names` | `POST {"id","name"}` names a place (empty name: back to the world's own) or, with an id of `hub@x,z`, a portal hub standing there; needs a signed-in session (`Authorization: Bearer`) or, from a proxy, `X-Announce-Token`, which credits `X-User` |
+| `/pins` (POST) | `{"op":"add","x","z","type","text"}`, `{"op":"edit","id"}` with any of `x`, `z`, `type`, `text`, or `{"op":"delete","id"}`: places, changes or takes up a pin, only ever on walked ground; answers `{"ok","id","pins"}`, 400 with `{"error"}`. Needs a session or `X-Announce-Token` as `/names`; the member owns a new pin and is logged for every write |
+| `/auth/login` | `?to=<a page of this map>`: 302 to the sign-in service with this map's Discord server and address; 400 for a `to` anywhere else. 404 while `discord_guild` is empty |
+| `/auth/me` | the signed-in member, `{"id","name","avatar","admin"}`; 401 without a valid session, 404 while `discord_guild` is empty |
 | `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
-| `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs `X-Announce-Token` and `X-Admin: 1`, credits `X-User` |
+| `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs an admin's session, or `X-Announce-Token` with `X-Admin: 1` |
 | `/discord/guilds` | the bot's guilds, `{"guilds":[{"id","name"}]}`, for the settings picker; same gate as `/settings` |
 | `/discord/channels` | `?guild=` a guild's text and announcement channels, `{"channels":[{"id","name"}]}`; same gate |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw, lit, by]` against a table of prefab footprint and colour and a `players` list: `lit` is a torch's, fire pit's or hearth's fuel, `1` while it burns, `0` once out, `-1` on a piece that does not burn or is not known; `by` who built it, an index into `players` by the name the stats know them by, `-1` for a builder never seen online (JSON, a few hundred KB for a busy world) |

@@ -23,11 +23,14 @@ guards against; there is one per failure, not one per branch.
 2. **The sweep's game-thread walk** (`StructureMap`): too many ZDOs a frame hitches the
    game, a yield inside a sector list skips ZDOs. **Nothing**; `/structures/stats` measures
    it live.
-3. **The write routes' token gate** -- `SiteWrite` and `/announce` in
-   `ProcessSpecialRoutes`. A regression opens pin, name and announcement writes to anyone.
-   **Nothing**: the constructor starts the broadcast timer at once, and its first tick
-   throws before the server listens, which kills a test host. Starting the timer in
-   `ListenAsync` would make the routes testable over real HTTP.
+3. **The write routes' gate** -- `Caller` (the proxy's token, or a signed-in session) and
+   `/announce` in `ProcessSpecialRoutes`. A regression opens pin, name, settings and
+   announcement writes to anyone. The session itself (`Auth.Verify`: the service's key,
+   expiry, the Discord server, the map's address; the admin rule; where `/auth/login` may
+   return to): **dotnet test**, on a key pair the test makes. The routes: **nothing**: the
+   constructor starts the broadcast timer at once, and its first tick throws before the
+   server listens, which kills a test host. Starting the timer in `ListenAsync` would make
+   the routes testable over real HTTP.
 4. **Pins.** The chat commands (`!pin`, `!undoPin`, `!deletePin` in
    `ZRoutedRpcPatch.Observe`, whose per-player trim once deleted other players' pins):
    **nothing**, they read a `ZPackage`. Site writes (`MapDataServer.WritePin`): **dotnet

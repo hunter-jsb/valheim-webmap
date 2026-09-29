@@ -74,8 +74,14 @@ namespace WebMap
             new Entry { key = "discord_bot_token", kind = "string", live = true, secret = true,
                         desc = "The bot token behind the audit log, the chat relay and the settings picker. Empty turns all three off.",
                         get = () => WebMapConfig.DISCORD_BOT_TOKEN, set = Text(v => WebMapConfig.DISCORD_BOT_TOKEN = v, 100, v => true, "a bot token, or empty") },
-            new Entry { key = "discord_guild", kind = "string", live = true, desc = "The guild (server) id the settings picker lists channels from.",
+            new Entry { key = "discord_guild", kind = "string", live = true, desc = "The Discord server whose members can sign in to the map, and whose channels the picker lists. Empty turns sign-in off.",
                         get = () => WebMapConfig.DISCORD_GUILD, set = Text(v => WebMapConfig.DISCORD_GUILD = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
+            // auth_url and auth_public_key are the config file's alone: set from the site, a stolen admin
+            // session could send every sign-in to a page of its own, or believe sessions it signs itself
+            new Entry { key = "discord_admin_role", kind = "string", live = true, desc = "A role id whose members are the map's admins too, beside the server's owner and administrators.",
+                        get = () => WebMapConfig.DISCORD_ADMIN_ROLE, set = Text(v => WebMapConfig.DISCORD_ADMIN_ROLE = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
+            new Entry { key = "public_url", kind = "string", live = true, desc = "The map's address when it is reached through a proxy or a name (https://map.example.com). Empty: the address it is visited at.",
+                        get = () => WebMapConfig.PUBLIC_URL, set = Text(v => WebMapConfig.PUBLIC_URL = v, 200, v => v.Length == 0 || Auth.Origin(v) != null, "an http or https address, or empty") },
             new Entry { key = "discord_log_channel", kind = "string", live = true, desc = "Channel that gets what people do on the site: names, pins, settings changes.",
                         get = () => WebMapConfig.DISCORD_LOG_CHANNEL, set = Text(v => WebMapConfig.DISCORD_LOG_CHANNEL = v, 25, DigitsOrEmpty, "a Discord id (digits), or empty") },
             new Entry { key = "discord_chat_channel", kind = "string", live = true, desc = "Channel relayed both ways with in-game chat.",

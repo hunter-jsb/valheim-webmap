@@ -856,9 +856,9 @@ if(typeof document !== "undefined"){
   });
 }
 // ---------- who you are ----------
-// A deployment's Worker signs people in with Discord and sends the page back with
-// a session token in its hash; the page keeps the token and sends it as a bearer.
-// Served by the mod alone there is no /auth route, and the bar shows nothing.
+// The sign-in service signs people in with Discord and sends the page back with a
+// session token in its hash; the page keeps the token and sends it as a bearer.
+// Where sign-in is off, /auth/me answers 404 and the bar shows nothing.
 let session = null, me = null;
 try{
   const parts = location.hash.replace(/^#/, "").split("&").filter(Boolean);

@@ -690,16 +690,12 @@ namespace WebMap
                     res.Close(textBytes, true);
                     return true;
                 case "/settings":
-                    // The settings an admin changes from the site. The Worker checks the
-                    // Discord role and says so in X-Admin; the shared token guards both.
+                    // The settings an admin changes from the site.
                     {
-                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
-                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        if (!Caller(req, out string who, out bool admin) || !admin) { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
                         if (req.HttpMethod != "POST") { Answer(res, 200, Settings.Json()); return true; }
                         string body;
                         using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) body = sr.ReadToEnd();
-                        string who = req.Headers["X-User"] ?? "";
-                        try { who = Uri.UnescapeDataString(who); } catch { }
                         string log = null; bool restart = false;
                         string err = Features.ParseBody(body, out string key, out string value, "key", "value")
                             ? Settings.Set(key, value, who, out log, out restart) : "expected {\"key\":..,\"value\":..}";
@@ -713,16 +709,14 @@ namespace WebMap
                     // Empty (never an error) when there is no token yet, so the picker
                     // just falls back to the plain field.
                     {
-                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
-                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        if (!Caller(req, out _, out bool admin) || !admin) { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
                         Answer(res, 200, "{\"guilds\":" + RefsJson(Discord.Guilds()) + "}");
                         return true;
                     }
                 case "/discord/channels":
                     // A guild's text channels, for the same picker.
                     {
-                        string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
-                        if (want == null || got != want || req.Headers["X-Admin"] != "1") { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        if (!Caller(req, out _, out bool admin) || !admin) { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
                         string guild = req.QueryString["guild"];
                         if (string.IsNullOrEmpty(guild)) { Answer(res, 400, "{\"error\":\"guild is required\"}"); return true; }
                         Answer(res, 200, "{\"channels\":" + RefsJson(Discord.Channels(guild)) + "}");
@@ -753,9 +747,7 @@ namespace WebMap
                     res.Close(textBytes, true);
                     return true;
                 case "/names":
-                    // A name given on the site. The same shared secret as /announce
-                    // guards it, and the caller says who: the public Worker adds both
-                    // once it has seen a signed-in Discord member.
+                    // A name given on the site, by a signed-in member.
                     {
                         if (!SiteWrite(req, res, out string body, out string who)) return true;
                         string log = null;
@@ -764,6 +756,30 @@ namespace WebMap
                         Answer(res, err == null ? 200 : 400, err == null
                             ? "{\"ok\":true,\"rev\":" + Features.Rev + ",\"log\":\"" + JsonEscape(log ?? "") + "\"}"
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
+                        return true;
+                    }
+                case "/auth/login":
+                    // A sign-in starts at the service, which sends the person back to `to`
+                    // with #session=; the viewer keeps that and sends it as a bearer.
+                    {
+                        if (WebMapConfig.DISCORD_GUILD.Length == 0) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        string url = Auth.LoginUrl(WebMapConfig.AUTH_URL, req.QueryString["to"] ?? "", WebMapConfig.DISCORD_GUILD, Origins(req));
+                        if (url == null) { Answer(res, 400, "{\"error\":\"bad return address\"}"); return true; }
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
+                        res.RedirectLocation = url;
+                        res.StatusCode = 302;
+                        res.Close();
+                        return true;
+                    }
+                case "/auth/me":
+                    // a 404 keeps the viewer's Sign in hidden where sign-in is off
+                    {
+                        if (WebMapConfig.DISCORD_GUILD.Length == 0) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
+                        var s = Signed(req, out bool admin);
+                        if (s == null) { Answer(res, 401, "{\"error\":\"not signed in\"}"); return true; }
+                        Answer(res, 200, "{\"id\":\"" + JsonEscape(s.Id) + "\",\"name\":\"" + JsonEscape(s.Name) + "\",\"avatar\":"
+                            + (string.IsNullOrEmpty(s.Avatar) ? "null" : "\"" + JsonEscape(s.Avatar) + "\"") + ",\"admin\":" + (admin ? "true" : "false") + "}");
                         return true;
                     }
                 case "/announce":
@@ -827,23 +843,53 @@ namespace WebMap
             return false;
         }
 
-        // A write from the site: the shared token says the Worker sent it, X-User which
-        // signed-in member. False when this has already answered 403.
+        // A write from the site. False when this has already answered 403.
         private static bool SiteWrite(HttpListenerRequest req, HttpListenerResponse res, out string body, out string who)
         {
             body = who = null;
-            string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
-            if (req.HttpMethod != "POST" || want == null || got != want)
+            if (req.HttpMethod != "POST" || !Caller(req, out who, out _))
             {
                 Answer(res, 403, "{\"error\":\"forbidden\"}");
                 return false;
             }
             using (var sr = new StreamReader(req.InputStream, Encoding.UTF8))
                 body = sr.ReadToEnd();
-            who = req.Headers["X-User"] ?? "";
-            try { who = Uri.UnescapeDataString(who); } catch { }
             return true;
         }
+
+        // Who is writing. A proxy holding the shared token (our Worker) says who in X-User
+        // and whether an admin in X-Admin, never believed without it; a browser signed in
+        // through the sign-in service carries its session. False when neither.
+        private static bool Caller(HttpListenerRequest req, out string who, out bool admin)
+        {
+            string want = Announce.Token, got = req.Headers["X-Announce-Token"] ?? "";
+            if (want != null && got == want)
+            {
+                who = req.Headers["X-User"] ?? "";
+                try { who = Uri.UnescapeDataString(who); } catch { }
+                admin = req.Headers["X-Admin"] == "1";
+                return true;
+            }
+            var s = Signed(req, out admin);
+            who = s?.Name;
+            return s != null;
+        }
+
+        // The session a request's bearer carries, checked against the service's key, this
+        // map's Discord server and this map's addresses; null where sign-in is off.
+        private static Auth.Session Signed(HttpListenerRequest req, out bool admin)
+        {
+            admin = false;
+            if (WebMapConfig.DISCORD_GUILD.Length == 0) return null;
+            string h = req.Headers["Authorization"] ?? "";
+            if (!h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return null;
+            var s = Auth.Verify(h.Substring(7).Trim(), WebMapConfig.AUTH_PUBLIC_KEY.Length > 0 ? WebMapConfig.AUTH_PUBLIC_KEY : Auth.BrokerKey,
+                                WebMapConfig.DISCORD_GUILD, Origins(req), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            if (s != null) admin = Auth.IsAdmin(s.Owner, s.Perms, s.Roles, WebMapConfig.DISCORD_ADMIN_ROLE);
+            return s;
+        }
+        private static List<string> Origins(HttpListenerRequest req) =>
+            Auth.Origins(req.Headers["Host"], req.IsSecureConnection, WebMapConfig.PUBLIC_URL);
 
         // A body, gzipped for a client that takes it: the 3D view's chunks are arrays of
         // numbers that shrink to a third. Each body is compressed once and kept with it.
