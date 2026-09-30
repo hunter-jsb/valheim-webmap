@@ -10,6 +10,17 @@
   sees or does changes. The two checks that cut into 3D build their place first, by the
   view's own measure, and wait on the tour's beat, where they had timed out under software
   rendering.
+* The pages share what each had a copy of, and again nothing a player sees or does changes.
+  One spotlight, `js/spot.js`, turns the map's figures, the World page's records and a
+  player's figures, the last as the strip whose rules are now `site.css`'s. The helpers two
+  pages defined are `map-core.js`'s once -- a figure and a distance, a tally's age, the walked
+  world's share and box, a canvas sized to its stage, the scale bar, the names by revision --
+  or `js/card.js`'s for a player's kitchen, and the plan uses the core's geometry and view
+  rather than copies of its own. Every call to the server goes through MapCore's one client:
+  one API base, one error (the server's own words or the status, with the status on it), and
+  fresh reads unless a versioned one asks for the browser's cache. The page check measures
+  the 3D view across a tour over two cycles after a warm one, where a cold first cycle had
+  failed it now and then.
 
 ## 2.16.0
 
