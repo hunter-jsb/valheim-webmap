@@ -177,7 +177,7 @@ async function view3d() {
   const at = await p.ev(`(() => { const q = MapCore.toPx(${x}, ${z}), r = stage.getBoundingClientRect(), b = pegman.getBoundingClientRect();
     return {x: r.left + V.tx + q.px*V.scale, y: r.top + V.ty + q.py*V.scale, bx: b.left + b.width/2, by: b.top + b.height/2}; })()`);
   if (at) await p.drag(at.bx, at.by, at.x, at.y);
-  const dropped = !!at && await p.until(`IN3D && location.hash.startsWith("#3d=")`, 10000);
+  const dropped = !!at && await p.until(`Street.on && location.hash.startsWith("#3d=")`, 10000);
   check("3d: the pegman dropped on walked ground stands you there", dropped, await p.ev("location.hash"));
   await p.done("3d");
 }
@@ -200,16 +200,16 @@ async function tour() {
   check("tour: a flight resized under it lands on its spot", off !== false && off < 2, `${off.toFixed ? off.toFixed(0) : off} px off`);
   // A stop's place built before it plays, by the view's own measure: the cut waits only a few
   // seconds for it, and under software rendering a place still loading stays on the map.
-  const build = async views => await p.ev(`loadView3D().then(v => { feed3D(LAST_STATE); v.prefetch(${views}); return true; })`)
-    && await p.until(`V3D.ready((${views})[0])`, 120000);
+  const build = async views => await p.ev(`Street.load().then(v => { Street.feed(LAST_STATE); v.prefetch(${views}); return true; })`)
+    && await p.until(`Street.view.ready((${views})[0])`, 120000);
   const built = await build(`[{x: ${x}, z: ${z}, dist: 100, pitch: 45}]`);
   await p.ev(`void (Tour.state.on = false, HIDDEN.add("portal"), applyHidden(), Tour.start(), Tour.state.run++,
     window.__stop = {kind: "", title: "", line: "", x: ${x}, z: ${z}, zoom: 30, dist: 100, layer: "portal"},
     window.__old = Tour.visit(window.__stop, Tour.state.run).then(() => window.__woke = true))`);
   const circling = built && await p.until(`Tour.state.in3d === window.__stop`, 60000);
-  await p.ev(`void (Tour.stop(), HIDDEN.delete("portal"), applyHidden(), Tour.state.on = true, Tour.state.run++, enter3D(${x}, ${z}, 0).then(() => { V3D.setMode("orbit"); V3D.setSpin(6); }))`);
+  await p.ev(`void (Tour.stop(), HIDDEN.delete("portal"), applyHidden(), Tour.state.on = true, Tour.state.run++, Street.enter(${x}, ${z}, 0).then(() => { Street.view.setMode("orbit"); Street.view.setSpin(6); }))`);
   const woke = circling && await p.until(`window.__woke`, 30000);
-  const after = await p.ev(`({spin: V3D && V3D.spin, portals: !HIDDEN.has("portal")})`) || {};
+  const after = await p.ev(`({spin: Street.view && Street.view.spin, portals: !HIDDEN.has("portal")})`) || {};
   check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals,
         JSON.stringify(after) + (!built ? ", its place never built" : !circling ? ", never seen in 3D" : ""));
   await p.ev(`Tour.stop()`);
@@ -242,8 +242,8 @@ async function tour() {
     return null; })()`);
   const streetBuilt = !!street && await build(`window.__street.shot.views`);
   if (street) await p.ev(`void (Tour.start(), Tour.state.run++, Tour.state.pace = 3, Tour.visit(window.__street, Tour.state.run, null))`);
-  const stood3d = streetBuilt && await p.until(`Tour.state.in3d === window.__street && IN3D && V3D.running && V3D.mode === "street" && V3D.moves.length`, 60000);
-  const eye = stood3d ? await p.ev(`(() => { const w = Tour.walked(); return {walked: w(V3D.me.x, V3D.me.z), eye: +(V3D.me.y - V3D.standAt(V3D.me.x, V3D.me.z)).toFixed(2)}; })()`) : null;
+  const stood3d = streetBuilt && await p.until(`Tour.state.in3d === window.__street && Street.on && Street.view.running && Street.view.mode === "street" && Street.view.moves.length`, 60000);
+  const eye = stood3d ? await p.ev(`(() => { const w = Tour.walked(); return {walked: w(Street.view.me.x, Street.view.me.z), eye: +(Street.view.me.y - Street.view.standAt(Street.view.me.x, Street.view.me.z)).toFixed(2)}; })()`) : null;
   check("tour: a street beat stands on walked ground at eye height", stood3d && eye.walked && Math.abs(eye.eye - 1.8) < 0.25,
         `${street || "no stand in this world"}: ${JSON.stringify(eye)}` + (street && !streetBuilt ? ", its place never built" : ""));
   await p.ev(`Tour.stop()`);
@@ -254,7 +254,7 @@ async function tour() {
   await p.ev(`Tour.state.pace = 8; Tour.state.cycles = 0; Tour.start()`);
   const per = [];
   for (const t0 = Date.now(); Date.now() - t0 < 1200000; await sleep(1000)) {
-    const m = await p.ev(`({c: Tour.state.cycles, g: V3D ? V3D.renderer.info.memory.geometries : 0, t: V3D ? V3D.renderer.info.memory.textures : 0, n: V3D ? V3D.chunks.size : 0})`);
+    const m = await p.ev(`({c: Tour.state.cycles, g: Street.view ? Street.view.renderer.info.memory.geometries : 0, t: Street.view ? Street.view.renderer.info.memory.textures : 0, n: Street.view ? Street.view.chunks.size : 0})`);
     if (!m || m.c >= 2) break;
     const r = per[m.c] || (per[m.c] = { g: 0, t: 0, n: 0 });
     r.g = Math.max(r.g, m.g); r.t = Math.max(r.t, m.t); r.n = Math.max(r.n, m.n);
@@ -263,8 +263,8 @@ async function tour() {
   check("tour: across two cycles the 3D view's geometries and textures level off", !!(c1 && c2) && c2.g <= c1.g*1.3 + 300 && c2.t <= c1.t*1.3 + 60 && c2.n <= 1600,
         per.map((r, i) => `cycle ${i + 1}: at most ${r.g} geometries, ${r.t} textures, ${r.n} chunks`).join("; "));
   await p.ev(`Tour.stop()`); await sleep(900);
-  const left = await p.ev(`Object.assign(${was}, {spin: V3D.spin, dist: V3D.orbitDist, mode: V3D.mode, eye: V3D.eye, ahead: V3D.ahead.length, jobs: V3D.jobs.length, moves: V3D.moves.length, held: V3D.held,
-    in3d: IN3D, tour: document.body.classList.contains("tour"), cap: document.getElementById("tourcap").hidden, fig: document.getElementById("tourfig").hidden, card: ${card}.hidden})`) || {};
+  const left = await p.ev(`Object.assign(${was}, {spin: Street.view.spin, dist: Street.view.orbitDist, mode: Street.view.mode, eye: Street.view.eye, ahead: Street.view.ahead.length, jobs: Street.view.jobs.length, moves: Street.view.moves.length, held: Street.view.held,
+    in3d: Street.on, tour: document.body.classList.contains("tour"), cap: document.getElementById("tourcap").hidden, fig: document.getElementById("tourfig").hidden, card: ${card}.hidden})`) || {};
   const back = ["hidden", "details", "off", "side"].every(k => left[k] === before[k]);
   check("tour: stopping it puts back every layer, the sidebar, the 3D view's camera and clock, and lets what it was building go",
         back && left.spin === 0 && left.dist === 140 && left.mode === "street" && left.eye === 1.8 && !left.ahead && !left.jobs && !left.moves && left.held === null && !left.in3d && !left.tour && left.cap && left.fig && left.card,
