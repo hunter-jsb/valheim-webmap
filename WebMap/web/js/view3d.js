@@ -113,14 +113,15 @@ export class View3D {
   }
 
   // ---------------------------------------------------------------- the server
+  // Through the page's MapCore client, but from the browser's cache when it has them: every
+  // path carries its layer's revision. url() is for three.js's loaders, which fetch for themselves.
   url(path) { return this.api + path; }
 
   async getBuffer(path) {
     this.fetched[path.startsWith('/height') ? 'height' : 'objects']++;
-    const r = await fetch(this.url(path));
-    if (r.status === 404) return null;            // nobody has walked there
-    if (!r.ok) throw new Error(path + ' ' + r.status);
-    const buf = await r.arrayBuffer();
+    let buf;
+    try { buf = await MapCore.fetchBytes(this.api, path, { cache: 'default' }); }
+    catch (e) { if (e.status === 404) return null; throw e; }   // 404: nobody has walked there
     this.fetched.bytes += buf.byteLength;
     return buf;
   }
@@ -169,7 +170,7 @@ export class View3D {
   // chunks that hold it back for a rebuild; the rest keep what they have.
   async loadPrefabs(v) {
     let d;
-    try { d = await (await fetch(this.url(`/prefabs?v=${v}`))).json(); } catch (e) { return; }
+    try { d = await MapCore.fetchJSON(this.api, `/prefabs?v=${v}`, { cache: 'default' }); } catch (e) { return; }
     const next = new Map(Object.entries(d.prefabs || {}).map(([k, p]) => [+k, p]));
     const moved = new Set();
     for (const [h, p] of next) {

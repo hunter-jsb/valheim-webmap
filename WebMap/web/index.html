@@ -657,7 +657,7 @@ function setPill(online){ LIVE_UP = online; renderStatus(); }
 
 let SUMMARY = null;
 async function tickStatus(){
-  try{ SUMMARY = await fetch(STATUS_JSON, {cache:"no-store"}).then(r=>r.json()); }
+  try{ SUMMARY = await fetch(STATUS_JSON, {cache:"no-store"}).then(r=>r.json()); }   // Statuspage's own, not the server: no API base
   catch(e){ SUMMARY = null; }
   renderStatus();
 }

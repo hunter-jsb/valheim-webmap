@@ -463,7 +463,8 @@ async function ridgeLine(f){
   const got = new Map(), jobs = [];
   for(let cz = Math.floor(z0/256); cz <= Math.floor(z1/256); cz++) for(let cx = Math.floor(x0/256); cx <= Math.floor(x1/256); cx++){
     if(![[.5, .5], [.1, .1], [.9, .1], [.1, .9], [.9, .9]].some(([u, w]) => walked((cx + u)*256, (cz + w)*256))) continue;
-    jobs.push(fetch(API + `/height?cx=${cx}&cz=${cz}&step=16&v=${(world.rev && world.rev.height) || 0}`).then(r => r.ok ? r.arrayBuffer() : null)
+    // versioned by the ground's revision, so the browser may keep it
+    jobs.push(MapCore.fetchBytes(API, `/height?cx=${cx}&cz=${cz}&step=16&v=${(world.rev && world.rev.height) || 0}`, {cache: "default"})
       .then(b => { if(b && b.byteLength === 17*17*2) got.set(cx + "," + cz, new Int16Array(b)); }).catch(() => {}));
   }
   if(!jobs.length || jobs.length > 100) return null;

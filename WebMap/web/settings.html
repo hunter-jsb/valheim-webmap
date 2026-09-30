@@ -104,14 +104,14 @@ async function upgradePickers(){
   const tokenRow = SETTINGS.settings.find(s => s.key === "discord_bot_token");
   const guildRow = SETTINGS.settings.find(s => s.key === "discord_guild");
   if(!tokenRow || !tokenRow.set || !guildRow) return;   // no token yet: nothing to pick from
+  // a list the server refuses is an empty one; no answer at all leaves the plain fields
+  const refused = e => { if(e.status) return {}; throw e; };
   try{
-    const gr = await fetch(API + "/discord/guilds", {headers: MapCore.authHeaders(), cache: "no-store"});
-    const guilds = gr.ok ? (await gr.json()).guilds || [] : [];
+    const guilds = (await MapCore.fetchJSON(API, "/discord/guilds", {headers: MapCore.authHeaders()}).catch(refused)).guilds || [];
     fillPicker("discord_guild", guilds, guildRow.value);
     const guildId = guildRow.value || (guilds[0] && guilds[0].id) || "";
     if(!guildId) return;
-    const cr = await fetch(API + "/discord/channels?guild=" + encodeURIComponent(guildId), {headers: MapCore.authHeaders(), cache: "no-store"});
-    const channels = cr.ok ? (await cr.json()).channels || [] : [];
+    const channels = (await MapCore.fetchJSON(API, "/discord/channels?guild=" + encodeURIComponent(guildId), {headers: MapCore.authHeaders()}).catch(refused)).channels || [];
     for(const key of CHANNEL_KEYS){
       const row = SETTINGS.settings.find(s => s.key === key);
       if(row) fillPicker(key, channels, row.value);
@@ -124,9 +124,7 @@ async function load(){
   if(!me){ note.textContent = "Sign in with Discord to see the settings."; rows.innerHTML = ""; return; }
   if(!me.admin){ note.textContent = "The settings are for the server's admins."; rows.innerHTML = ""; return; }
   try{
-    const r = await fetch(API + "/settings", {headers: MapCore.authHeaders(), cache: "no-store"});
-    if(!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
-    SETTINGS = await r.json(); note.textContent = ""; render();
+    SETTINGS = await MapCore.fetchJSON(API, "/settings", {headers: MapCore.authHeaders()}); note.textContent = ""; render();
     document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
   }catch(e){ note.textContent = e.message === "HTTP 404" ? "This server does not take settings from the site yet (it needs the mod build that does)." : e.message; }
 }

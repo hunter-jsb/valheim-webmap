@@ -52,19 +52,24 @@ const PLAN_ZOOM = 16, MAX_ZOOM = 120;
 // ---------- the server ----------
 // No committed snapshots: a page reads the game server live, at cfg.api -- our
 // deployment through a Cloudflare Worker that adds HTTPS + CORS, the mod's own
-// viewer at its own origin.
-async function api(base, path){
-  const r = await fetch(base + path, {cache: "no-store"});
-  if(!r.ok) throw new Error(path + " " + r.status);
+// viewer at its own origin. Every call to it comes through here: fresh unless the
+// caller says otherwise (o: fetch's own options), and a refusal an Error in the
+// server's own words, or "HTTP <status>", with the status on it.
+async function api(base, path, o){
+  const r = await fetch(base + path, Object.assign({cache: "no-store"}, o));
+  if(!r.ok){
+    let j = null; try{ j = await r.json(); }catch(e){}
+    throw Object.assign(new Error((j && j.error) || "HTTP " + r.status), {status: r.status});
+  }
   return r;
 }
-const fetchJSON = (base, path) => api(base, path).then(r => r.json());
-// a signed-in write: the session rides as a bearer, the answer is the mod's JSON
+const fetchJSON = (base, path, o) => api(base, path, o).then(r => r.json());
+const fetchBytes = (base, path, o) => api(base, path, o).then(r => r.arrayBuffer());
+// a signed-in write: the session rides as a bearer, the answer is the mod's JSON (an
+// older mod's CSV reads as no answer)
 async function post(base, path, body){
-  const r = await fetch(base + path, {method: "POST", headers: {"content-type": "application/json", ...authHeaders()}, body: JSON.stringify(body)});
-  let j = {}; try{ j = await r.json(); }catch(e){}
-  if(!r.ok) throw new Error(j.error || ("HTTP " + r.status));
-  return j;
+  const r = await api(base, path, {method: "POST", cache: "default", headers: {"content-type": "application/json", ...authHeaders()}, body: JSON.stringify(body)});
+  try{ return await r.json(); }catch(e){ return {}; }
 }
 // One document per tick carries every small block a page shows, plus a revision
 // per large layer.
@@ -929,11 +934,11 @@ const authHeaders = () => session ? {authorization: "Bearer " + session} : {};
 const user = () => me;
 let asked = null, signInHere = false;     // the nav's one question a page, and whether this deployment signs in
 async function whoami(){
-  let r;
-  try{ r = await fetch(cfg.api + "/auth/me", {headers: authHeaders(), cache: "no-store"}); }catch(e){ return null; }
-  if(r.status === 200){ me = await r.json(); }
-  else if(r.status === 401){ me = null; if(session){ session = null; try{ localStorage.removeItem("xnv.session"); }catch(e){} } }
-  else return null;                        // no sign-in here
+  let r = null;
+  try{ r = await api(cfg.api, "/auth/me", {headers: authHeaders()}); }
+  catch(e){ if(e.status !== 401) return null; }        // no sign-in here, or no answer
+  if(r){ me = await r.json(); }
+  else { me = null; if(session){ session = null; try{ localStorage.removeItem("xnv.session"); }catch(e){} } }
   signInHere = true;
   renderWho();
   return me;
@@ -981,7 +986,7 @@ function nav(current, el){
 // what the pages use, and setGeom, which the tests turn the geometry with
 return {cfg, nav, toggleSide, user, authHeaders, whoami,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
-        fetchJSON, fetchState, fetchConfig, post, layers,
+        fetchJSON, fetchBytes, fetchState, fetchConfig, post, layers,
         drawRasters, parsePieces, explored, filterExplored, walked, drawPieces, drawFires, drawDeaths, drawNames, hitName,
         clamp, view, viewCache, fitCanvas, scaleBar,
         ICONS, spriteSVG, injectSprite, iconPaths, vehicleStyle, PIN_ICON, BOSSES, BOSS_ICON, kitchens, pic, BIOME_INK,
