@@ -247,20 +247,21 @@ async function tour() {
   check("tour: a street beat stands on walked ground at eye height", stood3d && eye.walked && Math.abs(eye.eye - 1.8) < 0.25,
         `${street || "no stand in this world"}: ${JSON.stringify(eye)}` + (street && !streetBuilt ? ", its place never built" : ""));
   await p.ev(`Tour.stop()`);
-  // Two whole cycles, fast: what the 3D view holds levels off rather than growing with every
-  // place built ahead; then a stop puts every layer, the sidebar and the 3D view back.
+  // Three whole cycles, fast: after the first, which starts from a cold view, what the 3D view
+  // holds levels off rather than growing with every place built ahead; then a stop puts every
+  // layer, the sidebar and the 3D view back.
   const was = `({hidden: [...Layers.hidden].sort().join(), details: [...Layers.details].sort().join(), off: [...Layers.off].sort().join(), side: document.body.classList.contains("side-open")})`;
   const before = await p.ev(was);
   await p.ev(`Tour.state.pace = 8; Tour.state.cycles = 0; Tour.start()`);
   const per = [];
-  for (const t0 = Date.now(); Date.now() - t0 < 1200000; await sleep(1000)) {
+  for (const t0 = Date.now(); Date.now() - t0 < 1800000; await sleep(1000)) {
     const m = await p.ev(`({c: Tour.state.cycles, g: Street.view ? Street.view.renderer.info.memory.geometries : 0, t: Street.view ? Street.view.renderer.info.memory.textures : 0, n: Street.view ? Street.view.chunks.size : 0})`);
-    if (!m || m.c >= 2) break;
+    if (!m || m.c >= 3) break;
     const r = per[m.c] || (per[m.c] = { g: 0, t: 0, n: 0 });
     r.g = Math.max(r.g, m.g); r.t = Math.max(r.t, m.t); r.n = Math.max(r.n, m.n);
   }
-  const [c1, c2] = per;
-  check("tour: across two cycles the 3D view's geometries and textures level off", !!(c1 && c2) && c2.g <= c1.g*1.3 + 300 && c2.t <= c1.t*1.3 + 60 && c2.n <= 1600,
+  const [, c1, c2] = per;
+  check("tour: across two cycles after a warm one the 3D view's geometries and textures level off", !!(c1 && c2) && c2.g <= c1.g*1.3 + 300 && c2.t <= c1.t*1.3 + 60 && c2.n <= 1600,
         per.map((r, i) => `cycle ${i + 1}: at most ${r.g} geometries, ${r.t} textures, ${r.n} chunks`).join("; "));
   await p.ev(`Tour.stop()`); await sleep(900);
   const left = await p.ev(`Object.assign(${was}, {spin: Street.view.spin, dist: Street.view.orbitDist, mode: Street.view.mode, eye: Street.view.eye, ahead: Street.view.ahead.length, jobs: Street.view.jobs.length, moves: Street.view.moves.length, held: Street.view.held,
