@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using UnityEngine;
 using WebMap.Util;
 using ItemType = ItemDrop.ItemData.ItemType;

@@ -6,7 +6,7 @@ using WebSocketSharp;
 
 namespace WebMap
 {
-    public class DiscordWebHook : IDisposable
+    public class DiscordWebHook
     {
         private readonly string webHookUrl;
 
@@ -32,7 +32,5 @@ namespace WebMap
                 catch (Exception e) { ZLog.LogWarning("WebMap: discord webhook failed: " + e.Message); }
             });
         }
-
-        public void Dispose() { }
     }
 }

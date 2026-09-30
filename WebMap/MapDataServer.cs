@@ -54,9 +54,6 @@ namespace WebMap
             base.OnOpen();
         }
 
-        // protected override void OnClose(CloseEventArgs e) {
-        // }
-
         protected override void OnMessage(MessageEventArgs e)
         {
             if (e.Data.ToString() == "players")
@@ -77,7 +74,7 @@ namespace WebMap
             {"png", "image/png"},
             {"jpg", "image/jpeg"},
             {"webp", "image/webp"},
-            {"woff2", "font/woff2"},         // web/fonts, the brand's face
+            {"woff2", "font/woff2"},
             {"txt", "text/plain"}
         };
 

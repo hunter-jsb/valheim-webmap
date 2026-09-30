@@ -61,8 +61,6 @@ namespace WebMap
             return items;
         }
 
-        // A nested object member's own substring (e.g. a message's "author"), brace
-        // matched from its opening {; null when the key is absent or not an object.
         // the array a key holds, brackets and all, or null
         public static string Arr(string json, string key)
         {
@@ -81,6 +79,9 @@ namespace WebMap
             }
             return null;
         }
+
+        // A nested object member's own substring (e.g. a message's "author"), brace
+        // matched from its opening {; null when the key is absent or not an object.
         public static string Obj(string json, string key)
         {
             var m = Regex.Match(json ?? "", "\"" + key + "\"\\s*:\\s*\\{");

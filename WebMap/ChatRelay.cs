@@ -82,8 +82,5 @@ namespace WebMap
             if (Interlocked.CompareExchange(ref warned, 1, 0) == 0)
                 ZLog.LogWarning("WebMap: discord chat relay failed, will keep trying quietly: " + ex.Message);
         }
-
-        // for the tests: back to unseeded, as at boot
-        internal static void ResetForTests() { timer = null; afterId = null; seededChannel = null; warned = 0; polling = 0; }
     }
 }

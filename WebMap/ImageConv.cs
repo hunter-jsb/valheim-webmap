@@ -4,9 +4,6 @@ using UnityEngine;
 
 namespace WebMap
 {
-    // Calls UnityEngine.ImageConversion via reflection so the mod need not reference
-    // UnityEngine.ImageConversionModule at compile time. That module pulls in netstandard
-    // 2.1 / ReadOnlySpan overloads which don't resolve when building against net48.
     // Content revision of a layer: FNV-1a over the bytes. Two sweeps that paint the
     // same picture get the same number, so a viewer that already has it skips it.
     internal static class Fnv
@@ -25,6 +22,9 @@ namespace WebMap
         }
     }
 
+    // Calls UnityEngine.ImageConversion via reflection so the mod need not reference
+    // UnityEngine.ImageConversionModule at compile time. That module pulls in netstandard
+    // 2.1 / ReadOnlySpan overloads which don't resolve when building against net48.
     internal static class ImageConv
     {
         private static readonly Type T =

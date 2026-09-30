@@ -91,7 +91,7 @@ namespace WebMap.Util
         public int Length => sb.Length;
     }
 
-    // Minimal JSON reader for the files the mod persists (stats.json, markers.json).
+    // Minimal JSON reader for the file the mod persists as JSON (models/index.json).
     // Produces Dictionary<string, object>, List<object>, string, double, bool, null.
     internal static class JsonParser
     {

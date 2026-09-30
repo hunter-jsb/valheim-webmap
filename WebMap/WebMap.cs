@@ -8,24 +8,17 @@ using HarmonyLib;
 using UnityEngine;
 using static ZRoutedRpc;
 using Random = UnityEngine.Random;
-using System.Runtime.InteropServices;
 using System.Collections;
-using System.Dynamic;
 
 // the tests reach the internal static classes directly: WebMap.Tests
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WebMap.Tests")]
 
 namespace WebMap
 {
-    //This attribute is required, and lists metadata for your plugin.
-    //The GUID should be a unique ID for this plugin, which is human readable (as it is used in places like the config). I like to use the java package notation, which is "com.[your name here].[your plugin name here]"
-    //The name is the name of the plugin that's displayed on load, and the version number just specifies what version the plugin is.
     [BepInPlugin(GUID, NAME, VERSION)]
-
-    //This is the main declaration of our plugin class. BepInEx searches for all classes inheriting from BaseUnityPlugin to initialize on startup.
-    //BaseUnityPlugin itself inherits from MonoBehaviour, so you can use this as a reference for what you can declare and use in your plugin class: https://docs.unity3d.com/ScriptReference/MonoBehaviour.html
     public class WebMap : BaseUnityPlugin
     {
+        // upstream's: BepInEx names the config file after it, so every operator's config hangs on it
         public const string GUID = "com.github.h0tw1r3.valheim.webmap";
         public const string NAME = "WebMap";
         public const string VERSION = Manifest.Version;        // manifest.json's, compiled in by WebMap.csproj
@@ -357,32 +350,6 @@ namespace WebMap
             private static readonly Color DeepWaterColor = new Color(0.36105883f, 0.36105883f, 0.43137255f);
             private static readonly Color ShallowWaterColor = new Color(0.574f, 0.50709206f, 0.47892025f);
             private static readonly Color ShoreColor = new Color(0.1981132f, 0.12241901f, 0.1503943f);
-
-            private static Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
-            {
-                Color noForest = new Color(0f, 0f, 0f, 0f);
-                Color forest = new Color(1f, 0f, 0f, 0f);
-
-                if (height < ZoneSystem.instance.m_waterLevel) return noForest;
-
-                if (biome == Heightmap.Biome.Meadows)
-                {
-                    if (!WorldGenerator.InForest(new Vector3(wx, 0f, wy))) return noForest;
-
-                    return forest;
-                }
-
-                if (biome == Heightmap.Biome.Plains)
-                {
-                    if (WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) >= 0.8f) return noForest;
-
-                    return forest;
-                }
-
-                if (biome == Heightmap.Biome.BlackForest || biome == Heightmap.Biome.Mistlands) return forest;
-
-                return noForest;
-            }
 
             private static Color GetPixelColor(Heightmap.Biome biome)
             {

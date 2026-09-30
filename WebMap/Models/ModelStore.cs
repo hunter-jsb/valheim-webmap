@@ -227,18 +227,7 @@ namespace WebMap.Models
         public static int TexturesWanted { get; private set; }
         public static int TexturesPresent { get; private set; }
 
-        // Re-export every known prefab (after textures were extracted, or a format tweak). Returns the count queued.
-        public static int ReexportAll()
-        {
-            PrefabExporter.ForgetMissingTextures();
-            int n = 0;
-            foreach (var i in index.Values) { Request(i.hash, i.cat, force: true); n++; }
-            return n;
-        }
-
         public static string FileName(int hash) => unchecked((uint)hash).ToString("x8") + ".glb";
-
-        public static bool Known(int hash) => index.ContainsKey(hash);
 
         // Game thread (the player snapshot): a part of a live player's rig, exported once like any prefab.
         public static void RequestRig(string name)
