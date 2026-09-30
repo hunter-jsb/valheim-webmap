@@ -110,7 +110,7 @@ namespace WebMap
 
             DEFAULT_ZOOM = config.Bind("Texture", "default_zoom",
                 WebMapConfig.DEFAULT_ZOOM,
-                "How zoomed in should the web map start at? Higher is more zoomed in.").Value;
+                "Kept for front-ends of your own; the bundled viewer ignores it.").Value;
 
             MAX_MESSAGES = config.Bind("Server", "max_messages",
                 WebMapConfig.MAX_MESSAGES,
@@ -126,7 +126,7 @@ namespace WebMap
 
             DEBUG = config.Bind("Server", "debug",
                 WebMapConfig.DEBUG,
-                "Output debugging information.").Value;
+                "Extra log lines: fog saves, routed RPC hashes, chat and pin diagnostics.").Value;
 
             SHOW_VEHICLES = config.Bind("Server", "show_vehicles",
                 WebMapConfig.SHOW_VEHICLES,
@@ -136,7 +136,7 @@ namespace WebMap
 
             DISCORD_WEBHOOK = config.Bind("Server", "discord_webhook",
                 WebMapConfig.DISCORD_WEBHOOK,
-                "Discord webhook URL").Value;
+                "Discord webhook that gets the server coming on and off line, joins and leaves.").Value;
 
             DISCORD_BOT_TOKEN = config.Bind("Server", "discord_bot_token",
                 WebMapConfig.DISCORD_BOT_TOKEN,
