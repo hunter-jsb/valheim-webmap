@@ -193,19 +193,26 @@ async function tour() {
   const p = await open("/");
   await p.until(`FEATURES && FEATURES.length && LAYERS_READY && PIECES_ALL`);
   await p.send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
-  await p.ev(`void (TOUR.on = true, flyTo(1000, 1000, 4, 2000).then(() => { const q = V.at(stage.clientWidth/2, stage.clientHeight/2); window.__off = Math.hypot(q.px - 1000, q.py - 1000)*4; }))`);
+  await p.ev(`void (Tour.state.on = true, Tour.flyTo(1000, 1000, 4, 2000).then(() => { const q = V.at(stage.clientWidth/2, stage.clientHeight/2); window.__off = Math.hypot(q.px - 1000, q.py - 1000)*4; }))`);
   await sleep(700);
   await p.send("Emulation.setDeviceMetricsOverride", { width: 1000, height: 700, deviceScaleFactor: 1, mobile: false });
   const off = await p.until(`window.__off !== undefined`, 10000) && await p.ev(`window.__off`);
   check("tour: a flight resized under it lands on its spot", off !== false && off < 2, `${off.toFixed ? off.toFixed(0) : off} px off`);
-  await p.ev(`void (TOUR.on = false, HIDDEN.add("portal"), applyHidden(), startTour(), TOUR.run++,
-    window.__old = tourStop({kind: "", title: "", line: "", x: ${x}, z: ${z}, zoom: 30, dist: 100, layer: "portal"}, TOUR.run).then(() => window.__woke = true))`);
-  const circling = await p.until(`IN3D && V3D && V3D.spin > 0`, 60000);
-  await p.ev(`void (stopTour(), HIDDEN.delete("portal"), applyHidden(), TOUR.on = true, TOUR.run++, enter3D(${x}, ${z}, 0).then(() => { V3D.setMode("orbit"); V3D.setSpin(6); }))`);
+  // A stop's place built before it plays, by the view's own measure: the cut waits only a few
+  // seconds for it, and under software rendering a place still loading stays on the map.
+  const build = async views => await p.ev(`loadView3D().then(v => { feed3D(LAST_STATE); v.prefetch(${views}); return true; })`)
+    && await p.until(`V3D.ready((${views})[0])`, 120000);
+  const built = await build(`[{x: ${x}, z: ${z}, dist: 100, pitch: 45}]`);
+  await p.ev(`void (Tour.state.on = false, HIDDEN.add("portal"), applyHidden(), Tour.start(), Tour.state.run++,
+    window.__stop = {kind: "", title: "", line: "", x: ${x}, z: ${z}, zoom: 30, dist: 100, layer: "portal"},
+    window.__old = Tour.visit(window.__stop, Tour.state.run).then(() => window.__woke = true))`);
+  const circling = built && await p.until(`Tour.state.in3d === window.__stop`, 60000);
+  await p.ev(`void (Tour.stop(), HIDDEN.delete("portal"), applyHidden(), Tour.state.on = true, Tour.state.run++, enter3D(${x}, ${z}, 0).then(() => { V3D.setMode("orbit"); V3D.setSpin(6); }))`);
   const woke = circling && await p.until(`window.__woke`, 30000);
   const after = await p.ev(`({spin: V3D && V3D.spin, portals: !HIDDEN.has("portal")})`) || {};
-  check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals, JSON.stringify(after));
-  await p.ev(`stopTour()`);
+  check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals,
+        JSON.stringify(after) + (!built ? ", its place never built" : !circling ? ", never seen in 3D" : ""));
+  await p.ev(`Tour.stop()`);
   // a player's card, built for a roster entry directly since nobody need be online; one the
   // server remembers no look for is handed the body alone, as on the players page
   const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
@@ -213,37 +220,41 @@ async function tour() {
   const who = await p.until(`STATS && STATS.players && STATS.players.length`, 20000) && await p.ev(`(() => {
     const P = STATS.players, q = P.find(x => x.look && PlayerCard.classify(x, P)) || P.find(x => PlayerCard.classify(x, P)) || P[0];
     if(!q.look) q.look = ${JSON.stringify(look || null)};
-    showPlayerCard(q.name); return q.name; })()`);
-  const stood = !!who && !!body && await p.until(`VIKING && VIKING.rig && VIKING.raf && pcard.contains(VIKING.el) && VIKING.el.querySelector("canvas").clientWidth > 0`, 60000);
-  const shown = await p.ev(`({pill: !!pcard.querySelector(".ph .cls"), radar: !!pcard.querySelector(".pr svg.radar .fill")})`) || {};
-  const frames = async () => { const f0 = await p.ev(`VIKING ? VIKING.v.renderer.info.render.frame : 0`); await sleep(600); return await p.ev(`VIKING ? VIKING.v.renderer.info.render.frame : 0`) - f0; };
+    Tour.showCard(q.name); return q.name; })()`);
+  const card = `document.getElementById("pcard")`, vk = `Tour.viking`;
+  const stood = !!who && !!body && await p.until(`${vk} && ${vk}.rig && ${vk}.raf && ${card}.contains(${vk}.el) && ${vk}.el.querySelector("canvas").clientWidth > 0`, 60000);
+  const shown = await p.ev(`({pill: !!${card}.querySelector(".ph .cls"), radar: !!${card}.querySelector(".pr svg.radar .fill")})`) || {};
+  const frames = async () => { const f0 = await p.ev(`${vk} ? ${vk}.v.renderer.info.render.frame : 0`); await sleep(600); return await p.ev(`${vk} ? ${vk}.v.renderer.info.render.frame : 0`) - f0; };
   const spun = stood ? await frames() : 0;
-  await p.ev(`dropPlayerCard()`);
-  const gone = await p.until(`pcard.hidden && (!VIKING || (!VIKING.raf && !VIKING.rig))`, 3000), still = stood ? await frames() : 0;
+  await p.ev(`Tour.dropCard()`);
+  const gone = await p.until(`${card}.hidden && (!${vk} || (!${vk}.raf && !${vk}.rig))`, 3000), still = stood ? await frames() : 0;
   check("tour: a player's card shows their class, pentagon and turning Viking, and stops turning as it goes",
         !!who && shown.pill && shown.radar && (!body || spun > 0) && gone && still === 0,
         `${who}: ${shown.pill ? "pill" : "no pill"}, ${shown.radar ? "radar" : "no radar"}, ${body ? `${spun} frames turning, ${still} after` : "no body in the library to draw"}`);
-  const kinds = await p.ev(`tourPlan().then(plan => [...new Set(plan.filter(s => !s.figure).map(s => s.group))])`) || [];
+  const kinds = await p.ev(`Tour.plan().then(plan => [...new Set(plan.filter(s => !s.figure).map(s => s.group))])`) || [];
   check("tour: a cycle draws from at least eight kinds of place", kinds.length >= 8, kinds.join(", "));
-  // a stand at eye height, played as the tour plays it, a little faster
+  // a stand at eye height, its place built first as above, played as the tour plays it, a little faster
   const street = await p.ev(`(async () => {
-    for(const s of [...tourPool().values()].flat().sort(() => Math.random() - .5)) for(const m of ["yard", "gates", "seaward", "peakdown"]) if((s.moves || []).includes(m)){
-      const sh = await SHOTS[m](s); if(!sh) continue;
-      sh.move = m; s.shot = sh; startTour(); TOUR.run++; TOUR.pace = 3; tourStop(s, TOUR.run, null);
+    for(const s of [...Tour.pool().values()].flat().sort(() => Math.random() - .5)) for(const m of ["yard", "gates", "seaward", "peakdown"]) if((s.moves || []).includes(m)){
+      const sh = await Tour.shots[m](s); if(!sh) continue;
+      sh.move = m; s.shot = sh; window.__street = s;
       return s.kind + " / " + s.title + " (" + m + ")"; }
     return null; })()`);
-  const stood3d = !!street && await p.until(`IN3D && V3D.running && V3D.mode === "street" && V3D.moves.length`, 60000);
-  const eye = stood3d ? await p.ev(`(() => { const w = walkedFn(); return {walked: w(V3D.me.x, V3D.me.z), eye: +(V3D.me.y - V3D.standAt(V3D.me.x, V3D.me.z)).toFixed(2)}; })()`) : null;
-  check("tour: a street beat stands on walked ground at eye height", stood3d && eye.walked && Math.abs(eye.eye - 1.8) < 0.25, `${street || "no stand in this world"}: ${JSON.stringify(eye)}`);
-  await p.ev(`stopTour()`);
+  const streetBuilt = !!street && await build(`window.__street.shot.views`);
+  if (street) await p.ev(`void (Tour.start(), Tour.state.run++, Tour.state.pace = 3, Tour.visit(window.__street, Tour.state.run, null))`);
+  const stood3d = streetBuilt && await p.until(`Tour.state.in3d === window.__street && IN3D && V3D.running && V3D.mode === "street" && V3D.moves.length`, 60000);
+  const eye = stood3d ? await p.ev(`(() => { const w = Tour.walked(); return {walked: w(V3D.me.x, V3D.me.z), eye: +(V3D.me.y - V3D.standAt(V3D.me.x, V3D.me.z)).toFixed(2)}; })()`) : null;
+  check("tour: a street beat stands on walked ground at eye height", stood3d && eye.walked && Math.abs(eye.eye - 1.8) < 0.25,
+        `${street || "no stand in this world"}: ${JSON.stringify(eye)}` + (street && !streetBuilt ? ", its place never built" : ""));
+  await p.ev(`Tour.stop()`);
   // Two whole cycles, fast: what the 3D view holds levels off rather than growing with every
   // place built ahead; then a stop puts every layer, the sidebar and the 3D view back.
   const was = `({hidden: [...HIDDEN].sort().join(), details: [...DETAILS].sort().join(), off: [...OFF].sort().join(), side: document.body.classList.contains("side-open")})`;
   const before = await p.ev(was);
-  await p.ev(`TOUR.pace = 8; TOUR.cycles = 0; startTour()`);
+  await p.ev(`Tour.state.pace = 8; Tour.state.cycles = 0; Tour.start()`);
   const per = [];
   for (const t0 = Date.now(); Date.now() - t0 < 1200000; await sleep(1000)) {
-    const m = await p.ev(`({c: TOUR.cycles, g: V3D ? V3D.renderer.info.memory.geometries : 0, t: V3D ? V3D.renderer.info.memory.textures : 0, n: V3D ? V3D.chunks.size : 0})`);
+    const m = await p.ev(`({c: Tour.state.cycles, g: V3D ? V3D.renderer.info.memory.geometries : 0, t: V3D ? V3D.renderer.info.memory.textures : 0, n: V3D ? V3D.chunks.size : 0})`);
     if (!m || m.c >= 2) break;
     const r = per[m.c] || (per[m.c] = { g: 0, t: 0, n: 0 });
     r.g = Math.max(r.g, m.g); r.t = Math.max(r.t, m.t); r.n = Math.max(r.n, m.n);
@@ -251,9 +262,9 @@ async function tour() {
   const [c1, c2] = per;
   check("tour: across two cycles the 3D view's geometries and textures level off", !!(c1 && c2) && c2.g <= c1.g*1.3 + 300 && c2.t <= c1.t*1.3 + 60 && c2.n <= 1600,
         per.map((r, i) => `cycle ${i + 1}: at most ${r.g} geometries, ${r.t} textures, ${r.n} chunks`).join("; "));
-  await p.ev(`stopTour()`); await sleep(900);
+  await p.ev(`Tour.stop()`); await sleep(900);
   const left = await p.ev(`Object.assign(${was}, {spin: V3D.spin, dist: V3D.orbitDist, mode: V3D.mode, eye: V3D.eye, ahead: V3D.ahead.length, jobs: V3D.jobs.length, moves: V3D.moves.length, held: V3D.held,
-    in3d: IN3D, tour: document.body.classList.contains("tour"), cap: tourCap.hidden, fig: tourFig.hidden, card: pcard.hidden})`) || {};
+    in3d: IN3D, tour: document.body.classList.contains("tour"), cap: document.getElementById("tourcap").hidden, fig: document.getElementById("tourfig").hidden, card: ${card}.hidden})`) || {};
   const back = ["hidden", "details", "off", "side"].every(k => left[k] === before[k]);
   check("tour: stopping it puts back every layer, the sidebar, the 3D view's camera and clock, and lets what it was building go",
         back && left.spin === 0 && left.dist === 140 && left.mode === "street" && left.eye === 1.8 && !left.ahead && !left.jobs && !left.moves && left.held === null && !left.in3d && !left.tour && left.cap && left.fig && left.card,
