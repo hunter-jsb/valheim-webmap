@@ -467,14 +467,21 @@ trace, so of bread and pies only the oven's step counts.
 
 `site.css` is the whole look: the tokens on `:root` (surfaces darkest to lightest, ink,
 accents, the map's own hues for portals, traders and graves, the halos over the world,
-radii, shadows, fonts, the bar and sidebar widths), the base, and the components every
-page shares -- `.title .eyebrow .sub .note .section .foot`, `.card .well .glass .stat .dot`,
-`.btn .chip .field .btnrow`, `.stage .mapctl .legend`, `.spot` (a spotlight: one figure, a line of
+radii, shadows, fonts, the bar and sidebar widths), the base, and the components the pages
+share, under a heading each -- type: `.title .eyebrow .sub .note .section .foot`;
+surfaces: `.card .rows .well .glass .stat .dot`; controls: `.btn .chip .field .btnrow`, `.btn.sm`
+the small button beside a line of text; figures: `.spot` (a spotlight: one figure, a line of
 context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars;
 `.spot.wide` the band of fixed height `js/spot.js` makes of it at the head of a player's figures),
-`.cls .mini .radar .viking` (a player as `js/card.js` draws them), the nav and the sidebar shell. A
-page's own `<style>` holds only what that page alone draws, and names no colour of its
-own: every colour is a token, so a restyle is an edit to `:root` and the pages follow.
+`.cls .mini .radar .viking` (a player as `js/card.js` draws them, `.radar.big` the labelled
+pentagon of a player's page), `.bosses .biomes` (the bosses board and danger by biome, drawn by
+`MapCore.BOSSES.board` and `MapCore.biomeRows` for the World page and a player's alike); the
+map's furniture: `.stage .mapctl .legend`; the nav, and the shell: `.wrap` the one column of a
+page without a sidebar, `.app .sidebar` a page with one. A page's own `<style>` holds only what
+that page alone draws, and a variation on a shared component carries only what differs -- a
+width, a gap, a margin -- layered on the shared rule; a class name means one thing across the
+pages. A page names no colour of its own: every colour is a token, so a restyle is an edit to
+`:root` and the pages follow.
 The two exceptions are data, not chrome: the forest swatch's greens and the biome
 inks the map sets names in (`NAME_STYLE` in `map-core.js`).
 

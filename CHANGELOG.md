@@ -21,6 +21,14 @@
   fresh reads unless a versioned one asks for the browser's cache. The page check measures
   the 3D view across a tour over two cycles after a warm one, where a cold first cycle had
   failed it now and then.
+* The pages' styles follow their scripts: what several pages drew alike is `site.css`'s once --
+  the bosses board and danger by biome (their markup `map-core.js`'s once, for the World page
+  and a player's), the page column, a list of cards, a small button, the big pentagon's labels,
+  a legend's heading -- each page's `<style>` keeps only its own, grouped, with rules nothing
+  matches gone, and a class name two pages used for different things is two names now. A
+  distance in metres or km and the minute's re-read are `map-core.js`'s once. Nothing a player
+  sees changes but one leak: a signed-in name in the Portals page's bar had picked up that
+  page's own name style, and now looks as it does on every other page.
 
 ## 2.16.0
 
