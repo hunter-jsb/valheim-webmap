@@ -12,6 +12,7 @@
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
 <script src="js/card.js"></script>
+<script src="js/spot.js"></script>
 <script src="js/street.js"></script>
 <script src="js/tour.js"></script>
 <!-- the 3D view's modules, fetched only when someone first steps into 3D -->
@@ -786,12 +787,12 @@ let FOREST = {};          // /forest/stats: trees standing, stumps cut
 const BUILD = "2026-09-26b";   // shown in the footer, so a stale page is obvious
 let PLAYERS = {}, PINS = [], EXPLORED = null;
 const GEOM = MapCore.geom;
-// the world as this page holds it, live, for the 3D view and the tour to read
+// the world as this page holds it, live, for the 3D view, the spotlight and the tour to read
 const WORLD = {
   get players(){ return PLAYERS; }, get portals(){ return PORTALS; }, get pieces(){ return PIECES_ALL; }, get builders(){ return PIECE_PLAYERS; },
   get deaths(){ return DEATHS; }, get graves(){ return GRAVES; }, get traders(){ return TRADERS; }, get vehicles(){ return VEHICLES; },
   get stats(){ return STATS; }, get features(){ return FEATURES; }, get pins(){ return PINS; }, get explored(){ return EXPLORED; },
-  get box(){ return EXPLORED_BOX; }, get rev(){ return LAST_REV; }, get state(){ return LAST_STATE; }};
+  get box(){ return EXPLORED_BOX; }, get rev(){ return LAST_REV; }, get state(){ return LAST_STATE; }, get forest(){ return FOREST; }};
 
 const esc = MapCore.esc;
 // Statuspage summary, rendered in the site's own styling rather than their
@@ -834,82 +835,14 @@ function renderStatus(){
 const ago = MapCore.ago, toPx = MapCore.toPx;
 
 // ---------- the spotlight ----------
-// One thing about the world at a time, under the tiles, with a small picture: how
-// much is walked, who built the most of what stands, the boats by kind, the gates
-// linked, the bosses down, where people die, the graves out there, the names given,
-// and the roster's farthest, deadliest and loudest. Seven seconds each; a hover
-// holds it, a click moves on. The tallies behind the roster come every five minutes.
+// The tallies behind the roster's figures come every five minutes.
 let STATS = null;
-const WSPOT = {list: [], i: -1, timer: 0, held: false, html: ""};
-const num = v => Number.isFinite(+v) ? +v : 0;
 async function tickStats(){
   try{ STATS = await MapCore.fetchJSON(API, "/stats/players"); }catch(e){}
-  renderSpot();
+  Spot.render();
 }
-function worldSpots(){
-  const out = [], P = (STATS && Array.isArray(STATS.players)) ? STATS.players : [], pic = MapCore.pic;
-  const top = get => P.length ? P.slice().sort((a, b) => get(b) - get(a))[0] : null;
-  const kmf = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
-  const sum = get => P.reduce((t, q) => t + get(q), 0);
-  if(EXPLORED != null) out.push({k: "Explored", v: `${(EXPLORED*100).toFixed(1)}% <small>of the world</small>`, c: "walked by someone since the fog first lifted", svg: pic.ring(EXPLORED, "walked, the rest still under fog")});
-  if(PIECES_ALL){ const b = top(q => num(q.pieces)), all = sum(q => num(q.pieces));
-    out.push({k: "Standing", v: `${PIECES_ALL.length.toLocaleString()} <small>pieces</small>`, c: b && num(b.pieces) ? `${esc(b.name)} built the most of it` : "built by everyone", svg: b && all ? pic.ring(num(b.pieces)/all, `of it is ${b.name}'s`) : ""}); }
-  if(FOREST.stumps != null){ const b = top(q => num(q.trees));
-    out.push({k: "Felled", v: `${num(FOREST.stumps).toLocaleString()} <small>trees</small>`, c: b && num(b.trees) ? `${esc(b.name)} felled the most` : "stumps standing where trees were", svg: b && num(b.trees) ? pic.strip(P, b, q => num(q.trees)) : ""}); }
-  const K = STATS && STATS.kitchen;   // none from a mod without a kitchen
-  if(K && num(K.cooked) + num(K.brewed) + num(K.smelted)){ const cook = top(q => num((q.kitchen || {}).cooked)), mine = cook ? num((cook.kitchen || {}).cooked) : 0;
-    out.push({k: "Kitchen", v: `${num(K.cooked).toLocaleString()} <small>meals cooked</small>`, c: `${num(K.brewed).toLocaleString()} meads brewed · ${num(K.smelted).toLocaleString()} bars smelted`,
-              svg: mine && num(K.cooked) ? pic.ring(mine/num(K.cooked), `of it cooked by ${cook.name}`) : ""}); }
-  const boats = (VEHICLES || []).filter(v => v.kind === "boat");
-  if(boats.length){ const kinds = {}; boats.forEach(v => { const k = MapCore.vehicleStyle(v).label; kinds[k] = (kinds[k] || 0) + 1; });
-    const rows = Object.entries(kinds).sort((a, b) => b[1] - a[1]);
-    out.push({k: "Afloat", v: `${boats.length} <small>${boats.length === 1 ? "boat" : "boats"}</small>`, c: rows.map(([k, n]) => `${n} ${k.toLowerCase()}${n > 1 ? "s" : ""}`).join(" \u00b7 "), svg: pic.bars(rows.slice(0, 3).map(([k, n]) => ({frac: n/boats.length, label: `${n} ${k}`})))}); }
-  if(PORTALS.length){ const by = new Map(PORTALS.map(p => [p.id, p])); const linked = PORTALS.filter(p => p.to && p.to !== "0" && p.to !== p.id && by.has(p.to)).length;
-    out.push({k: "Gates", v: `${PORTALS.length} <small>portals</small>`, c: `${Math.floor(linked/2)} pairs linked \u00b7 ${PORTALS.length - linked} waiting for a twin`, svg: pic.ring(linked/PORTALS.length, "linked to another")}); }
-  if(STATS && Array.isArray(STATS.bosses)){ const down = MapCore.BOSSES.down(STATS.bosses), N = Math.max(MapCore.BOSSES.order.length, down.length);
-    out.push({k: "Bosses", v: `${down.length} <small>of ${N} fallen</small>`, c: down.length ? `the last to fall: ${esc(MapCore.BOSSES.label(down[down.length - 1]))}` : "every one still standing", svg: pic.ring(down.length/N, "of the bosses")}); }
-  const deaths = sum(q => num(q.deaths));
-  if(deaths){ const by = {}; P.forEach(q => (q.biomes || []).forEach(b => { by[b.biome] = (by[b.biome] || 0) + num(b.deaths); }));
-    const rows = Object.entries(by).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).slice(0, 3), placed = rows.reduce((t, r) => t + r[1], 0);
-    // the ground under a death has been kept for less long than the deaths themselves: it speaks only once it covers a fair share
-    const ground = placed >= deaths/4;
-    out.push({k: "Deaths", v: `${deaths}`, c: ground ? `most of them in the ${esc(rows[0][0])}` : "since the count began", svg: ground ? pic.bars(rows.map(([b, n]) => ({frac: n/placed, label: `${n} ${b}`, colour: MapCore.BIOME_INK[b]}))) : ""}); }
-  if(GRAVES.length){ const by = {}; GRAVES.forEach(g => { by[g.name] = (by[g.name] || 0) + 1; }); const rows = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    out.push({k: "Graves", v: `${GRAVES.length} <small>out there</small>`, c: "gear still lying where someone fell", svg: pic.bars(rows.map(([n, c]) => ({frac: c/GRAVES.length, label: `${c} ${n}`})))}); }
-  if(FEATURES && FEATURES.length){ const named = FEATURES.filter(f => f.by); if(named.length){ const last = named.slice().sort((a, b) => num(b.t) - num(a.t))[0];
-    out.push({k: "Named", v: `${named.length} <small>places named</small>`, c: `the latest: ${esc(last.name)}, by ${esc(last.by)}`, svg: pic.ring(named.length/FEATURES.length, "of the places carry a given name")}); } }
-  const far = top(q => num(q.dist_m)); if(far && num(far.dist_m)) out.push({k: "Farthest", v: esc(far.name), c: `${kmf(far.dist_m)} km on foot and by boat`, svg: pic.strip(P, far, q => num(q.dist_m))});
-  const kill = top(q => num(q.kills)); if(kill && num(kill.kills)) out.push({k: "Slayer", v: esc(kill.name), c: `${num(kill.kills)} kills`, svg: pic.strip(P, kill, q => num(q.kills))});
-  const dead = top(q => num(q.deaths)); if(dead && num(dead.deaths)) out.push({k: "Most deaths", v: esc(dead.name), c: `${num(dead.deaths)} deaths in ${kmf(dead.dist_m)} km`, svg: pic.strip(P, dead, q => num(q.deaths))});
-  const loud = top(q => num(q.chat)); if(loud && num(loud.chat)) out.push({k: "Loudest", v: esc(loud.name), c: `${num(loud.chat)} lines said in chat`, svg: pic.strip(P, loud, q => num(q.chat))});
-  if(DEATHS.length){ const d = DEATHS[DEATHS.length - 1], w = MapCore.toWorld(d.px, d.py);
-    out.push({k: "Latest death", v: esc(d.name), c: `${MapCore.ago(d.t*1000)} at ${Math.round(w.x)}, ${Math.round(w.z)}`, svg: ""}); }
-  return out;
-}
-function renderSpot(){
-  const el = document.getElementById("spot");
-  WSPOT.list = worldSpots();
-  el.hidden = !WSPOT.list.length; if(el.hidden) return;
-  if(WSPOT.i < 0) WSPOT.i = Math.floor(Math.random()*WSPOT.list.length);
-  WSPOT.i %= WSPOT.list.length;
-  showSpot(false);
-  if(!WSPOT.timer){
-    WSPOT.timer = setInterval(() => { if(!WSPOT.held && document.visibilityState === "visible" && !Street.on) showSpot(true); }, 7000);
-    el.onmouseenter = () => { WSPOT.held = true; }; el.onmouseleave = () => { WSPOT.held = false; };
-    el.onclick = () => showSpot(true);
-  }
-}
-function showSpot(advance){
-  const el = document.getElementById("spot"); if(!WSPOT.list.length) return;
-  if(advance) WSPOT.i = (WSPOT.i + 1) % WSPOT.list.length;
-  const s = WSPOT.list[WSPOT.i], n = WSPOT.list.length;
-  const html = `<div class="in${advance ? " out" : ""}"><div class="eyebrow"><span>${esc(s.k)}</span><span class="n">${WSPOT.i + 1}/${n}</span></div>`
-    + `<div class="v">${s.v}</div><div class="c">${s.c}</div>${s.svg}</div>`
-    + `<div class="dots">${WSPOT.list.map((_, i) => `<i${i === WSPOT.i ? ' class="on"' : ""}></i>`).join("")}</div>`;
-  if(!advance && html === WSPOT.html) return;      // the minute's data said nothing new: no flicker
-  el.innerHTML = html; WSPOT.html = html;
-  if(advance) requestAnimationFrame(() => requestAnimationFrame(() => { const i = el.querySelector(".in"); if(i) i.classList.remove("out"); WSPOT.html = el.innerHTML; }));
-}
+const worldSpots = () => Spot.world(WORLD);
+Spot.init({id: "spot", entries: worldSpots, every: 7000, when: () => !Street.on});
 
 function renderTiles(){
   const count = (PLAYERS && PLAYERS.count != null) ? PLAYERS.count : "\u2014";
@@ -926,7 +859,7 @@ function renderTiles(){
     ? `<b>${list.length} online</b> · ${esc(list.map(p=>p.name).join(", "))}` : "nobody online";
   buildMarkers(list.filter(p=>p.x!=null && p.z!=null).map(p=>({name:p.name, ...toPx(p.x,p.z)})),
                PINS, VEHICLES);
-  renderSpot();
+  Spot.render();
 }
 // Chat is a few lines a day and the joins, leaves and deaths are a few hundred,
 // so a feed showing both is not a chat monitor. The server marks its own lines
