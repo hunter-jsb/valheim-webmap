@@ -12,22 +12,12 @@
 <script src="js/spot.js"></script>
 <style>
   body{min-height:100%}
-  .wrap{max-width:900px;margin:0 auto;padding:1.3rem .9rem 3rem}
   /* the world at a glance: small figures, four to a row */
   .glance{display:grid;gap:.5rem;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-top:1rem}
   .glance .stat{padding:.55rem .7rem}
   .glance .stat .v{font-size:1.15rem}
   .glance .stat .k{font-size:.58rem}
   .row2{display:grid;gap:.8rem;grid-template-columns:minmax(0,1fr) 260px;align-items:start;margin-top:1rem}
-  /* the bosses, as on the players page */
-  .bosses{display:flex;flex-wrap:wrap;gap:.25rem}
-  .boss{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;width:60px;padding:.4rem .15rem .3rem;border:1px solid transparent;border-radius:var(--r)}
-  .boss svg{width:28px;height:28px;overflow:visible;filter:var(--shadow-ink)}
-  .boss .bn{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
-  .boss.down{border-color:var(--line);background:var(--hair)}
-  .boss.down .bn{color:var(--gold)}
-  .boss.up{opacity:.38;filter:grayscale(.7)}
-  .boss .n{position:absolute;top:1px;right:5px;font-size:.58rem;font-weight:600;color:var(--gold)}
   /* the records: one row each, its figure, and the way to the spot */
   .records{display:grid;gap:.4rem;margin-top:.6rem}
   .rec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.1rem .8rem;align-items:center;padding:.5rem .7rem}
@@ -37,15 +27,7 @@
   .rec .t small{font-weight:500;font-size:.78rem;color:var(--ink-2);margin-left:.4rem}
   .rec .links{display:flex;gap:.3rem;grid-column:2;grid-row:1 / span 2}
   .rec .links .btn{height:28px;padding:0 .5rem;font-size:.7rem}
-  /* danger by biome, for everyone together */
-  .biomes{display:grid;grid-template-columns:minmax(5rem,auto) 1fr auto auto;gap:.35rem .6rem;align-items:center;margin-top:.6rem;font-size:.76rem}
-  .biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
-  .biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
-  .biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
-  .biomes .km{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
-  .biomes .dx b{color:var(--off);font-weight:600}
-  .biomes .dx.safe b{color:var(--ok)}
+  .biomes{margin-top:.6rem}
   /* the lands: a table that sorts by its heads */
   table.lands{width:100%;border-collapse:collapse;margin-top:.6rem;font-size:.78rem}
   .lands th{text-align:right;font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:.35rem .4rem;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
@@ -242,10 +224,7 @@ function glance(){
   sub.innerHTML = `<b>${esc(world)}</b> · ${plural(P.length, "player")}${P.filter(q => q.online).length ? ` · ${P.filter(q => q.online).length} online now` : ""}${STATS && STATS.since ? ` · tallied since ${new Date(STATS.since*1000).toLocaleDateString(undefined, {month: "short", day: "numeric", year: "numeric"})}` : ""}`;
 }
 function bosses(){
-  const el = document.getElementById("bosses"), B = MapCore.BOSSES, list = STATS && Array.isArray(STATS.bosses) ? STATS.bosses : null;
-  const down = B.down(list), keys = B.order.concat(down.filter(k => !B.order.includes(k)));
-  el.innerHTML = keys.map(k => { const i = down.indexOf(k), name = B.label(k);
-    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${MapCore.ord(i + 1)}` : "still standing"}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${B.icon(k)}"></use></svg><span class="bn">${esc(name)}</span></span>`; }).join("");
+  document.getElementById("bosses").innerHTML = MapCore.BOSSES.board(STATS && Array.isArray(STATS.bosses) ? STATS.bosses : null);
 }
 let RECORDS = [];
 function renderRecords(){
@@ -258,12 +237,8 @@ function renderRecords(){
 function biomes(){
   const P = (STATS && STATS.players) || [], by = {};
   P.forEach(q => (q.biomes || []).forEach(b => { const r = by[b.biome] || (by[b.biome] = {m: 0, d: 0}); r.m += num(b.m); r.d += num(b.deaths); }));
-  const rows = Object.entries(by).filter(([, r]) => r.m >= 500 || r.d).sort((a, b) => (b[1].d/(b[1].m || 1)) - (a[1].d/(a[1].m || 1)) || b[1].m - a[1].m);
-  const most = Math.max(...rows.map(([, r]) => r.m), 1);
-  const per = (d, m) => { const k = m/1000; if(!d) return ""; const n = k/d; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
-  document.getElementById("biomes").innerHTML = rows.map(([b, r]) => `<span class="b"><i style="background:${MapCore.BIOME_INK[b] || "#9aa093"}"></i>${esc(b)}</span>`
-    + `<span class="bar" style="width:${Math.max(1, 100*r.m/most).toFixed(1)}%" title="${esc(b)}: ${km(r.m)} km walked, ${plural(r.d, "death")}"></span><span class="km">${km(r.m)} km</span>`
-    + `<span class="dx${r.d ? "" : " safe"}"><b>${r.d ? "× " + r.d : "✓"}</b> ${per(r.d, r.m)}</span>`).join("") || `<p class="empty">No walking tallied yet.</p>`;
+  document.getElementById("biomes").innerHTML = MapCore.biomeRows(Object.entries(by).map(([biome, r]) => ({biome, m: r.m, deaths: r.d})))
+    || `<p class="empty">No walking tallied yet.</p>`;
 }
 let SORT = "area", SHOW_ALL = false, LANDS = [];
 function lands(){

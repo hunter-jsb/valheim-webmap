@@ -754,6 +754,13 @@ const BOSSES = {
   down(list){ return (list || []).map(b => String(b.key || "").replace(/^defeated_/, "")).filter(k => !BOSSES.prey.has(k)); },
   label(k){ return BOSSES.names[k] || k.replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase()); },
   icon(k){ return BOSS_ICON["boss-" + k] ? "boss-" + k : "boss-other"; },
+  // the board, as the World page and the roster show it: each in the order met, the fallen numbered
+  board(list){
+    const down = BOSSES.down(list), keys = BOSSES.order.concat(down.filter(k => !BOSSES.order.includes(k)));
+    return keys.map(k => { const i = down.indexOf(k), name = BOSSES.label(k);
+      return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${ord(i + 1)}` : "still standing"}">`
+        + `${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${BOSSES.icon(k)}"></use></svg><span class="bn">${esc(name)}</span></span>`; }).join("");
+  },
 };
 const BOSS_ICON = {
   "boss-eikthyr":[["M10.4 11.2 7.4 8.2 5.6 9.8 6.6 6.6 3.8 4.2 7.6 5 7 1.6 9.6 5.8 11.6 8.8z","#d9c7a6"],
@@ -811,6 +818,18 @@ function kitchens(stations){
 const BIOME_INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#caa27b", "Mountain": "#ffffff", "Plains": "#e2c98f",
                    "Mistlands": "#c4a4dc", "Ashlands": "#e6907e", "Deep North": "#dde8f2", "Ocean": "#9fd0e6"};
 const ord = n => n + (["st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 3 : n % 10 - 1] || "th");
+// Danger by biome, a player's or everyone's ([{biome, m, deaths}]): a row per biome walked 500 m in
+// or died in, the deadliest for its km first -- the name in its ink, the km as a bar, the deaths.
+function biomeRows(list){
+  const rows = (list || []).filter(b => num(b.m) >= 500 || num(b.deaths) > 0)
+    .sort((a, b) => (num(b.deaths)/(num(b.m) || 1)) - (num(a.deaths)/(num(a.m) || 1)) || num(b.m) - num(a.m));
+  const most = Math.max(...rows.map(b => num(b.m)), 1);
+  return rows.map(b => { const m = num(b.m), d = num(b.deaths);
+    return `<span class="b"><i style="background:${BIOME_INK[b.biome] || "#9aa093"}"></i>${esc(b.biome)}</span>`
+      + `<span class="bar" style="width:${Math.max(1, 100*m/most).toFixed(1)}%" title="${esc(b.biome)}: ${km(m)} km walked, ${plural(d, "death")}"></span>`
+      + `<span class="km">${km(m)} km</span>`
+      + `<span class="dx${d ? "" : " safe"}"><b>${d ? "× " + d : "✓"}</b> ${d ? per(d, m) : ""}</span>`; }).join("");
+}
 const pic = {
   strip(list, me, get){
     const max = Math.max(1e-9, ...list.map(get)), x = v => (4 + 192*Math.sqrt(Math.min(1, v/max))).toFixed(1);
@@ -850,6 +869,8 @@ const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 const num = v => Number.isFinite(+v) ? +v : 0;
 // metres as km, to three figures or so
 const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+// deaths per km reads as "1 per N km": one death every so far, which is what people say
+const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
 // Coarse on purpose, from unix seconds: how stale a tally is, when a setting was set -- never how
 // long anyone played. fresh: what under a minute and a half reads as.
 function secsAgo(secs, fresh = "just now"){
@@ -989,6 +1010,6 @@ return {cfg, nav, toggleSide, user, authHeaders, whoami,
         fetchJSON, fetchBytes, fetchState, fetchConfig, post, layers,
         drawRasters, parsePieces, explored, filterExplored, walked, drawPieces, drawFires, drawDeaths, drawNames, hitName,
         clamp, view, viewCache, fitCanvas, scaleBar,
-        ICONS, spriteSVG, injectSprite, iconPaths, vehicleStyle, PIN_ICON, BOSSES, BOSS_ICON, kitchens, pic, BIOME_INK,
-        parsePins, plural, ord, num, km, ago, secsAgo, esc};
+        ICONS, spriteSVG, injectSprite, iconPaths, vehicleStyle, PIN_ICON, BOSSES, BOSS_ICON, kitchens, pic, BIOME_INK, biomeRows,
+        parsePins, plural, ord, num, km, per, ago, secsAgo, esc};
 })();

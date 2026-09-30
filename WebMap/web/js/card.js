@@ -6,14 +6,11 @@
  */
 const PlayerCard = (() => {
 "use strict";
-const esc = MapCore.esc, num = MapCore.num, km = MapCore.km;
+const esc = MapCore.esc, num = MapCore.num, km = MapCore.km, per = MapCore.per;
 
 // last_seen 0 is a name the sweep found on a grave or a build without ever
 // seeing its owner online: no session behind it, so no elapsed time to show.
 function seen(t){ return t ? "last seen " + MapCore.secsAgo(t, "moments ago") : "not seen since the tally began"; }
-
-// deaths per km reads as "1 per N km": one death every so far, which is what people say
-const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
 
 // ---------- the pentagon ----------
 // Five sides, each the player's share of the roster's best, square-rooted: a
@@ -296,5 +293,5 @@ function viking(api){
   return VK;
 }
 
-return {per, seen, sea, kpd, kit, BEST, rim, radar, classify, pill, figures, viking};
+return {seen, sea, kpd, kit, BEST, rim, radar, classify, pill, figures, viking};
 })();

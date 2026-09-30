@@ -75,6 +75,8 @@ button,input,textarea{font:inherit;color:inherit}
 a.card{display:block;color:var(--ink)}
 .card.link:hover{border-color:var(--gold);text-decoration:none}
 .card.on{border-color:var(--ok-line)}
+/* cards one under another: a list's rows */
+.rows{display:grid;gap:.5rem}
 .well{background:var(--well);border:1px solid var(--line);border-radius:var(--r)}
 .glass{background:var(--glass);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(4px)}
 /* a figure with its caption under it */
@@ -157,6 +159,24 @@ a.btn,a.btn:hover{text-decoration:none}   /* a link that looks like a button: Se
 .viking canvas{display:block;width:100%}
 .viking figcaption{padding:.35rem .6rem .4rem;border-top:1px solid var(--line);font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
 .viking.ok figcaption{color:var(--ok)}
+/* the world's tallies, on the World page and a player's: the bosses in the order they fell, the
+   ones standing dim (MapCore.BOSSES.board); danger by biome, the deadliest first (MapCore.biomeRows) */
+.bosses{display:flex;flex-wrap:wrap;gap:.25rem}
+.boss{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;width:60px;padding:.4rem .15rem .3rem;border:1px solid transparent;border-radius:var(--r)}
+.boss svg{width:28px;height:28px;overflow:visible;filter:var(--shadow-ink)}
+.boss .bn{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
+.boss.down{border-color:var(--line);background:var(--hair)}
+.boss.down .bn{color:var(--gold)}
+.boss.up{opacity:.38;filter:grayscale(.7)}
+.boss .n{position:absolute;top:1px;right:5px;font-size:.58rem;font-weight:600;color:var(--gold)}
+.biomes{display:grid;grid-template-columns:minmax(5rem,auto) 1fr auto auto;gap:.35rem .6rem;align-items:center;font-size:.76rem}
+.biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+.biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
+.biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
+.biomes .km{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.biomes .dx b{color:var(--off);font-weight:600}
+.biomes .dx.safe b{color:var(--ok)}
 .field{width:100%;background:var(--well);border:1px solid var(--line);border-radius:var(--r);color:var(--ink);
   font-size:.85rem;padding:.45rem .55rem}
 .field:focus{outline:none;border-color:var(--gold)}
@@ -173,6 +193,7 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
 .mapctl.top{top:.7rem;bottom:auto}
 /* the legend: a swatch or an icon, then the name; a row is the switch for what it depicts */
 .legend{display:grid;gap:.4rem .6rem;grid-template-columns:auto 1fr;align-items:center;font-size:.74rem;color:var(--muted)}
+.legend h3{grid-column:1/-1;margin-bottom:.1rem}   /* a heading inside spans the swatches and the names */
 .legend .sw{width:26px;height:13px;border-radius:3px;border:1px solid rgba(0,0,0,.7)}
 /* one swatch for both ends of the same scale: dense woods through to bare ground */
 .legend .sw2{background:linear-gradient(90deg,#2f4a2a 0%,#3f5a37 45%,#8fae5c 100%)}
@@ -219,6 +240,8 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
 }
 
 /* ---------- app shell ---------- */
+/* A page without a sidebar: the bar, then one column down the middle. */
+.wrap{max-width:900px;margin:0 auto;padding:1.3rem .9rem 3rem}
 /* A page with a sidebar: the bar, then the sidebar beside a stage that fills the
    rest. The ☰ in the bar folds the sidebar away, one choice for the whole site
    (MapCore.toggleSide). On a phone the sidebar is a drawer over the stage, shut

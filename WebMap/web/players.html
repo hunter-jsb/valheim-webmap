@@ -41,37 +41,28 @@
   .sel{flex:1 1 0;display:grid;gap:.25rem;min-width:0}
   .sel .field{height:32px;padding:0 .5rem;font-size:.8rem}
 
-  /* the world's bosses in the order they fell; the ones still standing are dim */
-  .bosses{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.9rem}
-  .boss{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;width:60px;padding:.4rem .15rem .3rem;
-    border:1px solid transparent;border-radius:var(--r)}
-  .boss svg{width:28px;height:28px;overflow:visible;filter:var(--shadow-ink)}
-  .boss .bn{font-size:.56rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15;white-space:nowrap}
-  .boss.down{border-color:var(--line);background:var(--hair)}
-  .boss.down .bn{color:var(--gold)}
-  .boss.up{opacity:.38;filter:grayscale(.7)}
-  .boss .n{position:absolute;top:1px;right:5px;font-size:.58rem;font-weight:600;color:var(--gold)}
+  .bosses{margin-top:.9rem}
 
-  /* a row: who, when, and the four figures people compare */
-  .rows{display:grid;gap:.4rem;margin-top:.9rem}
-  .row{display:block;width:100%;text-align:left;color:inherit;font:inherit;padding:.55rem .7rem .6rem;
+  .rows{gap:.4rem;margin-top:.9rem}
+  /* a player's row: who, when, and the four figures people compare */
+  .player{display:block;width:100%;text-align:left;color:inherit;font:inherit;padding:.55rem .7rem .6rem;
     background:var(--card);border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
-  .row:hover{border-color:var(--gold)}
-  .row.pick{border-color:var(--gold);background:var(--card-2)}
-  .row.ok{border-color:var(--ok-line)}
-  .row.ok.pick{border-color:var(--gold)}
-  .row{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:0 .6rem;align-items:center}
-  .row .rh{display:flex;align-items:center;gap:.45rem;min-width:0}
+  .player:hover{border-color:var(--gold)}
+  .player.pick{border-color:var(--gold);background:var(--card-2)}
+  .player.ok{border-color:var(--ok-line)}
+  .player.ok.pick{border-color:var(--gold)}
+  .player{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:0 .6rem;align-items:center}
+  .player .rh{display:flex;align-items:center;gap:.45rem;min-width:0}
   .roster{container-type:inline-size}
   /* a narrow list (a phone, or the list beside an open page) keeps the name whole and drops the title under it */
-  @container (max-width:560px){ .row .rh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot nm seen" "cls cls cls";align-items:center} .row .rh .cls{grid-area:cls;justify-self:start;margin-top:.3rem} .row .rh .seen{grid-area:seen} .row .rh .nm{grid-area:nm} .row .rh .dot{grid-area:dot} }
-  .row .radar{grid-column:2;grid-row:1 / span 2;width:58px;height:58px;display:block}
-  .row .nm{font-weight:700;color:var(--bright);font-size:.95rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .row .seen{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  @container (max-width:560px){ .player .rh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot nm seen" "cls cls cls";align-items:center} .player .rh .cls{grid-area:cls;justify-self:start;margin-top:.3rem} .player .rh .seen{grid-area:seen} .player .rh .nm{grid-area:nm} .player .rh .dot{grid-area:dot} }
+  .player .radar{grid-column:2;grid-row:1 / span 2;width:58px;height:58px;display:block}
+  .player .nm{font-weight:700;color:var(--bright);font-size:.95rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .player .seen{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
   .dhead .cls{font-size:.68rem;padding:.15rem .55rem}
   .figs .fig.txt .v{font-size:.82rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row.ok .seen{color:var(--ok)}
-  .row .mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin-top:.4rem}
+  .player.ok .seen{color:var(--ok)}
+  .player .mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin-top:.4rem}
 
   /* the player's page */
   .dhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
@@ -83,7 +74,7 @@
   .dhead .links{margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap}
   .dhead .links .btn{height:30px;padding:0 .6rem;font-size:.74rem}
   .top{display:grid;grid-template-columns:minmax(0,1fr) 232px;gap:.6rem 1.4rem;align-items:start;margin-top:1.1rem}
-  .side{display:grid;gap:.9rem;width:232px}
+  .portrait{display:grid;gap:.9rem;width:232px}
   .viking canvas{height:300px}
   .radar.big{width:232px;height:232px;display:block;overflow:visible}
   .radar.big .fill{fill:var(--gold);fill-opacity:.2;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
@@ -102,18 +93,11 @@
   .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
   .fig.nil .v{color:var(--nil);font-weight:600}
   .fig.warn .v,.fig.warn .k{color:var(--gold)}
-  /* the danger rows: a biome, how far you walked there, how often it killed you */
+  /* the danger rows under their heading, the way to the map at its right */
   .sect{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--line)}
   .sect .eyebrow{display:flex;justify-content:space-between;align-items:baseline}
   .sect .eyebrow a{font-weight:500;letter-spacing:0;text-transform:none;font-size:.68rem}
-  .biomes{display:grid;grid-template-columns:minmax(5rem,auto) 1fr auto auto;gap:.35rem .6rem;align-items:center;margin-top:.5rem;font-size:.76rem}
-  .biomes .b{color:var(--ink-2);display:flex;align-items:center;gap:.4rem;white-space:nowrap}
-  .biomes .b i{width:.5rem;height:.5rem;border-radius:50%;flex:0 0 auto;opacity:.9}
-  .biomes .bar{height:10px;border-radius:0 4px 4px 0;background:var(--portal);min-width:2px}
-  .biomes .km{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .biomes .dx{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
-  .biomes .dx b{color:var(--off);font-weight:600}
-  .biomes .dx.safe b{color:var(--ok)}
+  .biomes{margin-top:.5rem}
   .line{font-size:.78rem;color:var(--muted);margin-top:.4rem;line-height:1.5}
   .line b{color:var(--ink-2);font-weight:600}
   .line a{white-space:nowrap}
@@ -134,10 +118,10 @@
     .app:not(.picked) .detail{display:none}
     .app.picked .detail{animation:slidein .3s var(--ease)}   /* a shown element cannot transition in, so it animates */
     .dhead .back{display:inline-flex}
-    .row .mini{gap:.3rem}
+    .player .mini{gap:.3rem}
     .top{grid-template-columns:1fr;justify-items:center}
     .top .groups{width:100%}
-    .side{width:100%;max-width:320px}
+    .portrait{width:100%;max-width:320px}
     .radar.big{width:232px;margin:0 auto}
     .figs{grid-template-columns:repeat(3,minmax(0,1fr))}
   }
@@ -217,21 +201,15 @@ let SORT = "seen", SHOW = "all", PICK = null, LAST = "", LOADED = false, DATA = 
 let DEATHS = [], ONLINE = [], BOSSES = null;
 
 const esc = MapCore.esc, plural = MapCore.plural;
-const {per, seen, sea, kpd, kit, BEST, radar} = PlayerCard, num = MapCore.num, km = MapCore.km;
+const {seen, sea, kpd, kit, BEST, radar} = PlayerCard, num = MapCore.num, km = MapCore.km, per = MapCore.per;
 const rate = p =>{ const d = num(p.deaths), k = num(p.dist_m)/1000; return d && k ? d/k : 0; };
 const INK = MapCore.BIOME_INK;
 const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
 
 document.getElementById("icons").innerHTML = MapCore.spriteSVG(MapCore.BOSS_ICON);
 function renderBosses(list){
-  const el = document.getElementById("bosses"), B = MapCore.BOSSES;
-  const down = B.down(list), keys = B.order.concat(down.filter(k => !B.order.includes(k)));
+  const el = document.getElementById("bosses"), html = MapCore.BOSSES.board(list);
   el.hidden = !list;
-  const html = keys.map(k => {
-    const i = down.indexOf(k), name = B.label(k);
-    return `<span class="boss ${i >= 0 ? "down" : "up"}" title="${esc(name)}: ${i >= 0 ? `fell ${MapCore.ord(i + 1)}` : "still standing"}">`
-      + `${i >= 0 ? `<span class="n">${i + 1}</span>` : ""}<svg><use href="#ic-${B.icon(k)}"></use></svg><span class="bn">${esc(name)}</span></span>`;
-  }).join("");
   if(el.innerHTML !== html) el.innerHTML = html;
 }
 
@@ -262,7 +240,7 @@ function gearGroup(p){
 }
 function row(p){
   const on = !!p.online;
-  return `<button class="row${on ? " ok" : ""}${PICK === p.name ? " pick" : ""}" type="button" data-name="${esc(p.name || "")}">`
+  return `<button class="player${on ? " ok" : ""}${PICK === p.name ? " pick" : ""}" type="button" data-name="${esc(p.name || "")}">`
     + `<span class="rh"><span class="dot"></span><span class="nm">${esc(p.name || "unnamed")}</span>${PlayerCard.pill(classify(p))}`
     + `<span class="seen">${on ? "online now" : seen(num(p.last_seen))}</span></span>`
     + PlayerCard.figures(p) + radar(p, 58, false) + `</button>`;
@@ -292,17 +270,9 @@ function render(){
 function fig(v, k, cls, title){
   return `<div class="stat fig${cls ? " " + cls : ""}"${title ? ` title="${esc(title)}"` : ""}><div class="v">${v}</div><div class="k">${k}</div></div>`;
 }
-function biomeRows(p){
-  const rows = (p.biomes || []).filter(b => num(b.m) >= 500 || num(b.deaths) > 0);
-  if(!rows.length) return "";
-  const most = Math.max(...rows.map(b => num(b.m)), 1);
-  rows.sort((a, b) => (num(b.deaths)/(num(b.m) || 1)) - (num(a.deaths)/(num(a.m) || 1)) || num(b.m) - num(a.m));
-  return `<div class="sect"><div class="eyebrow"><span>Danger by biome</span><a href="${mapLink(p.name)}">deaths on the map</a></div><div class="biomes">`
-    + rows.map(b => `<span class="b"><i style="background:${INK[b.biome] || "#9aa093"}"></i>${esc(b.biome)}</span>`
-      + `<span class="bar" style="width:${Math.max(1, 100*num(b.m)/most).toFixed(1)}%" title="${esc(b.biome)}: ${km(b.m)} km walked, ${plural(num(b.deaths), "death")}"></span>`
-      + `<span class="km">${km(b.m)} km</span>`
-      + `<span class="dx${num(b.deaths) ? "" : " safe"}"><b>${num(b.deaths) ? "× " + num(b.deaths) : "✓"}</b> ${num(b.deaths) ? per(b.deaths, b.m) : ""}</span>`).join("")
-    + `</div></div>`;
+function danger(p){
+  const rows = MapCore.biomeRows(p.biomes);
+  return rows ? `<div class="sect"><div class="eyebrow"><span>Danger by biome</span><a href="${mapLink(p.name)}">deaths on the map</a></div><div class="biomes">${rows}</div></div>` : "";
 }
 let DLAST = "", WHERE = null;    // WHERE: {name, text} once the ground under an online player has answered
 function renderDetail(){
@@ -368,7 +338,7 @@ function renderDetail(){
         fig(num(p.joins), "joins", nil(num(p.joins)))
         + fig(num(p.chat), "chat lines", nil(num(p.chat))))
     + gearGroup(p)
-    + `</div><div class="side"><i id="vslot" hidden></i>` + radar(p, 232, true) + `</div></div>` + biomeRows(p);
+    + `</div><div class="portrait"><i id="vslot" hidden></i>` + radar(p, 232, true) + `</div></div>` + danger(p);
   if(html !== DLAST){ body.innerHTML = html; DLAST = html; Spot.render(); }
   showViking(p, here);
   if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
@@ -444,7 +414,7 @@ function pick(name){
   PICK = name || null; DLAST = ""; Spot.reset();
   if(!PICK) VK.hide();
   document.getElementById("app").classList.toggle("picked", !!PICK);
-  for(const b of document.querySelectorAll("#list .row")) b.classList.toggle("pick", b.dataset.name === PICK);
+  for(const b of document.querySelectorAll("#list .player")) b.classList.toggle("pick", b.dataset.name === PICK);
   if(PICK){ renderDetail(); document.getElementById("detail").scrollTop = 0; }
 }
 function applyHash(){
@@ -453,7 +423,7 @@ function applyHash(){
   if(name !== PICK) pick(name);
 }
 document.getElementById("list").addEventListener("click", e => {
-  const b = e.target.closest(".row[data-name]"); if(!b) return;
+  const b = e.target.closest(".player[data-name]"); if(!b) return;
   location.hash = "#p=" + encodeURIComponent(b.dataset.name);
 });
 document.getElementById("detail").addEventListener("click", e => {

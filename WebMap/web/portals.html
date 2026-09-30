@@ -18,7 +18,6 @@
   .key .k.dash{border-top:2px dashed var(--portal-dim);opacity:.75}
   .list{margin-top:.4rem}
   h2{margin-bottom:.55rem}
-  .rows{display:grid;gap:.5rem}
   .row{display:flex;gap:.75rem;align-items:flex-start}
   .row .ic,.card h3 .ic{width:19px;height:19px;flex:0 0 auto;margin-top:.15rem;overflow:visible;
     filter:var(--shadow-ink)}
@@ -51,9 +50,10 @@
   .inside .hdr h2{font-size:.95rem;font-weight:600;color:var(--bright);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .inside .hdr .meta{margin:0 auto 0 0;font-size:.72rem;color:var(--muted);white-space:nowrap}
   .inside .hdr .btn{height:30px;min-width:0;padding:0 .6rem;font-size:.74rem}
-  .inside .field{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:grab}
-  .inside .field.dragging{cursor:grabbing}
-  .inside .field canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .inside .ground{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:grab;
+    background:var(--well);border:1px solid var(--line);border-radius:var(--r)}
+  .inside .ground.dragging{cursor:grabbing}
+  .inside .ground canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   .inside .marks{position:absolute;inset:0;pointer-events:none}
   .inside .mk{position:absolute;left:0;top:0;width:0;height:0}
   .inside .mk .ic{position:absolute;left:-11px;top:-11px;width:22px;height:22px;overflow:visible;pointer-events:auto;filter:var(--shadow-ink)}
@@ -67,8 +67,8 @@
   .inside .mk.here .lb{color:var(--portal)}
   .inside .mk.here::before{content:"";position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;border:2px solid var(--portal);animation:here 1.5s ease-out infinite}
   @keyframes here{from{transform:scale(.5);opacity:1}to{transform:scale(1.4);opacity:0}}
-  .inside .mk.mini .lb{display:none}          /* crowded out: the icon keeps the place, hover reads it */
-  .inside .mk.mini:hover .lb{display:block}
+  .inside .mk.crowd .lb{display:none}          /* crowded out: the icon keeps the place, hover reads it */
+  .inside .mk.crowd:hover .lb{display:block}
   .inside .mk.pin .ic{width:15px;height:15px;left:-7px;top:-7px;opacity:.85}
   .inside .mk.pin .lb{font-weight:500;font-size:.66rem;color:var(--ink-2);top:7px}
   .inside .gates{padding:.4rem .7rem;margin:0;border-top:1px solid var(--line);background:var(--sheet);flex:0 0 auto;max-height:5.4rem;overflow:auto}
@@ -115,7 +115,7 @@
   .node .dl{color:var(--unknown);font-weight:600}
   .node.dial .ic{opacity:.66}
   .node.loose .ic{opacity:.3}
-  .node.mini .lb{display:none}          /* no room at this zoom: the icon keeps the place */
+  .node.crowd .lb{display:none}          /* no room at this zoom: the icon keeps the place */
   .node.off{display:none}
   .node:hover .t,.node.hl .t{color:var(--portal)}
   .node:hover .ic,.node.hl .ic{filter:drop-shadow(0 0 6px var(--portal));opacity:1}
@@ -192,7 +192,7 @@
       <div class="hdr"><svg class="ic"><use href="#ic-portal"></use></svg><h2 id="inName"></h2><span class="meta" id="inMeta"></span>
         <a class="btn quiet" id="inMap" href="#" title="Open the map here">Map</a><a class="btn quiet" id="in3d" href="#" title="Stand here in 3D">3D</a>
         <button class="btn quiet" id="inClose" type="button" title="Back to the network (Esc)">&times;</button></div>
-      <div class="field" id="inField"><canvas id="inCv"></canvas><div class="marks" id="inMarks"></div>
+      <div class="ground" id="inField"><canvas id="inCv"></canvas><div class="marks" id="inMarks"></div>
         <div class="rose">N &#8593;</div><div class="sbar"><span class="sline" id="inSline"></span><span id="inStxt"></span></div></div>
       <div class="gates" id="inGates"></div>
     </div>
@@ -357,7 +357,7 @@ function layout(v){
     n.el.style.left = Math.round(n.sx) + "px";
     n.el.style.top  = Math.round(n.sy) + "px";
     n.el.classList.toggle("off", !n.vis);
-    n.el.classList.remove("mini");
+    n.el.classList.remove("crowd");
   }
   for(const n of NODES){                       // hubs first: a panel stands on its own ground
     if(!n.vis) continue;
@@ -369,7 +369,7 @@ function layout(v){
   for(const n of NODES){
     if(!n.vis || n.kind === "hub" || !n.w) continue;
     // an icon off the edge keeps its spoke, but a label out there belongs to nothing
-    if(n.sx < 0 || n.sy < 0 || n.sx > W || n.sy > H){ n.el.classList.add("mini"); continue; }
+    if(n.sx < 0 || n.sy < 0 || n.sx > W || n.sy > H){ n.el.classList.add("crowd"); continue; }
     const gy = 13 + PAD + n.h/2 + 1, gx = 13 + PAD + n.w/2 + 1;
     const reach = Math.abs(n.u.x)*n.w/2 + Math.abs(n.u.y)*n.h/2 + 14 + PAD;
     const cand = [[0, gy], [0, -gy], [n.u.x*reach, n.u.y*reach], [gx, 0], [-gx, 0]];
@@ -390,7 +390,7 @@ function layout(v){
       if(hits(boxAt(n, ox, oy))) continue;
       put(n, ox, oy); done = true; break;
     }
-    if(!done) n.el.classList.add("mini");
+    if(!done) n.el.classList.add("crowd");
   }
 }
 // a label that had to step away from its icon says which icon it belongs to
@@ -450,7 +450,7 @@ function edge(n, u, sgn){
 // A label's size never changes with the zoom, so it is measured once per rebuild.
 function measure(){
   for(const n of NODES){
-    n.el.classList.remove("mini", "off");
+    n.el.classList.remove("crowd", "off");
     n.box = n.el.querySelector(".panel") || n.el.querySelector(".lb");
     n.w = n.box ? n.box.offsetWidth : 0;
     n.h = n.box ? n.box.offsetHeight : 0;
@@ -503,7 +503,7 @@ function paintInside(){
     if(!w) continue;
     const r = {x0: x - w/2 - 3, y0: y + 8, x1: x + w/2 + 3, y1: y + 26};
     const hit = taken.some(t => r.x0 < t.x1 && r.x1 > t.x0 && r.y0 < t.y1 && r.y1 > t.y0);
-    m.classList.toggle("mini", hit); if(!hit) taken.push(r);
+    m.classList.toggle("crowd", hit); if(!hit) taken.push(r);
   }
   MapCore.scaleBar(document.getElementById("inSline"), document.getElementById("inStxt"), GEOM.pixel/HV.scale, 1);   // a base is metres across
 }
