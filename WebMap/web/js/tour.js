@@ -4,7 +4,7 @@
  */
 const Tour = (() => {
 "use strict";
-const GEOM = MapCore.geom, PLAN_ZOOM = MapCore.PLAN_ZOOM, toPx = MapCore.toPx, esc = MapCore.esc, num = MapCore.num;
+const GEOM = MapCore.geom, PLAN_ZOOM = MapCore.PLAN_ZOOM, toPx = MapCore.toPx, esc = MapCore.esc, num = MapCore.num, metres = MapCore.metres;
 let stage, V, LAYERS, API, world, street, legend, figures, drawRaster, closeCard;
 let tourBtn, tourCap, tourFig, pcard;
 
@@ -22,7 +22,6 @@ const sleepT = ms => new Promise(r => setTimeout(r, ms));
 const beat = ms => sleepT(ms/TOUR.pace);          // the checks run the tour faster than anyone watches it
 const pick = a => a[Math.floor(Math.random()*a.length)], within = z => Array.isArray(z) ? z[0] + Math.random()*(z[1] - z[0]) : z;
 const D2R = Math.PI/180, EYE_M = 1.8;
-const kmOf = m => m >= 1000 ? (m/1000).toFixed(1) + " km" : Math.round(m) + " m";
 const whose = n => n + (/s$/i.test(n) ? "'" : "'s");
 const headingTo = (a, b) => (Math.atan2(b.x - a.x, b.z - a.z)/D2R + 360) % 360;
 function flyTo(px, py, scale, ms){
@@ -168,14 +167,14 @@ function tourPool(){
     const far = linked.map(p => { const a = wOf(p), b = wOf(byId.get(p.to)); return {p, b, d: Math.hypot(a.x - b.x, a.z - b.z)}; }).sort((a, b) => b.d - a.d)[0];
     add("hub", {kind: "Portal hub", title: nameAt(c.x, c.z) || "A hub", line: `${c.n} gates stand here`, x: c.x, z: c.z, zoom: [22, 34], dist: 140, layer: "portal",
       gates: c.items.map(wOf), moves: ["gates", "orbit", "dolly"],
-      stats: [[c.n, "gates"], [linked.length, "linked"]].concat(far ? [[`${far.p.name || "unnamed"} to ${at(far.b.x, far.b.z)}`, `the farthest pair, ${kmOf(far.d)}`]] : [])});
+      stats: [[c.n, "gates"], [linked.length, "linked"]].concat(far ? [[`${far.p.name || "unnamed"} to ${at(far.b.x, far.b.z)}`, `the farthest pair, ${metres(far.d)}`]] : [])});
   });
   if(world.portals.length > 1){
     const pts = world.portals.map(p => ({p, w: wOf(p)}));
     const lone = pts.map(a => ({a, d: Math.min(...pts.filter(b => b !== a).map(b => Math.hypot(a.w.x - b.w.x, a.w.z - b.w.z)))})).sort((a, b) => b.d - a.d)[0];
-    if(lone.d > 250) add("lonely", {kind: "The loneliest gate", title: lone.a.p.name || "An unnamed gate", line: `${kmOf(lone.d)} from any other gate, in ${at(lone.a.w.x, lone.a.w.z)}`,
+    if(lone.d > 250) add("lonely", {kind: "The loneliest gate", title: lone.a.p.name || "An unnamed gate", line: `${metres(lone.d)} from any other gate, in ${at(lone.a.w.x, lone.a.w.z)}`,
       x: lone.a.w.x, z: lone.a.w.z, zoom: [26, 38], dist: 60, layer: "portal", moves: ["dolly", "crane"],
-      stats: [[kmOf(lone.d), "to the next gate"], [byId.has(lone.a.p.to) ? "linked" : "waiting for a twin", ""]]});
+      stats: [[metres(lone.d), "to the next gate"], [byId.has(lone.a.p.to) ? "linked" : "waiting for a twin", ""]]});
   }
   // the builds: the biggest stretches, and each builder's densest
   const G = pieceGrid(), PL = world.builders;
@@ -246,7 +245,7 @@ function tourPool(){
       moves: ["peakdown", "orbit"], stats: [[`${Math.round(peak.peak.y - 30)} m`, "above the sea"]].concat(biome(peak.peak.x, peak.peak.z))});
     F.filter(f => f.kind === "range" && f.w && f.peak && walked(f.peak.x, f.peak.z) && Math.max(f.w, f.h) >= 600).forEach(f =>
       add("ridge", {kind: "Along the ridge", title: f.name, line: `the peak line, ${Math.round(f.peak.y - 30)} m at its top`, x: f.peak.x, z: f.peak.z, fit: box(f), dist: Math.max(500, Math.max(f.w, f.h)*0.8), far: true, detail: "names",
-        range: f, moves: ["ridge"], need3d: true, stats: [[kmOf(Math.max(f.w, f.h)), "end to end"], [`${Math.round(f.peak.y - 30)} m`, "at the top"]]}));
+        range: f, moves: ["ridge"], need3d: true, stats: [[metres(Math.max(f.w, f.h)), "end to end"], [`${Math.round(f.peak.y - 30)} m`, "at the top"]]}));
     const lake = F.filter(f => f.kind === "lake" && f.w).map(f => ({f, m: middle(f)})).filter(r => r.m.share >= 0.08).sort((a, b) => b.f.area - a.f.area)[0];
     if(lake) add("lake", {kind: "The biggest lake known", title: lake.f.name, line: `${lake.f.area.toFixed(2)} km²`, x: lake.m.x, z: lake.m.z, fit: box(lake.f), dist: Math.max(500, Math.max(lake.f.w, lake.f.h)*0.8), far: true, detail: "names",
       moves: ["tilt"], stats: [[lake.f.area.toFixed(2), "km²"], [`${Math.round(100*lake.m.share)}%`, "of its shores walked"]]});
@@ -255,7 +254,7 @@ function tourPool(){
     if(river){   // flown along the stretch someone has seen: from its first walked point to its last
       const seen = river.line.map(p => walked(p[0], p[1])), i0 = seen.indexOf(true), i1 = seen.lastIndexOf(true), path = river.line.slice(i0, i1 + 1);
       if(path.length > 1) add("river", {kind: "The longest river known", title: river.name, line: `${(riverLen(river)/1000).toFixed(1)} km from source to sea`, x: path[0][0], z: path[0][1], path, zoom: 14, detail: "names",
-        stats: [[kmOf(riverLen(river)), "source to sea"]]});
+        stats: [[metres(riverLen(river)), "source to sea"]]});
     }
     // what players themselves marked, and named
     world.pins.filter(p => p.text && p.x != null).forEach(p => add("pin", {kind: "A pin", title: p.text, line: `${p.type === "dot" ? "a" : p.type} pin${p.owner ? ` by ${p.owner}` : ""}, in ${at(p.x, p.z)}`,
@@ -308,7 +307,7 @@ function tourPool(){
       // the ground under a walk has been kept for less long than the walk itself: shares of what it covers
       const rows = Object.entries(by).sort((a, b) => b[1] - a[1]), placed = rows.reduce((t, r) => t + r[1], 0);
       add("trails", {kind: "Where people go", title: "Every path walked", line: "the trails over the whole walked world", x: 0, z: 0, wide: true, far: true, detail: "trails",
-        stats: [[kmOf(walkedM), "walked, all told"]].concat(placed ? [[`${Math.round(100*rows[0][1]/placed)}%`, `of it in the ${rows[0][0] === "Ocean" ? "sea" : rows[0][0]}`]] : []),
+        stats: [[metres(walkedM), "walked, all told"]].concat(placed ? [[`${Math.round(100*rows[0][1]/placed)}%`, `of it in the ${rows[0][0] === "Ocean" ? "sea" : rows[0][0]}`]] : []),
         pic: placed ? pic.bars(rows.slice(0, 3).map(([b, m]) => ({frac: m/placed, label: `${Math.round(100*m/placed)}% ${b === "Ocean" ? "sea" : b}`, colour: MapCore.BIOME_INK[b]}))) : ""}); }
   }
   add("centre", {kind: "Where it all began", title: "The sacrificial stones", line: "the centre of the world", x: 0, z: 0, zoom: [24, 34], dist: 130, moves: ["crane", "orbit"],

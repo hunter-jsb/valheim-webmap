@@ -869,6 +869,8 @@ const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
 const num = v => Number.isFinite(+v) ? +v : 0;
 // metres as km, to three figures or so
 const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+// a length as it reads: metres under a kilometre, then km to one place
+const metres = m => m >= 1000 ? (m/1000).toFixed(1) + " km" : Math.round(m) + " m";
 // deaths per km reads as "1 per N km": one death every so far, which is what people say
 const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
 // Coarse on purpose, from unix seconds: how stale a tally is, when a setting was set -- never how
@@ -887,6 +889,11 @@ function ago(iso){
   if(d < 3600) return Math.round(d/60) + "m ago";
   if(d < 86400) return Math.round(d/3600) + "h ago";
   return Math.round(d/86400) + "d ago";
+}
+// a page's reads again each minute while it is in sight, and at once when it comes back into sight
+function everyMinute(load){
+  setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") load(); });
 }
 function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
@@ -1011,5 +1018,5 @@ return {cfg, nav, toggleSide, user, authHeaders, whoami,
         drawRasters, parsePieces, explored, filterExplored, walked, drawPieces, drawFires, drawDeaths, drawNames, hitName,
         clamp, view, viewCache, fitCanvas, scaleBar,
         ICONS, spriteSVG, injectSprite, iconPaths, vehicleStyle, PIN_ICON, BOSSES, BOSS_ICON, kitchens, pic, BIOME_INK, biomeRows,
-        parsePins, plural, ord, num, km, per, ago, secsAgo, esc};
+        parsePins, plural, ord, num, km, metres, per, ago, secsAgo, everyMinute, esc};
 })();

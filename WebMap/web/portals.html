@@ -209,7 +209,7 @@ const FILTER = new Map();                              // a big hub's search tex
 const HUB_R = 150;                                     // a hub's name, or a gate's memory, counts this close
 const hubId = s => `hub@${Math.round(s.x)},${Math.round(s.z)}`;
 
-const plural = MapCore.plural;
+const plural = MapCore.plural, metres = MapCore.metres;
 
 // Valheim's +z is north, +x east, and a lone distance is from the world centre --
 // which is where everyone spawns, so it is the shared frame of reference.
@@ -218,10 +218,9 @@ const ABBR = ["N","NE","E","SE","S","SW","W","NW"];
 function deg(dx, dz){ return (Math.atan2(dx, dz)*180/Math.PI + 360) % 360; }
 function bearing(dx, dz){ return DIRS[Math.round(deg(dx, dz)/45) % 8]; }
 function abbr(dx, dz){ return ABBR[Math.round(deg(dx, dz)/45) % 8]; }
-function span(d){ return d < 1000 ? Math.round(d) + " m" : (d/1000).toFixed(1) + " km"; }
 function where(p){
   const d = Math.hypot(p.x, p.z), xz = `${Math.round(p.x)}, ${Math.round(p.z)}`;
-  return `<span class="xz">${xz}</span> &#183; ` + (d < 50 ? "the world centre" : `${bearing(p.x, p.z)}, ${span(d)}`);
+  return `<span class="xz">${xz}</span> &#183; ` + (d < 50 ? "the world centre" : `${bearing(p.x, p.z)}, ${metres(d)}`);
 }
 function nameOf(p){ return p.name ? esc(p.name) : `<span class="un">unnamed</span>`; }
 function link(id){ return `index.html#portal=${encodeURIComponent(id)}`; }
@@ -624,11 +623,11 @@ function hubCard(hub, sps){
   const free = hub.portals.filter(p => !p.to).length;
   const meta = `${plural(hub.portals.length, "gate")}${free ? ` (${free} free)` : ""} &#183; `
     + `<span class="xz">${Math.round(hub.x)}, ${Math.round(hub.z)}</span> &#183; `
-    + (d < 50 ? "the world centre" : `${bearing(hub.x, hub.z)}, ${span(d)} out`);
+    + (d < 50 ? "the world centre" : `${bearing(hub.x, hub.z)}, ${metres(d)} out`);
   const one = sps.filter(s => s.kind === "link").length === 1;
   const li = s => `<li data-q="${esc((s.tag + " " + s.dst.label).toLowerCase())}"><a class="go" href="${link(s.target)}" data-go="${siteKey(s.dst)}" data-at="${esc(s.at)}" title="Through to ${esc(s.dst.label)}">`
     + `<span class="g">${s.kind === "dial" ? "dial " : ""}${esc(s.tag)}</span><span class="arr">&#8594;</span>`
-    + `<span class="to">${esc(s.dst.label)}</span> <span>&#183; ${span(s.d)} ${s.ab}</span>`
+    + `<span class="to">${esc(s.dst.label)}</span> <span>&#183; ${metres(s.d)} ${s.ab}</span>`
     + `<span class="st ${s.kind === "dial" ? "dial" : "on"}">`
     + (s.kind === "dial" ? "one retag away" : one ? "dialled now" : "linked") + `</span></a>`
     + `<a class="mp" href="${link(s.target)}" title="See this gate on the map">&#8982;</a></li>`;
@@ -810,7 +809,7 @@ function render(list){
     nodes.push({site, kind: dial ? "dial" : "rem", pri: dial ? 2 : 1, d, go: siteKey(site), at: p0.id,
       keys: sps.map(s => s.k), href: link(p0.id), title: `${site.pin || p0.name || "untagged"} · close up`,
       html: ico + `<span class="lb"><span class="t">${dial ? `<span class="dl">dial </span>` : ""}`
-        + `${esc(p0.name || sps[0].tag)}</span><span class="d">${span(d)} ${ab}</span></span>`});
+        + `${esc(p0.name || sps[0].tag)}</span><span class="d">${metres(d)} ${ab}</span></span>`});
   }
   nodes.sort((a, b) => a.pri - b.pri || a.d - b.d);
 
@@ -888,8 +887,7 @@ async function load(){
   await load();
   const h = new URLSearchParams(location.hash.slice(1));
   if(h.get("in")) openInside(h.get("in"), h.get("at"));
-  setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
-  document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") load(); });
+  MapCore.everyMinute(load);
 })();
 </script>
 </body>

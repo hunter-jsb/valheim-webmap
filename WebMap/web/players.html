@@ -453,8 +453,7 @@ async function load(){
 }
 
 load();
-setInterval(() => { if(document.visibilityState === "visible") load(); }, 60000);
-document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") load(); });
+MapCore.everyMinute(load);
 </script>
 </body>
 </html>
