@@ -80,8 +80,8 @@ async function map() {
 
   // the kinds of name, as a finger reaches them; one switched off leaves the map
   const kind = await p.ev(`NAMEBOXES.length ? NAMEBOXES[0].f.kind : null`);
-  const group = await p.ev(`(NAME_GROUPS.flatMap(g => g[1]).find(r => r[2].includes(${JSON.stringify(kind)})) || [])[0]`);
-  const opened = await p.click("#lcard") && await p.click("#namesCaret") && await p.until(`getComputedStyle(namesMenu).display !== "none"`, 3000);
+  const group = await p.ev(`(Layers.NAME_GROUPS.flatMap(g => g[1]).find(r => r[2].includes(${JSON.stringify(kind)})) || [])[0]`);
+  const opened = await p.click("#lcard") && await p.click("#namesCaret") && await p.until(`getComputedStyle(document.getElementById("namesMenu")).display !== "none"`, 3000);
   const off = opened && !!group && await p.click(`#namesMenu .frow[data-group="${group}"]`)
     && await p.until(`NAMEVIEW.scale === V.scale && !NAMEBOXES.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
   check("map: the names flyout opens on its caret and its switch takes a kind off", off, `${kind} in "${group}"${opened ? "" : ", flyout never opened"}`);
@@ -203,13 +203,13 @@ async function tour() {
   const build = async views => await p.ev(`Street.load().then(v => { Street.feed(LAST_STATE); v.prefetch(${views}); return true; })`)
     && await p.until(`Street.view.ready((${views})[0])`, 120000);
   const built = await build(`[{x: ${x}, z: ${z}, dist: 100, pitch: 45}]`);
-  await p.ev(`void (Tour.state.on = false, HIDDEN.add("portal"), applyHidden(), Tour.start(), Tour.state.run++,
+  await p.ev(`void (Tour.state.on = false, Layers.hidden.add("portal"), Layers.applyHidden(), Tour.start(), Tour.state.run++,
     window.__stop = {kind: "", title: "", line: "", x: ${x}, z: ${z}, zoom: 30, dist: 100, layer: "portal"},
     window.__old = Tour.visit(window.__stop, Tour.state.run).then(() => window.__woke = true))`);
   const circling = built && await p.until(`Tour.state.in3d === window.__stop`, 60000);
-  await p.ev(`void (Tour.stop(), HIDDEN.delete("portal"), applyHidden(), Tour.state.on = true, Tour.state.run++, Street.enter(${x}, ${z}, 0).then(() => { Street.view.setMode("orbit"); Street.view.setSpin(6); }))`);
+  await p.ev(`void (Tour.stop(), Layers.hidden.delete("portal"), Layers.applyHidden(), Tour.state.on = true, Tour.state.run++, Street.enter(${x}, ${z}, 0).then(() => { Street.view.setMode("orbit"); Street.view.setSpin(6); }))`);
   const woke = circling && await p.until(`window.__woke`, 30000);
-  const after = await p.ev(`({spin: Street.view && Street.view.spin, portals: !HIDDEN.has("portal")})`) || {};
+  const after = await p.ev(`({spin: Street.view && Street.view.spin, portals: !Layers.hidden.has("portal")})`) || {};
   check("tour: a stop of a stopped tour leaves the next tour and the layers alone", woke && after.spin === 6 && after.portals,
         JSON.stringify(after) + (!built ? ", its place never built" : !circling ? ", never seen in 3D" : ""));
   await p.ev(`Tour.stop()`);
@@ -249,7 +249,7 @@ async function tour() {
   await p.ev(`Tour.stop()`);
   // Two whole cycles, fast: what the 3D view holds levels off rather than growing with every
   // place built ahead; then a stop puts every layer, the sidebar and the 3D view back.
-  const was = `({hidden: [...HIDDEN].sort().join(), details: [...DETAILS].sort().join(), off: [...OFF].sort().join(), side: document.body.classList.contains("side-open")})`;
+  const was = `({hidden: [...Layers.hidden].sort().join(), details: [...Layers.details].sort().join(), off: [...Layers.off].sort().join(), side: document.body.classList.contains("side-open")})`;
   const before = await p.ev(was);
   await p.ev(`Tour.state.pace = 8; Tour.state.cycles = 0; Tour.start()`);
   const per = [];
