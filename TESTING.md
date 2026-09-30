@@ -4,13 +4,14 @@
 |---|---|---|
 | `dotnet test WebMap.Tests` | CI, every push and PR | the mod's logic, from the built `WebMap.dll` on .NET 10 |
 | `node --test` | CI, every push and PR | `map-core.js`'s pure functions |
+| `./package.sh` | CI, every push and PR | the Thunderstore zip, as a tag publishes it |
 | `node tools/check.mjs <proxy> <devtools port>` | by hand, over a live server | every page in a headless Chrome |
 
 The .NET layer runs the net48 DLL on CoreCLR. Plain IL runs; anything that reaches the
 engine throws, so the tests switch Unity's logger off and feed the mod through one marked
 block per class (`Features.ResetForTests`/`AnalyseForTests`, `Portals.ResetForTests`/
-`ObserveForTests`, the `MapDataServer(bool)` constructor). A test names the failure it
-guards against; there is one per failure, not one per branch.
+`ObserveForTests`, the `MapDataServer(IPAddress)` constructor, which binds loopback). A
+test names the failure it guards against; there is one per failure, not one per branch.
 
 ## What a regression would do on the live server, worst first
 
@@ -29,10 +30,12 @@ guards against; there is one per failure, not one per branch.
    expiry, a sign-out of everyone, the Discord server, the map's address; the admin rule;
    the map's own addresses and when Host counts; where `/auth/login` may return to; the
    token's constant-time compare): **dotnet test**, on a key pair the test makes, and one
-   session the Worker signed. The routes: **nothing**: the
-   constructor starts the broadcast timer at once, and its first tick throws before the
-   server listens, which kills a test host. Starting the timer in `ListenAsync` would make
-   the routes testable over real HTTP.
+   session the Worker signed. The routes: **dotnet test**, over real HTTP on a loopback
+   port, configured as an operator does (the BepInEx config, `announce.token`) -- no
+   credentials; the token and the `X-User` it names; `X-User` and `X-Admin` without it; a
+   member's session and an admin's; one for another Discord server or another map;
+   `/announce` by the token alone. Not reached: `/auth/login` and `/auth/me` as routes
+   (their rules are `Auth`'s, tested above).
 4. **Pins.** The chat commands (`!pin`, `!undoPin`, `!deletePin` in
    `ZRoutedRpcPatch.Observe`, whose per-player trim once deleted other players' pins):
    **nothing**, they read a `ZPackage`. Site writes (`MapDataServer.WritePin`): **dotnet
@@ -91,3 +94,5 @@ guards against; there is one per failure, not one per branch.
     `ChatRelay.LinesToSpeak` directly. The `Timer` loop itself, the Harmony hookup that
     calls `Discord.PostChat`, and the settings picker's two routes: **nothing**; those
     need a running server and a real bot token.
+12. **The version** BepInEx logs at load: `manifest.json`'s, compiled in by the build;
+    **dotnet test** reads it back off the plugin.
