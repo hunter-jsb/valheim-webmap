@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.16.0
 
 * Sign in with Discord on any server running the mod: set `discord_guild` to your Discord
   server's id and **Sign in** appears on the map, through the project's sign-in service and
