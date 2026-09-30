@@ -21,21 +21,6 @@
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
 </script>
 <style>
-.namer{position:absolute;z-index:6;width:17rem;padding:.6rem .75rem;box-shadow:var(--shadow-lg)}
-.namer .field{margin:.4rem 0 0}
-.namer .btnrow{margin-top:.5rem}
-.namer .nm{font-weight:700;font-size:1.05rem;margin-top:.2rem}
-.namer .nm .edit{color:var(--faint);font-size:.85rem;margin-left:.3rem;text-decoration:none}
-.namer .nm .edit:hover{color:var(--gold)}
-.namer .facts{color:var(--ink-2);font-size:.78rem;margin-top:.25rem}
-.namer .others{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
-.namer .others .chip{font-size:.68rem}
-/* the pin's own icons, shadowed as on the map so the gold ones hold on a gold chip */
-.namer .nm .ic{width:17px;height:17px;vertical-align:-3px;margin-right:.35rem;overflow:visible;filter:var(--shadow-ink)}
-.namer .nm i{font-weight:400;color:var(--muted)}
-.namer .pick{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
-.namer .pick .chip{display:inline-flex;align-items:center;gap:.3rem}
-.namer .pick svg{width:13px;height:13px;overflow:visible;filter:var(--shadow-ink)}
   html,body{height:100%}
   body{overflow:hidden}
 
@@ -55,7 +40,6 @@
   .status .srows .warn{color:var(--gold)}
   .status.bad .shead{color:var(--off)}
   .status.warn .shead{color:var(--gold)}
-  .spot{margin-top:0}
   /* the tour: a caption over the stage, the controls faded until a hand comes near */
   .tourcap{position:absolute;left:50%;bottom:1.1rem;transform:translateX(-50%) translateY(8px);z-index:18;max-width:min(520px,calc(100% - 2rem));
     padding:.7rem 1.1rem .8rem;text-align:center;opacity:0;transition:opacity .7s ease,transform .7s ease;pointer-events:none}
@@ -98,7 +82,6 @@
   body.tour .mapctl,body.tour #mini,body.tour .layers,body.tour .v3d .where{opacity:.3;transition:opacity .6s}
   body.tour .v3d .hint{display:none}
   body.tour .mapctl:hover,body.tour .layers:hover{opacity:1}
-  #tourBtn.on{color:var(--gold);border-color:var(--gold)}
   .online{font-size:.78rem;color:var(--muted);margin-top:.7rem}
   .online b{color:var(--ok);font-weight:600}
   .feedhead{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}
@@ -152,6 +135,21 @@
   .no-pin .marker.pin{display:none}
   .no-vehicles .marker[data-kind="raft"],.no-vehicles .marker[data-kind="karve"],
   .no-vehicles .marker[data-kind="longship"],.no-vehicles .marker[data-kind="cart"]{display:none}
+  /* a place's card, where it was tapped: its name, what it is, the others at that spot */
+  .namer{position:absolute;z-index:6;width:17rem;padding:.6rem .75rem;box-shadow:var(--shadow-lg)}
+  .namer .field{margin:.4rem 0 0}
+  .namer .btnrow{margin-top:.5rem}
+  .namer .nm{font-weight:700;font-size:1.05rem;margin-top:.2rem}
+  .namer .nm .edit{color:var(--faint);font-size:.85rem;margin-left:.3rem;text-decoration:none}
+  .namer .nm .edit:hover{color:var(--gold)}
+  .namer .facts{color:var(--ink-2);font-size:.78rem;margin-top:.25rem}
+  .namer .others{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
+  /* the pin's own icons, shadowed as on the map so the gold ones hold on a gold chip */
+  .namer .nm .ic{width:17px;height:17px;vertical-align:-3px;margin-right:.35rem;overflow:visible;filter:var(--shadow-ink)}
+  .namer .nm i{font-weight:400;color:var(--muted)}
+  .namer .pick{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.45rem}
+  .namer .pick .chip{display:inline-flex;align-items:center;gap:.3rem}
+  .namer .pick svg{width:13px;height:13px;overflow:visible;filter:var(--shadow-ink)}
 
   /* The layers card, as on Google Maps: a thumbnail of the other ground in the
      corner; hovering it (a tap, where nothing hovers) opens the grounds and presets. */
@@ -213,7 +211,6 @@
   /* the pegman rests pale in the column and turns gold while armed or carried */
   .peg{color:var(--ink-2)}
   .peg svg{width:22px;height:22px}
-  .peg.on{color:var(--gold);border-color:var(--gold)}
   .pegghost{position:fixed;z-index:200;width:30px;height:30px;margin:-26px 0 0 -15px;color:var(--gold);pointer-events:none;
     filter:var(--shadow-ink);overflow:visible}
   .stage.dropping,.stage.dropping .marker{cursor:crosshair}
@@ -253,8 +250,8 @@
     #mini b{color:var(--ok);font-weight:600}
     .layers{flex-direction:column-reverse;align-items:flex-start}
     .tray{max-width:calc(100vw - 1.4rem)}
-    .lcard,.lcard canvas{width:56px;height:56px}
     .lcard{width:60px;height:60px}
+    .lcard canvas{width:56px;height:56px}
   }
 </style>
 </head>

@@ -24,7 +24,7 @@
   .set .who b{color:var(--muted);font-weight:500}
   .set form{display:grid;gap:.35rem}
   .set .field{font-family:var(--mono);font-size:.82rem}
-  .set .btnrow .btn{height:30px;min-width:0;padding:0 .55rem;font-size:.74rem}
+  .set .btnrow .btn{padding:0 .55rem}
   .set .note{margin-top:0}
   #restart{margin-top:.8rem}
   @media (max-width:560px){ .set{grid-template-columns:1fr} }
@@ -59,7 +59,7 @@ function row(s){
     <div><div class="k">${esc(s.key)}<span class="tag${s.live ? "" : " restart"}">${s.live ? "live" : "restart"}</span></div>
       <div class="d">${esc(s.desc)}</div>
       <div class="who">${s.given ? `set by <b>${esc(s.by || "someone")}</b> ${s.t ? MapCore.secsAgo(s.t) : ""} · the config says ${esc(s.secret ? (s.default ? "set" : "nothing") : s.default || "nothing")}` : "the config's own value"}</div></div>
-    <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">${time ? "Sign everyone out" : "Save"}</button>${s.given && !time ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
+    <form><div>${input}</div><div class="btnrow"><button class="btn sm" type="submit">${time ? "Sign everyone out" : "Save"}</button>${s.given && !time ? '<button class="btn quiet sm" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
   </div>`;
 }
 // the settings read in groups, as an admin thinks of them, not in the file's order

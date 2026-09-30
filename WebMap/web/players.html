@@ -22,9 +22,9 @@
   /* ---------- the roster, and the one picked ----------
      The roster stands alone in the middle until a player is picked; then it
      steps to the left as a column and the player's page opens beside it. */
-  .app{align-items:stretch;overflow:hidden;--ease:cubic-bezier(.2,.7,.2,1)}   /* the page slides in from past the edge */
+  .app{overflow:hidden;--ease:cubic-bezier(.2,.7,.2,1)}   /* the page slides in from past the edge */
   /* the widths are lengths on both sides so the roster slides rather than jumps */
-  .roster{flex:0 0 100%;max-width:100%;min-width:0;overflow:auto;padding:1.3rem .9rem 2.4rem;border-right:1px solid transparent;
+  .roster{flex:0 0 100%;max-width:100%;min-width:0;overflow:auto;container-type:inline-size;padding:1.3rem .9rem 2.4rem;border-right:1px solid transparent;
     transition:flex-basis .36s var(--ease),max-width .36s var(--ease),background-color .36s,border-color .36s,padding .36s var(--ease)}
   .roster > *{max-width:660px;margin-left:auto;margin-right:auto;transition:max-width .36s var(--ease)}
   .app.picked .roster{flex-basis:372px;max-width:372px;background:var(--bg-2);border-right-color:var(--line);padding:1rem .8rem 2rem}
@@ -45,52 +45,42 @@
 
   .rows{gap:.4rem;margin-top:.9rem}
   /* a player's row: who, when, and the four figures people compare */
-  .player{display:block;width:100%;text-align:left;color:inherit;font:inherit;padding:.55rem .7rem .6rem;
-    background:var(--card);border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
+  .player{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:0 .6rem;align-items:center;width:100%;text-align:left;
+    color:inherit;font:inherit;padding:.55rem .7rem .6rem;background:var(--card);border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
   .player:hover{border-color:var(--gold)}
   .player.pick{border-color:var(--gold);background:var(--card-2)}
   .player.ok{border-color:var(--ok-line)}
   .player.ok.pick{border-color:var(--gold)}
-  .player{display:grid;grid-template-columns:minmax(0,1fr) 58px;gap:0 .6rem;align-items:center}
   .player .rh{display:flex;align-items:center;gap:.45rem;min-width:0}
-  .roster{container-type:inline-size}
   /* a narrow list (a phone, or the list beside an open page) keeps the name whole and drops the title under it */
   @container (max-width:560px){ .player .rh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot nm seen" "cls cls cls";align-items:center} .player .rh .cls{grid-area:cls;justify-self:start;margin-top:.3rem} .player .rh .seen{grid-area:seen} .player .rh .nm{grid-area:nm} .player .rh .dot{grid-area:dot} }
   .player .radar{grid-column:2;grid-row:1 / span 2;width:58px;height:58px;display:block}
   .player .nm{font-weight:700;color:var(--bright);font-size:.95rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .player .seen{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;flex:0 0 auto}
-  .dhead .cls{font-size:.68rem;padding:.15rem .55rem}
-  .figs .fig.txt .v{font-size:.82rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .player.ok .seen{color:var(--ok)}
   .player .mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem;margin-top:.4rem}
 
   /* the player's page */
   .dhead{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
-  .dhead .back{display:none;height:30px;padding:0 .5rem;font-size:.76rem}
+  .dhead .back{display:none;padding:0 .5rem;font-size:.76rem}
   .dhead h2{font-size:1.4rem;font-weight:700;color:var(--bright);display:flex;align-items:center;gap:.55rem;min-width:0;flex-wrap:wrap}
   .dhead .state{font-size:.78rem;color:var(--muted)}
   .dhead.ok .state{color:var(--ok)}
   .dhead .state i{font-style:normal;color:var(--muted)}
+  .dhead .cls{font-size:.68rem;padding:.15rem .55rem}
   .dhead .links{margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap}
-  .dhead .links .btn{height:30px;padding:0 .6rem;font-size:.74rem}
   .top{display:grid;grid-template-columns:minmax(0,1fr) 232px;gap:.6rem 1.4rem;align-items:start;margin-top:1.1rem}
   .portrait{display:grid;gap:.9rem;width:232px}
   .viking canvas{height:300px}
-  .radar.big{width:232px;height:232px;display:block;overflow:visible}
-  .radar.big .fill{fill:var(--gold);fill-opacity:.2;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
-  .radar.big .grid{fill:none;stroke:var(--line);stroke-width:1}
-  .radar.big .spoke{stroke:var(--hair);stroke-width:1}
-  .radar.big .pt{fill:var(--gold)}
-  .radar.big .lb{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;fill:var(--muted)}
-  .radar.big .lv{font-size:9px;fill:var(--ink-2);font-variant-numeric:tabular-nums}
+  .radar.big{width:232px;height:232px;display:block}
   .groups{display:grid;gap:.75rem}
   .group{padding-top:.6rem;border-top:1px solid var(--line)}
-  .group:first-child{padding-top:0;border-top:0}
   .group .eyebrow{margin-bottom:.45rem}
   .group .line{margin-top:.45rem}
   .figs{display:grid;gap:.5rem .5rem;grid-template-columns:repeat(4,minmax(0,1fr))}
   .figs .v{font-size:1.15rem;margin-top:0}
   .figs .k{font-size:.61rem;letter-spacing:.05em;line-height:1.25}
+  .figs .fig.txt .v{font-size:.82rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .fig.nil .v{color:var(--nil);font-weight:600}
   .fig.warn .v,.fig.warn .k{color:var(--gold)}
   /* the danger rows under their heading, the way to the map at its right */
@@ -278,7 +268,7 @@ let DLAST = "", WHERE = null;    // WHERE: {name, text} once the ground under an
 function renderDetail(){
   const p = DATA.find(x => x.name === PICK);
   const head = document.getElementById("dhead"), body = document.getElementById("dbody");
-  if(!p){ head.innerHTML = `<button class="btn quiet back" id="back">&larr; Players</button><h2>${esc(PICK)}</h2>`; body.innerHTML = `<p class="empty">No tally under that name.</p>`; DLAST = ""; return; }
+  if(!p){ head.innerHTML = `<button class="btn quiet sm back" id="back">&larr; Players</button><h2>${esc(PICK)}</h2>`; body.innerHTML = `<p class="empty">No tally under that name.</p>`; DLAST = ""; return; }
   const on = !!p.online, graves = num(p.graves), runs = p.runs || {}, streak = p.streak_m || {}, runm = p.run_m || {};
   const nil = n => n ? "" : "nil";
   const calls = num(p.close_calls), lowest = num(p.lowest_hp);
@@ -287,13 +277,13 @@ function renderDetail(){
   const here = ONLINE.find(q => q.name === p.name), cls = classify(p);
   const where = on && WHERE && WHERE.name === p.name ? ` <i>· ${esc(WHERE.text)}</i>` : "";
   head.className = "dhead" + (on ? " ok" : "");
-  head.innerHTML = `<button class="btn quiet back" id="back">&larr; Players</button>`
+  head.innerHTML = `<button class="btn quiet sm back" id="back">&larr; Players</button>`
     + `<h2><span class="dot${on ? " ok" : ""}"></span>${esc(p.name)}${PlayerCard.pill(cls)}</h2>`
     + `<span class="state">${on ? "online now" : seen(num(p.last_seen))}${where}${cls ? ` <i>· ${esc(cls.why)}</i>` : ""}</span>`
     + `<span class="links">`
-    + (here ? `<a class="btn quiet" href="index.html#at=${Math.round(here.x)},${Math.round(here.z)},20" title="Where they stand now">On the map</a>` : "")
-    + (num(p.deaths) ? `<a class="btn quiet" href="${mapLink(p.name)}">Deaths</a>` : "")
-    + (lastLink ? `<a class="btn quiet" href="${lastLink}" title="Where they last died">Last death</a>` : "")
+    + (here ? `<a class="btn quiet sm" href="index.html#at=${Math.round(here.x)},${Math.round(here.z)},20" title="Where they stand now">On the map</a>` : "")
+    + (num(p.deaths) ? `<a class="btn quiet sm" href="${mapLink(p.name)}">Deaths</a>` : "")
+    + (lastLink ? `<a class="btn quiet sm" href="${lastLink}" title="Where they last died">Last death</a>` : "")
     + `</span>`;
   const streakLine = streak.best != null
     ? `<div class="line"><b>Streak</b> best ${km(streak.best)} km without dying &#183; ${km(streak.now)} km since the last`

@@ -22,15 +22,17 @@
   .row .ic,.card h3 .ic{width:19px;height:19px;flex:0 0 auto;margin-top:.15rem;overflow:visible;
     filter:var(--shadow-ink)}
   .bd{min-width:0;flex:1}
-  .nm{font-size:.9rem;font-weight:600;color:var(--bright);display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem}
-  .nm .arr{color:var(--portal);font-weight:400;font-size:1.05rem;line-height:1}
-  .nm .un{color:var(--muted);font-weight:400;font-style:italic}
+  .row .nm{font-size:.9rem;font-weight:600;color:var(--bright);display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem}
+  .row .nm .arr{color:var(--portal);font-weight:400;font-size:1.05rem;line-height:1}
+  .row .nm .un{color:var(--muted);font-weight:400;font-style:italic}
   /* the coordinates are the point of the row: readable, but the name leads */
   .ends{margin-top:.25rem;display:grid;gap:.1rem;font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums}
   .ends .xz,.meta .xz{color:var(--ink-2)}
   /* a hub's card: its name, where it stands, then a row per spoke */
   .card{margin-bottom:.8rem}
   .card h3{font-size:.92rem;font-weight:600;color:var(--bright);display:flex;gap:.6rem;align-items:flex-start}
+  .card h3 .open{color:inherit;text-decoration:none}
+  .card h3 .open:hover{color:var(--portal)}
   .meta{color:var(--muted);font-size:.74rem;margin-top:.15rem;font-variant-numeric:tabular-nums}
   .spokes{list-style:none;display:grid;gap:.2rem;margin-top:.55rem;border-top:1px solid var(--line);padding-top:.55rem}
   .spokes a{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline;color:var(--muted);
@@ -40,40 +42,6 @@
   .spokes li:not(.sector) > .go{flex:1 1 auto;min-width:0}
   .spokes .mp{flex:0 0 auto;align-self:center;padding:.2rem .4rem;color:var(--faint);font-size:.9rem;line-height:1}
   .spokes .mp:hover{color:var(--portal);background:none}
-  .card h3 .open{color:inherit;text-decoration:none}
-  .card h3 .open:hover{color:var(--portal)}
-  /* close up: the base as it stands, each gate where a player walks to it */
-  .inside{position:absolute;inset:0;z-index:15;background:var(--stage);display:flex;flex-direction:column;cursor:default}
-  .inside[hidden]{display:none}
-  .inside .hdr{display:flex;gap:.55rem;align-items:center;padding:.4rem .7rem;background:var(--sheet);border-bottom:1px solid var(--line);flex:0 0 auto}
-  .inside .hdr > .ic{width:20px;height:20px;overflow:visible;flex:0 0 auto}
-  .inside .hdr h2{font-size:.95rem;font-weight:600;color:var(--bright);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .inside .hdr .meta{margin:0 auto 0 0;font-size:.72rem;color:var(--muted);white-space:nowrap}
-  .inside .hdr .btn{height:30px;min-width:0;padding:0 .6rem;font-size:.74rem}
-  .inside .ground{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:grab;
-    background:var(--well);border:1px solid var(--line);border-radius:var(--r)}
-  .inside .ground.dragging{cursor:grabbing}
-  .inside .ground canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .inside .marks{position:absolute;inset:0;pointer-events:none}
-  .inside .mk{position:absolute;left:0;top:0;width:0;height:0}
-  .inside .mk .ic{position:absolute;left:-11px;top:-11px;width:22px;height:22px;overflow:visible;pointer-events:auto;filter:var(--shadow-ink)}
-  .inside .mk .lb{position:absolute;left:0;top:12px;z-index:1;transform:translateX(-50%);white-space:nowrap;font-size:.72rem;font-weight:600;color:var(--bright);text-shadow:var(--halo-text);pointer-events:auto}
-  .inside .mk.here .lb{z-index:2}
-  .inside .mk [data-go]{cursor:pointer}
-  .inside .mk [data-go]:hover{color:var(--portal)}
-  .inside .mk.free .ic,.inside .mk.free .lb{opacity:.55}
-  .inside .mk.dial .lb{color:var(--unknown)}
-  .inside .mk.here .ic{filter:drop-shadow(0 0 7px var(--portal))}
-  .inside .mk.here .lb{color:var(--portal)}
-  .inside .mk.here::before{content:"";position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;border:2px solid var(--portal);animation:here 1.5s ease-out infinite}
-  @keyframes here{from{transform:scale(.5);opacity:1}to{transform:scale(1.4);opacity:0}}
-  .inside .mk.crowd .lb{display:none}          /* crowded out: the icon keeps the place, hover reads it */
-  .inside .mk.crowd:hover .lb{display:block}
-  .inside .mk.pin .ic{width:15px;height:15px;left:-7px;top:-7px;opacity:.85}
-  .inside .mk.pin .lb{font-weight:500;font-size:.66rem;color:var(--ink-2);top:7px}
-  .inside .gates{padding:.4rem .7rem;margin:0;border-top:1px solid var(--line);background:var(--sheet);flex:0 0 auto;max-height:5.4rem;overflow:auto}
-  .inside .gates .gate{cursor:pointer}
-  .inside .empty{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);color:var(--muted);font-size:.8rem;text-shadow:var(--halo-text)}
   .spokes .g{color:var(--bright);font-weight:600}
   .spokes .arr{color:var(--portal)}
   .spokes .to{color:var(--ink)}
@@ -147,6 +115,35 @@
   .rose{top:.5rem;font-weight:600}
   .sbar{bottom:.5rem;display:flex;align-items:flex-end;gap:.35rem}
   .sline{display:block;height:5px;border:1px solid var(--muted);border-top:0}
+  /* close up: the base as it stands, each gate where a player walks to it */
+  .inside{position:absolute;inset:0;z-index:15;background:var(--stage);display:flex;flex-direction:column;cursor:default}
+  .inside[hidden]{display:none}
+  .inside .hdr{display:flex;gap:.55rem;align-items:center;padding:.4rem .7rem;background:var(--sheet);border-bottom:1px solid var(--line);flex:0 0 auto}
+  .inside .hdr > .ic{width:20px;height:20px;overflow:visible;flex:0 0 auto}
+  .inside .hdr h2{font-size:.95rem;font-weight:600;color:var(--bright);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inside .hdr .meta{margin:0 auto 0 0;font-size:.72rem;color:var(--muted);white-space:nowrap}
+  .inside .ground{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;cursor:grab;
+    background:var(--well);border:1px solid var(--line);border-radius:var(--r)}
+  .inside .ground.dragging{cursor:grabbing}
+  .inside .ground canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .inside .marks{position:absolute;inset:0;pointer-events:none}
+  .inside .mk{position:absolute;left:0;top:0;width:0;height:0}
+  .inside .mk .ic{position:absolute;left:-11px;top:-11px;width:22px;height:22px;overflow:visible;pointer-events:auto;filter:var(--shadow-ink)}
+  .inside .mk .lb{position:absolute;left:0;top:12px;z-index:1;transform:translateX(-50%);white-space:nowrap;font-size:.72rem;font-weight:600;color:var(--bright);text-shadow:var(--halo-text);pointer-events:auto}
+  .inside .mk [data-go]{cursor:pointer}
+  .inside .mk [data-go]:hover{color:var(--portal)}
+  .inside .mk.free .ic,.inside .mk.free .lb{opacity:.55}
+  .inside .mk.dial .lb{color:var(--unknown)}
+  .inside .mk.here .ic{filter:drop-shadow(0 0 7px var(--portal))}
+  .inside .mk.here .lb{z-index:2;color:var(--portal)}
+  .inside .mk.here::before{content:"";position:absolute;left:-17px;top:-17px;width:34px;height:34px;border-radius:50%;border:2px solid var(--portal);animation:here 1.5s ease-out infinite}
+  @keyframes here{from{transform:scale(.5);opacity:1}to{transform:scale(1.4);opacity:0}}
+  .inside .mk.crowd .lb{display:none}          /* crowded out: the icon keeps the place, hover reads it */
+  .inside .mk.crowd:hover .lb{display:block}
+  .inside .mk.pin .ic{width:15px;height:15px;left:-7px;top:-7px;opacity:.85}
+  .inside .mk.pin .lb{font-weight:500;font-size:.66rem;color:var(--ink-2);top:7px}
+  .inside .gates{padding:.4rem .7rem;margin:0;border-top:1px solid var(--line);background:var(--sheet);flex:0 0 auto;max-height:5.4rem;overflow:auto}
+  .inside .gates .gate{cursor:pointer}
   /* a phone's whole diagram is 3 km across: a panel that stays desktop-wide would
      swallow the places nearest the hub */
   @media (max-width:560px){
@@ -190,8 +187,8 @@
     <!-- the close up: a hub as it stands, over the render and the base's floor plan -->
     <div class="inside" id="inside" hidden>
       <div class="hdr"><svg class="ic"><use href="#ic-portal"></use></svg><h2 id="inName"></h2><span class="meta" id="inMeta"></span>
-        <a class="btn quiet" id="inMap" href="#" title="Open the map here">Map</a><a class="btn quiet" id="in3d" href="#" title="Stand here in 3D">3D</a>
-        <button class="btn quiet" id="inClose" type="button" title="Back to the network (Esc)">&times;</button></div>
+        <a class="btn quiet sm" id="inMap" href="#" title="Open the map here">Map</a><a class="btn quiet sm" id="in3d" href="#" title="Stand here in 3D">3D</a>
+        <button class="btn quiet sm" id="inClose" type="button" title="Back to the network (Esc)">&times;</button></div>
       <div class="ground" id="inField"><canvas id="inCv"></canvas><div class="marks" id="inMarks"></div>
         <div class="rose">N &#8593;</div><div class="sbar"><span class="sline" id="inSline"></span><span id="inStxt"></span></div></div>
       <div class="gates" id="inGates"></div>
