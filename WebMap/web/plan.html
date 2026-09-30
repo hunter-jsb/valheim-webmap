@@ -190,7 +190,6 @@ const V = MapCore.view(stage, {pointer: false, max: MAX_ZOOM, paint: () => {
 }});
 const ctx = cv.getContext("2d");
 const view = () => ({scale: V.scale, tx: V.tx, ty: V.ty});
-const w2s = (x,z) => { const p = toPx(x,z); return [V.tx + p[0]*V.scale, V.ty + p[1]*V.scale]; };
 const s2w = (sx,sy) => { const q = V.at(sx, sy); return toWorld(q.px, q.py); };
 
 // ---------- the document ----------

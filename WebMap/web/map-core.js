@@ -1,4 +1,4 @@
-/* map-core.js — the world map, shared by the live map and the planning board.
+/* map-core.js — the world map, shared by every page.
  *
  * The rendering rule: everything crisp is blitted or stroked into one
  * screen-space canvas per view change, never scaled by a CSS transform. Under a
@@ -7,7 +7,7 @@
  * finely it rasterises a 2048 px vector layer (builds came out as blobs). Drawn
  * at 1:1 against the current view, both stay sharp at any zoom.
  *
- * One global, no modules, no build step: two pages load it with a plain script tag.
+ * One global, no modules, no build step: each page loads it with a plain script tag.
  */
 const MapCore = (() => {
 "use strict";
