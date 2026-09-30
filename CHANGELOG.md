@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+* The map page's script is split into files with one global each, as `map-core.js` and
+  `js/card.js` are: `js/tour.js` the cinematic, `js/street.js` the 3D mode and the pegman,
+  `js/spot.js` the spotlight (a turn the players and World pages can hand their own figures
+  to) and `js/layers.js` the Layers card, each handed what it reads by one `init`; the page
+  keeps the view, the live data, the markers, the place card and the pins. Nothing a player
+  sees or does changes. The two checks that cut into 3D build their place first, by the
+  view's own measure, and wait on the tour's beat, where they had timed out under software
+  rendering.
+
 ## 2.16.0
 
 * Sign in with Discord on any server running the mod: set `discord_guild` to your Discord

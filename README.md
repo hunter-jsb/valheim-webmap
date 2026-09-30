@@ -66,7 +66,14 @@ presets of the legend and the choice of ground: the render, or the flat biome at
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
 holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
 page draws from, `map-core.js` the rendering core, `js/card.js` a player as the roster
-reads them (for the players page and the tour), and each page holds only its own.
+reads them (for the players page and the tour), and each page holds only its own. The
+map's own sit in files beside it, one global each, handed what they read by `init`:
+
+* `js/layers.js` — the Layers card: legend, presets, details, names and ground, kept per browser
+* `js/spot.js` — the spotlight's turn, and the map's figures in it
+* `js/street.js` — the 3D mode: in and out, the pegman, the View row and `#3d=` links
+* `js/tour.js` — the cinematic: its places, moves, prefetch, caption and player card
+
 Our own hosted copy at
 [xn-valheim] deploys the same files with a `site-config.js` that names our server.
 
