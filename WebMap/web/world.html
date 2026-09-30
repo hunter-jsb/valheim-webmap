@@ -106,8 +106,7 @@
 <script>
 const API = MapCore.cfg.api, esc = MapCore.esc, plural = MapCore.plural, pic = MapCore.pic, toPx = MapCore.toPx, toWorld = MapCore.toWorld;
 MapCore.fetchConfig(API).catch(() => {});
-const num = v => Number.isFinite(+v) ? +v : 0;
-const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+const num = MapCore.num, km = MapCore.km;
 const at = (x, z, zoom) => `index.html#at=${Math.round(x)},${Math.round(z)}${zoom ? "," + zoom : ""}`;
 const in3d = (x, z) => `index.html#3d=${Math.round(x)},${Math.round(z)}`;
 const SEA = 30;                                              // the game's water stands at y = 30
@@ -200,8 +199,8 @@ function records(){
   // what stands and what fell, by the ground it lies on
   const tally = (list, get) => { const by = new Map(); for(const it of list){ const w = get(it), p = placeAt(w.x, w.z, GROUND); if(!p) continue; const r = by.get(p) || {f: p, n: 0, x: 0, z: 0}; r.n++; r.x += w.x; r.z += w.z; by.set(p, r); } return [...by.values()].map(r => ({f: r.f, n: r.n, x: r.x/r.n, z: r.z/r.n})).sort((a, b) => b.n - a.n); };
   if(PIECES){ const b = tally(PIECES, p => toWorld(p.px, p.py)); if(b[0]) rec("Most built place", b[0].f, `${b[0].n.toLocaleString()} pieces standing`, b[0].x, b[0].z, 24, b.slice(0, 3).map(r => ({frac: r.n/b[0].n, label: `${r.n.toLocaleString()} ${r.f.name}`}))); }
-  const kit = MapCore.kitchens(((STATS || {}).kitchen || {}).stations).filter(k => k.cooked > 0 && walkedAt(k.x, k.z)), where = k => (placeAt(k.x, k.z, GROUND) || {name: "the wild"}).name;
-  if(kit[0]) rec("Busiest kitchen", {name: where(kit[0])}, `${kit[0].cooked.toLocaleString()} meals cooked here`, kit[0].x, kit[0].z, 40, kit.slice(0, 3).map(k => ({frac: k.cooked/kit[0].cooked, label: `${k.cooked.toLocaleString()} ${where(k)}`})));
+  const kitchens = MapCore.kitchens(((STATS || {}).kitchen || {}).stations).filter(k => k.cooked > 0 && walkedAt(k.x, k.z)), where = k => (placeAt(k.x, k.z, GROUND) || {name: "the wild"}).name;
+  if(kitchens[0]) rec("Busiest kitchen", {name: where(kitchens[0])}, `${kitchens[0].cooked.toLocaleString()} meals cooked here`, kitchens[0].x, kitchens[0].z, 40, kitchens.slice(0, 3).map(k => ({frac: k.cooked/kitchens[0].cooked, label: `${k.cooked.toLocaleString()} ${where(k)}`})));
   const deaths = ((S.deaths || {}).deaths) || [];
   if(deaths.length){ const d = tally(deaths, q => q); if(d[0]) rec("Deadliest place", d[0].f, `${plural(d[0].n, "death")}`, d[0].x, d[0].z, 18, d.slice(0, 3).map(r => ({frac: r.n/d[0].n, label: `${r.n} ${r.f.name}`, colour: "var(--off)"}))); }
   const portals = ((S.portals || {}).portals) || [];

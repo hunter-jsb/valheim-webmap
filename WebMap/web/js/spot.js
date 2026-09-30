@@ -5,7 +5,7 @@
  */
 const Spot = (() => {
 "use strict";
-const esc = MapCore.esc, num = v => Number.isFinite(+v) ? +v : 0;
+const esc = MapCore.esc, num = MapCore.num, km = MapCore.km;
 
 // ---------- the turn ----------
 // One spotlight a page. An entry is {k, v, c, svg}: its name, the figure and the line (both html),
@@ -52,7 +52,6 @@ function reset(){ S.i = -1; clearInterval(S.timer); S.timer = 0; }
 function world(W){
   const out = [], P = (W.stats && Array.isArray(W.stats.players)) ? W.stats.players : [], pic = MapCore.pic;
   const top = get => P.length ? P.slice().sort((a, b) => get(b) - get(a))[0] : null;
-  const kmf = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
   const sum = get => P.reduce((t, q) => t + get(q), 0);
   if(W.explored != null) out.push({k: "Explored", v: `${(W.explored*100).toFixed(1)}% <small>of the world</small>`, c: "walked by someone since the fog first lifted", svg: pic.ring(W.explored, "walked, the rest still under fog")});
   if(W.pieces){ const b = top(q => num(q.pieces)), all = sum(q => num(q.pieces));
@@ -81,9 +80,9 @@ function world(W){
     out.push({k: "Graves", v: `${W.graves.length} <small>out there</small>`, c: "gear still lying where someone fell", svg: pic.bars(rows.map(([n, c]) => ({frac: c/W.graves.length, label: `${c} ${n}`})))}); }
   if(W.features && W.features.length){ const named = W.features.filter(f => f.by); if(named.length){ const last = named.slice().sort((a, b) => num(b.t) - num(a.t))[0];
     out.push({k: "Named", v: `${named.length} <small>places named</small>`, c: `the latest: ${esc(last.name)}, by ${esc(last.by)}`, svg: pic.ring(named.length/W.features.length, "of the places carry a given name")}); } }
-  const far = top(q => num(q.dist_m)); if(far && num(far.dist_m)) out.push({k: "Farthest", v: esc(far.name), c: `${kmf(far.dist_m)} km on foot and by boat`, svg: pic.strip(P, far, q => num(q.dist_m))});
+  const far = top(q => num(q.dist_m)); if(far && num(far.dist_m)) out.push({k: "Farthest", v: esc(far.name), c: `${km(far.dist_m)} km on foot and by boat`, svg: pic.strip(P, far, q => num(q.dist_m))});
   const kill = top(q => num(q.kills)); if(kill && num(kill.kills)) out.push({k: "Slayer", v: esc(kill.name), c: `${num(kill.kills)} kills`, svg: pic.strip(P, kill, q => num(q.kills))});
-  const dead = top(q => num(q.deaths)); if(dead && num(dead.deaths)) out.push({k: "Most deaths", v: esc(dead.name), c: `${num(dead.deaths)} deaths in ${kmf(dead.dist_m)} km`, svg: pic.strip(P, dead, q => num(q.deaths))});
+  const dead = top(q => num(q.deaths)); if(dead && num(dead.deaths)) out.push({k: "Most deaths", v: esc(dead.name), c: `${num(dead.deaths)} deaths in ${km(dead.dist_m)} km`, svg: pic.strip(P, dead, q => num(q.deaths))});
   const loud = top(q => num(q.chat)); if(loud && num(loud.chat)) out.push({k: "Loudest", v: esc(loud.name), c: `${num(loud.chat)} lines said in chat`, svg: pic.strip(P, loud, q => num(q.chat))});
   if(W.deaths.length){ const d = W.deaths[W.deaths.length - 1], w = MapCore.toWorld(d.px, d.py);
     out.push({k: "Latest death", v: esc(d.name), c: `${MapCore.ago(d.t*1000)} at ${Math.round(w.x)}, ${Math.round(w.z)}`, svg: ""}); }

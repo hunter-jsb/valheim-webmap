@@ -295,10 +295,9 @@ const V = MapCore.view(stage, {paint, max: ZMAX, min: .4, guard: ".mapctl, .insi
   down: e => { setHover(keysOf(e.target)); }, resize: () => { if(NODES.length) measure(); }});
 function draw(){ V.request(); }
 
+// the chart's canvas, and the scratch the map's render is filtered through, at one size
 function sizeCanvas(){
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  const W = Math.round(stage.clientWidth*dpr), H = Math.round(stage.clientHeight*dpr);
-  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+  const dpr = MapCore.fitCanvas(cv, stage), W = cv.width, H = cv.height;
   if(!scratch){ scratch = document.createElement("canvas"); sctx = scratch.getContext("2d"); }
   if(scratch.width !== W || scratch.height !== H){ scratch.width = W; scratch.height = H; }
   return dpr;
@@ -328,7 +327,7 @@ function paint(){
   layout(v);
   drawSpokes(v);
   drawLeads(v);
-  scaleBar();
+  MapCore.scaleBar(document.getElementById("scaleBar"), document.getElementById("scaleTxt"), GEOM.pixel/V.scale);
 }
 
 // Nodes are HTML at screen positions, so a chip is a real link and the text is
@@ -448,14 +447,6 @@ function edge(n, u, sgn){
   }
   return {x: n.sx + d.x*t, y: n.sy + d.y*t};
 }
-function scaleBar(){
-  const mpp = GEOM.pixel/V.scale;               // metres per screen pixel
-  let m = 10;
-  while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
-  while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
-  document.getElementById("scaleBar").style.width = Math.round(m/mpp) + "px";
-  document.getElementById("scaleTxt").textContent = m >= 1000 ? (m/1000) + " km" : Math.round(m) + " m";
-}
 // A label's size never changes with the zoom, so it is measured once per rebuild.
 function measure(){
   for(const n of NODES){
@@ -498,9 +489,9 @@ const INSCENE = MapCore.viewCache((g, v) => {
   if(PIECES) MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= MapCore.PLAN_ZOOM});
 }, () => HV.request());
 function paintInside(){
-  const dpr = Math.min(devicePixelRatio || 1, 2), W = inField.clientWidth, H = inField.clientHeight;
+  const W = inField.clientWidth, H = inField.clientHeight;
   if(!W || !H) return;
-  if(inCv.width !== Math.round(W*dpr) || inCv.height !== Math.round(H*dpr)){ inCv.width = Math.round(W*dpr); inCv.height = Math.round(H*dpr); }
+  const dpr = MapCore.fitCanvas(inCv, inField);
   INSCENE.draw(inCtx, {scale: HV.scale, tx: HV.tx, ty: HV.ty, w: W, h: H, pix: dpr}, "#05070a");
   inCtx.setTransform(1, 0, 0, 1, 0, 0);
   // gates in a ring stand a few metres apart: a label that would sit on another
@@ -514,11 +505,7 @@ function paintInside(){
     const hit = taken.some(t => r.x0 < t.x1 && r.x1 > t.x0 && r.y0 < t.y1 && r.y1 > t.y0);
     m.classList.toggle("mini", hit); if(!hit) taken.push(r);
   }
-  const mpp = GEOM.pixel/HV.scale; let m = 1;
-  while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
-  while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
-  document.getElementById("inSline").style.width = Math.round(m/mpp) + "px";
-  document.getElementById("inStxt").textContent = m >= 1000 ? (m/1000) + " km" : Math.round(m) + " m";
+  MapCore.scaleBar(document.getElementById("inSline"), document.getElementById("inStxt"), GEOM.pixel/HV.scale, 1);   // a base is metres across
 }
 function loadPieces(){
   if(PIECE_REV == null || (PIECES && PIECES_REV === PIECE_REV) || PIECES_LOADING) return;

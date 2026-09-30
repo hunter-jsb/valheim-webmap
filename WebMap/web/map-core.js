@@ -98,9 +98,17 @@ function layers(base, onLoad){
     const hit = () => { if(++n >= keys.length) fn(); };
     for(const k of keys){ if(ready(k)) hit(); else imgs[k].addEventListener("load", hit, {once: true}); }
   }
-  // o: {pieces(list, json), structures (bool or fn, checked after pieces), onFog()}
+  // The names are a document, not a raster, but kept by their revision all the same, and
+  // asked for again after a failure; then(list) hears of a fresh one.
+  async function features(v, then){
+    rev.features = v;
+    try{ const j = await fetchJSON(base, "/features?v=" + v); if(j && j.features) then(j.features); }
+    catch(e){ rev.features = null; }
+  }
+  // o: {features(list), pieces(list, json), structures (bool or fn, checked after pieces), onFog()}
   async function sync(r, o){
     o = o || {}; r = r || {};
+    if(o.features && r.features && r.features !== rev.features) features(r.features, o.features);
     if(o.pieces && r.pieces !== rev.pieces){
       try{
         const pj = await fetchJSON(base, "/pieces?v=" + r.pieces);
@@ -116,7 +124,7 @@ function layers(base, onLoad){
     const wantTrails = typeof o.trails === "function" ? o.trails() : o.trails;
     if(wantTrails && r.trails && r.trails !== rev.trails){ rev.trails = r.trails; load("trails", "/trails", r.trails); }
   }
-  return {imgs, rev, ready, load, whenReady, sync,
+  return {imgs, rev, ready, load, whenReady, sync, features,
           loadBase: () => load("base", BASE_TEX, "4k")};
 }
 
@@ -232,8 +240,25 @@ function explored(fogImg){
 // A build in ground nobody has walked is not drawn. Until the fog has decoded,
 // nothing is dropped rather than everything.
 function filterExplored(pieces, fogImg){
-  const ok = explored(fogImg);
+  const ok = pieces && explored(fogImg);
   return ok ? pieces.filter(p => ok(p.px, p.py)) : pieces;
+}
+// The walked world at a glance, from a 256 px read of the fog: the share walked, and the box
+// round it in texture px (null when nothing is). null when the fog cannot be read.
+function walked(fogImg){
+  const N = 256, c = document.createElement("canvas");
+  c.width = c.height = N;
+  const g = c.getContext("2d", {willReadFrequently: true});
+  let d;
+  try{ g.drawImage(fogImg, 0, 0, N, N); d = g.getImageData(0, 0, N, N).data; }
+  catch(e){ return null; }
+  let x0 = N, y0 = N, x1 = -1, y1 = -1, seen = 0;
+  for(let y = 0; y < N; y++) for(let x = 0; x < N; x++) if(d[(y*N + x)*4] > 40){
+    seen++;
+    if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y;
+  }
+  const k = geom.size/N;
+  return {share: seen/(N*N), box: x1 < 0 ? null : {x: x0*k, y: y0*k, w: (x1 - x0 + 1)*k, h: (y1 - y0 + 1)*k}};
 }
 // Up close a base reads as a floor plan: walls as lines, floors a tint, roofs
 // barely there, furniture solid -- every storey lands on the same footprint, so
@@ -618,6 +643,23 @@ function viewCache(render, fresh){
   return {draw, invalidate, cost: () => cost};
 }
 
+// ---------- the stage's canvas and its scale ----------
+// A canvas's backing store to an element's size at the screen's pixel ratio, two at most:
+// sharper would cost a phone's fill rate for nothing seen. Returns the ratio.
+function fitCanvas(cv, el){
+  const pix = Math.min(devicePixelRatio || 1, 2), W = Math.round(el.clientWidth*pix), H = Math.round(el.clientHeight*pix);
+  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+  return pix;
+}
+// A scale bar at mpp metres a screen pixel: the round length -- 1, 2.5 or 5 times ten to some
+// power, from m -- that draws 60 to 150 px, as the bar's width and the label's text.
+function scaleBar(bar, label, mpp, m = 10){
+  while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
+  while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
+  bar.style.width = Math.round(m/mpp) + "px";
+  label.textContent = m >= 1000 ? (m/1000) + " km" : Math.round(m) + " m";
+}
+
 // ---------- marker icons ----------
 // [path, fill, strokeless?] -- flat silhouettes with a dark halo (paint-order:
 // stroke) so they hold over meadow green, rock grey and water; one hue per
@@ -742,14 +784,14 @@ const BOSS_ICON = {
 // /stats/players' busiest stations as kitchens: the busiest station still unclaimed and
 // every other within 24 m of it make one, the most meals first. None from a mod without them.
 function kitchens(stations){
-  const n = v => Number.isFinite(+v) ? +v : 0, out = [];
+  const out = [];
   const left = (Array.isArray(stations) ? stations : []).filter(s => Number.isFinite(+s.x) && Number.isFinite(+s.z))
-    .sort((a, b) => n(b.cooked) - n(a.cooked) || n(b.brewed) - n(a.brewed));
+    .sort((a, b) => num(b.cooked) - num(a.cooked) || num(b.brewed) - num(a.brewed));
   while(left.length){
     const s = left.shift(), k = {x: +s.x, z: +s.z, cooked: 0, brewed: 0, smelted: 0, honey: 0, stations: 0};
     for(const t of [s].concat(left.filter(t => Math.hypot(t.x - s.x, t.z - s.z) <= 24))){
       if(t !== s) left.splice(left.indexOf(t), 1);
-      for(const f of ["cooked", "brewed", "smelted", "honey"]) k[f] += n(t[f]);
+      for(const f of ["cooked", "brewed", "smelted", "honey"]) k[f] += num(t[f]);
       k.stations++;
     }
     out.push(k);
@@ -799,6 +841,19 @@ function parsePins(lines){
   }).filter(Boolean);
 }
 const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+// a figure from the server as a number, and nothing as nought: a tally a mod never kept is absent
+const num = v => Number.isFinite(+v) ? +v : 0;
+// metres as km, to three figures or so
+const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
+// Coarse on purpose, from unix seconds: how stale a tally is, when a setting was set -- never how
+// long anyone played. fresh: what under a minute and a half reads as.
+function secsAgo(secs, fresh = "just now"){
+  const d = Math.max(0, Math.floor(Date.now()/1000) - secs);
+  if(d < 90) return fresh;
+  if(d < 5400) return Math.round(d/60) + " min ago";
+  if(d < 172800) return Math.round(d/3600) + " h ago";
+  return Math.round(d/86400) + " d ago";
+}
 function ago(iso){
   const d = (Date.now() - new Date(iso).getTime())/1000;
   if(!isFinite(d)) return "";
@@ -923,10 +978,12 @@ function nav(current, el){
   return el;
 }
 
-return {cfg, brand, setTitle, credits, toggleSide,
+// what the pages use, and setGeom, which the tests turn the geometry with
+return {cfg, nav, toggleSide, user, authHeaders, whoami,
         geom, setGeom, toPx, toWorld, PLAN_ZOOM, MAX_ZOOM,
-        api, fetchJSON, fetchState, fetchConfig, layers, BASE_TEX,
-        drawRasters, kindOf, ORDER, shade, parsePieces, explored, filterExplored, drawPieces, drawFires, drawDeaths, drawNames, hitName, viewCache, post,
-        ICONS, spriteSVG, injectSprite, iconPaths, VEHICLE, vehicleStyle, PIN_ICON,
-        parsePins, ago, esc, plural, clamp, view, nav, user, authHeaders, whoami, signIn, signOut, pic, ord, BIOME_INK, BOSSES, BOSS_ICON, kitchens};
+        fetchJSON, fetchState, fetchConfig, post, layers,
+        drawRasters, parsePieces, explored, filterExplored, walked, drawPieces, drawFires, drawDeaths, drawNames, hitName,
+        clamp, view, viewCache, fitCanvas, scaleBar,
+        ICONS, spriteSVG, injectSprite, iconPaths, vehicleStyle, PIN_ICON, BOSSES, BOSS_ICON, kitchens, pic, BIOME_INK,
+        parsePins, plural, ord, num, km, ago, secsAgo, esc};
 })();

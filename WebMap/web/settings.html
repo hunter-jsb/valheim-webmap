@@ -47,8 +47,6 @@ const API = MapCore.cfg.api, esc = MapCore.esc;
 MapCore.fetchConfig(API).catch(() => {});
 let SETTINGS = null;
 
-function ago(t){ const d = Math.max(0, Math.floor(Date.now()/1000) - t); return d < 90 ? "just now" : d < 5400 ? Math.round(d/60) + " min ago" : d < 172800 ? Math.round(d/3600) + " h ago" : Math.round(d/86400) + " d ago"; }
-
 function row(s){
   // a moment the server stamps as its own now: sign_out_before, one button and no reset
   const time = s.kind === "time";
@@ -60,7 +58,7 @@ function row(s){
   return `<div class="card set" data-key="${esc(s.key)}">
     <div><div class="k">${esc(s.key)}<span class="tag${s.live ? "" : " restart"}">${s.live ? "live" : "restart"}</span></div>
       <div class="d">${esc(s.desc)}</div>
-      <div class="who">${s.given ? `set by <b>${esc(s.by || "someone")}</b> ${s.t ? ago(s.t) : ""} · the config says ${esc(s.secret ? (s.default ? "set" : "nothing") : s.default || "nothing")}` : "the config's own value"}</div></div>
+      <div class="who">${s.given ? `set by <b>${esc(s.by || "someone")}</b> ${s.t ? MapCore.secsAgo(s.t) : ""} · the config says ${esc(s.secret ? (s.default ? "set" : "nothing") : s.default || "nothing")}` : "the config's own value"}</div></div>
     <form><div>${input}</div><div class="btnrow"><button class="btn" type="submit">${time ? "Sign everyone out" : "Save"}</button>${s.given && !time ? '<button class="btn quiet" type="button" data-reset title="Back to the config file\'s value">Reset</button>' : ""}</div><div class="note" data-note></div></form>
   </div>`;
 }

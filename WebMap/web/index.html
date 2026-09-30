@@ -548,7 +548,7 @@ function buildMarkers(players, pinList, vehicles){
 let PIECES_ALL = null;
 function setPieces(list, pj){ PIECES_ALL = list; PIECE_PLAYERS = (pj && Array.isArray(pj.players)) ? pj.players : []; refilterPieces(); }
 function refilterPieces(){
-  PIECES = PIECES_ALL && MapCore.filterExplored(PIECES_ALL, LAYERS.imgs.fog);
+  PIECES = MapCore.filterExplored(PIECES_ALL, LAYERS.imgs.fog);
   drawRaster();
 }
 
@@ -587,30 +587,17 @@ function graveAge(sec){
 Layers.init({layers: LAYERS, world: WORLD, drawRaster});
 
 // ---------- fitting and the map buttons ----------
-// Zoom to what's actually been explored — a new world is almost entirely fog.
+// Zoom to what's actually been explored — a new world is almost entirely fog. The share
+// and the box are kept for the tile, the ground's thumbnails and the tour.
 function fitExplored(doFit = true){
-  const N = 256, c = document.createElement("canvas"), SIZE = MapCore.geom.size;
-  c.width = c.height = N;
-  const g = c.getContext("2d", {willReadFrequently:true});
-  let d;
-  try{
-    g.drawImage(LAYERS.imgs.fog, 0, 0, N, N);
-    d = g.getImageData(0, 0, N, N).data;
-  }catch(e){ return V.fitWorld(); }
-  let x0=N, y0=N, x1=-1, y1=-1, seen=0;
-  for(let y=0; y<N; y++) for(let x=0; x<N; x++){
-    if(d[(y*N+x)*4] > 40){
-      seen++;
-      if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
-    }
-  }
-  EXPLORED = seen/(N*N);
+  const w = MapCore.walked(LAYERS.imgs.fog);
+  if(!w) return V.fitWorld();
+  EXPLORED = w.share;
   renderTiles();
-  const k = SIZE/N;
-  EXPLORED_BOX = x1 < 0 ? null : {x:x0*k, y:y0*k, w:(x1-x0+1)*k, h:(y1-y0+1)*k};
+  EXPLORED_BOX = w.box;
   Layers.drawThumbs();
   if(!doFit) return;
-  if(x1 < 0) return V.fitWorld();
+  if(!EXPLORED_BOX) return V.fitWorld();
   V.fitBox(EXPLORED_BOX.x, EXPLORED_BOX.y, EXPLORED_BOX.w, EXPLORED_BOX.h);
 }
 
@@ -783,8 +770,8 @@ async function tickState(){
   if(s.forest) FOREST = s.forest;
   renderTiles();
   if(s.messages){ MESSAGES = s.messages; renderFeed(); }
-  if(s.rev && s.rev.features && s.rev.features !== FEATURES_REV) fetchFeatures(s.rev.features);
   await LAYERS.sync(s.rev, {
+    features: setFeatures,
     chart: true,                    // the atlas ground, and the card's thumbnail of it
     trails: () => Layers.details.has("trails"),
     pieces: setPieces,
@@ -793,14 +780,7 @@ async function tickState(){
   });
 }
 
-let FEATURES_REV = null;
-async function fetchFeatures(rev){
-  FEATURES_REV = rev;
-  try{
-    const j = await MapCore.fetchJSON(API, "/features?v=" + rev);
-    if(j && j.features){ FEATURES = j.features; drawRaster(); }
-  }catch(e){ FEATURES_REV = null; }
-}
+function setFeatures(list){ FEATURES = list; drawRaster(); }
 
 // ---------- the place card ----------
 // A tap on the map asks the server what is there -- the biome patch, the landmass,
@@ -870,7 +850,7 @@ async function saveName(name){
   note.className = "note"; note.textContent = "saving\u2026";
   try{
     const r = await MapCore.post(API, "/names", {id: f.id, name});
-    if(r && r.rev) await fetchFeatures(r.rev);
+    if(r && r.rev) await LAYERS.features(r.rev, setFeatures);
     const fresh = (FEATURES || []).find(g => g.id === f.id);
     if(fresh){ f.name = fresh.name; f.by = fresh.by; }
     c.editing = false; renderCard();

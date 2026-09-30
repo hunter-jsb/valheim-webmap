@@ -6,22 +6,12 @@
  */
 const PlayerCard = (() => {
 "use strict";
-const esc = MapCore.esc;
-function num(v){ return Number.isFinite(+v) ? +v : 0; }
+const esc = MapCore.esc, num = MapCore.num, km = MapCore.km;
 
-// Coarse on purpose: this says how stale a tally is, never how long anyone played.
-function ago(secs){
-  const d = Math.max(0, Math.floor(Date.now()/1000) - secs);
-  if(d < 90) return "moments ago";
-  if(d < 5400) return Math.round(d/60) + " min ago";
-  if(d < 172800) return Math.round(d/3600) + " h ago";
-  return Math.round(d/86400) + " d ago";
-}
 // last_seen 0 is a name the sweep found on a grave or a build without ever
 // seeing its owner online: no session behind it, so no elapsed time to show.
-function seen(t){ return t ? "last seen " + ago(t) : "not seen since the tally began"; }
+function seen(t){ return t ? "last seen " + MapCore.secsAgo(t, "moments ago") : "not seen since the tally began"; }
 
-const km = m => { const k = num(m)/1000; return k >= 100 ? Math.round(k) : k >= 10 ? k.toFixed(1) : k.toFixed(2); };
 // deaths per km reads as "1 per N km": one death every so far, which is what people say
 const per = (deaths, m) => { deaths = num(deaths); const k = num(m)/1000; if(!deaths) return k >= 1 ? "none yet" : "—"; if(k <= 0) return "—"; const n = k/deaths; return "1 per " + (n >= 10 ? Math.round(n) : n >= 1 ? n.toFixed(1) : n.toFixed(2)) + " km"; };
 
@@ -306,5 +296,5 @@ function viking(api){
   return VK;
 }
 
-return {num, km, per, seen, sea, kpd, BEST, rim, radar, classify, pill, figures, viking};
+return {per, seen, sea, kpd, kit, BEST, rim, radar, classify, pill, figures, viking};
 })();

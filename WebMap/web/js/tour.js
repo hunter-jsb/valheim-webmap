@@ -4,7 +4,7 @@
  */
 const Tour = (() => {
 "use strict";
-const GEOM = MapCore.geom, PLAN_ZOOM = MapCore.PLAN_ZOOM, toPx = MapCore.toPx, esc = MapCore.esc, num = PlayerCard.num;
+const GEOM = MapCore.geom, PLAN_ZOOM = MapCore.PLAN_ZOOM, toPx = MapCore.toPx, esc = MapCore.esc, num = MapCore.num;
 let stage, V, LAYERS, API, world, street, legend, figures, drawRaster, closeCard;
 let tourBtn, tourCap, tourFig, pcard;
 

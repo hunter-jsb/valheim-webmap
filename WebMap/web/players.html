@@ -217,7 +217,7 @@ let SORT = "seen", SHOW = "all", PICK = null, LAST = "", LOADED = false, DATA = 
 let DEATHS = [], ONLINE = [], BOSSES = null;
 
 const esc = MapCore.esc, plural = MapCore.plural;
-const {num, km, per, seen, sea, kpd, BEST, radar} = PlayerCard;
+const {per, seen, sea, kpd, kit, BEST, radar} = PlayerCard, num = MapCore.num, km = MapCore.km;
 const rate = p =>{ const d = num(p.deaths), k = num(p.dist_m)/1000; return d && k ? d/k : 0; };
 const INK = MapCore.BIOME_INK;
 const mapLink = (name, extra) => `index.html#details=deaths&who=${encodeURIComponent(name)}${extra || ""}`;
@@ -370,7 +370,7 @@ function renderDetail(){
     + gearGroup(p)
     + `</div><div class="side"><i id="vslot" hidden></i>` + radar(p, 232, true) + `</div></div>` + biomeRows(p);
   if(html !== DLAST){ body.innerHTML = html; DLAST = html; Spot.render(); }
-  viking(p, here);
+  showViking(p, here);
   if(on && here && !(WHERE && WHERE.name === p.name)) whereIs(p.name, here);
 }
 // the ground under an online player, in the world's own names: "in Homeplains, Meadows"
@@ -394,7 +394,6 @@ function rankLine(p, get, top, bottom, desc = true){
   return better === 0 ? top : of > 1 && better === of - 1 ? bottom : `${ord(better + 1)} of ${of} on the roster`;
 }
 const slice = (p, get) => { const all = DATA.reduce((t, q) => t + get(q), 0); return all ? get(p)/all : 0; };   // of everyone's together
-const kit = p => p.kitchen || {};
 const SPOTS = [
   p => { const c = classify(p); return c && c.top && c.top.length ? {k: "Class", v: c.name, c: c.why, svg: bars(c.top.map(t => ({frac: t.share, label: `${Math.round(t.share*100)}% ${t.fam}`})))} : null; },
   p => num(p.deaths) ? {k: "Deaths", v: `${num(p.deaths)}`, c: rankLine(p, q => num(q.deaths), "most on the roster", "fewest on the roster"), svg: strip(p, q => num(q.deaths))} : null,
@@ -435,7 +434,7 @@ Spot.init({id: "spot", entries: spots, every: 6000, when: () => !!PICK, shape: "
 // render of the column, so the renderer survives the minute's refresh.
 const VK = PlayerCard.viking(API);
 let MODELS = 0;   // the library's revision, from /state
-function viking(p, here){
+function showViking(p, here){
   const slot = document.getElementById("vslot");
   if(slot) slot.replaceWith(VK.el);
   VK.show(p.name, (p.online && here && here.look) || p.look, !!p.online, MODELS);

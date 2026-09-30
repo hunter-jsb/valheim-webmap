@@ -118,6 +118,30 @@ test("an age reads in the unit it is best read in, and nothing for a bad time", 
   assert.equal(MapCore.ago("not a time"), "");
 });
 
+// helpers more than one page draws on
+test("a tally's age is coarse, from unix seconds: minutes to an hour and a half, hours to two days", () => {
+  const ago = s => MapCore.secsAgo(Math.floor(Date.now()/1000) - s, "moments ago");
+  assert.equal(ago(-300), "moments ago");              // a server clock ahead of ours
+  assert.match(ago(80*60), /^80 min/);
+  assert.match(ago(40*3600), /^40 h/);
+  assert.match(ago(3*86400), /^3 d/);
+});
+
+test("a distance keeps three figures or so, and a figure the mod never kept is nought", () => {
+  assert.deepEqual([1234, 12345, 123456, undefined, "x"].map(MapCore.km), ["1.23", "12.3", 123, "0.00", "0.00"]);
+});
+
+test("a scale bar is a round length, drawn 60 to 150 px at any zoom, and says its own length", () => {
+  for (const mpp of [0.1, 0.37, 1, 4.2, 12, 60]){
+    const bar = {style: {}}, label = {};
+    MapCore.scaleBar(bar, label, mpp);
+    const px = parseFloat(bar.style.width), m = parseFloat(label.textContent)*(/km$/.test(label.textContent) ? 1000 : 1);
+    assert.ok(px >= 60 && px <= 150, `${px} px at ${mpp} m/px`);
+    assert.ok(Math.abs(m/mpp - px) <= 1, `${label.textContent} drawn ${px} px at ${mpp} m/px`);
+    assert.match(label.textContent, /^(1|2\.?5|5)0* k?m$/);
+  }
+});
+
 test("a boat is drawn as its hull, and one the viewer has never heard of is still a boat", () => {
   assert.equal(MapCore.vehicleStyle({kind: "boat", name: "VikingShip"}).icon, "longship");
   assert.equal(MapCore.vehicleStyle({kind: "boat", name: "karve"}).label, "Karve");

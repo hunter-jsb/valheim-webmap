@@ -173,24 +173,20 @@ const svgIcon = (k, s) => `<svg style="width:${s||18}px;height:${s||18}px"><use 
 // drawn at world zoom sits on the same rock at build zoom.
 const API = MapCore.cfg.api;
 const BUILD = "2026-09-14pa";
-const GEOM = MapCore.geom;
-const toPx = (x,z) => { const p = MapCore.toPx(x,z); return [p.px, p.py]; };
-const toWorld = (px,py) => { const w = MapCore.toWorld(px,py); return [w.x, w.z]; };
-const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const GEOM = MapCore.geom, clamp = MapCore.clamp;
 const MAX_ZOOM = MapCore.MAX_ZOOM;
 
 const stage = document.getElementById("stage");
 const cv = document.getElementById("cv");
 // the window onto the map; the tools drive the pointer themselves, so the view keeps to the maths and the wheel
 const V = MapCore.view(stage, {pointer: false, max: MAX_ZOOM, paint: () => {
-  const dpr = sizeCanvas();
+  const dpr = MapCore.fitCanvas(cv, stage);
   lastW = stage.clientWidth; lastH = stage.clientHeight;
-  render(ctx, lastW, lastH, view(), {pix: dpr});
-  scaleBar();
+  render(ctx, lastW, lastH, V, {pix: dpr});
+  readout();
 }});
 const ctx = cv.getContext("2d");
-const view = () => ({scale: V.scale, tx: V.tx, ty: V.ty});
-const s2w = (sx,sy) => { const q = V.at(sx, sy); return toWorld(q.px, q.py); };
+const s2w = (sx,sy) => { const q = V.at(sx, sy), w = MapCore.toWorld(q.px, q.py); return [w.x, w.z]; };
 
 // ---------- the document ----------
 // One JSON object is the whole plan: the same bytes go to localStorage, into the
@@ -220,24 +216,19 @@ const DATA = {portals:[], graves:[], vehicles:[], pins:[], players:[]};
 // Builds are footprints, drawn exactly as the live map draws them; the fog says
 // which of them stand in ground someone has actually walked.
 let PIECES = null, PIECES_ALL = null;
-function refilterPieces(){ PIECES = PIECES_ALL && MapCore.filterExplored(PIECES_ALL, RASTER.imgs.fog); SCENE.invalidate(); }
+function refilterPieces(){ PIECES = MapCore.filterExplored(PIECES_ALL, RASTER.imgs.fog); SCENE.invalidate(); }
 const RASTER = MapCore.layers(API, k => { if(k === "fog"){ refilterPieces(); fogReady(); } redraw(); });
 // The ground and the builds render once per zoom into a window the pans slide
 // over; the plan's own marks are drawn over it every frame.
 const SCENE = MapCore.viewCache((g, v) => ground(g, v), () => draw());
 function redraw(){ SCENE.invalidate(); draw(); }   // the ground, the builds or the layers changed
-let FEATURES = null, FEATURES_REV = null;   // the world's geography with its names, by revision
+let FEATURES = null;   // the world's geography with its names, by revision
 function ground(g, view){
   MapCore.drawRasters(g, view, RASTER.imgs, {forest:doc.layers.forest});
   if(doc.layers.builds && PIECES)
     MapCore.drawPieces(g, view, PIECES, {plan:view.scale >= MapCore.PLAN_ZOOM});
   if(doc.layers.names && FEATURES)
     MapCore.drawNames(g, view, FEATURES, MapCore.explored(RASTER.imgs.fog));
-}
-async function fetchFeatures(rev){
-  FEATURES_REV = rev;
-  try{ const j = await MapCore.fetchJSON(API, "/features?v=" + rev); if(j && j.features){ FEATURES = j.features; redraw(); } }
-  catch(e){ FEATURES_REV = null; }
 }
 
 // ---------- render ----------
@@ -256,7 +247,7 @@ function render(g, W, H, v, o){
   if(measure && measure.b) drawMeasure(g, v);
 }
 
-function project(v, x, z){ const p = toPx(x, z); return [v.tx + p[0]*v.scale, v.ty + p[1]*v.scale]; }
+function project(v, x, z){ const p = MapCore.toPx(x, z); return [v.tx + p.px*v.scale, v.ty + p.py*v.scale]; }
 
 function drawIcon(g, key, x, y, size){
   const paths = ICON_PATHS[key]; if(!paths) return;
@@ -363,7 +354,7 @@ function drawItem(g, v, it){
 
 // Screen-space hit test: what the eraser is over, topmost first.
 function hitItem(it, sx, sy){
-  const v = view(), tol = 8 + (WIDTHS[it.w] || 2);
+  const v = V, tol = 8 + (WIDTHS[it.w] || 2);
   const pt = i => project(v, it.p[i*2], it.p[i*2+1]);
   const near = (a, b) => {
     const dx = b[0]-a[0], dy = b[1]-a[1], L = dx*dx + dy*dy;
@@ -420,45 +411,23 @@ function measureOut(){
 }
 
 // ---------- view ----------
-function sizeCanvas(){
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  const W = stage.clientWidth, H = stage.clientHeight;
-  if(cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){
-    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
-  }
-  return dpr;
-}
 let lastW = 0, lastH = 0;
 function draw(){ V.request(); }
 function zoomAt(cx, cy, factor){ V.zoomAt(cx, cy, factor); saveSoon(); }
-function centreOn(x, z, zoom){ const p = toPx(x, z); V.centre(p[0], p[1], zoom); }
-function fitWorld(){ centreOn(0, 0, Math.min(stage.clientWidth, stage.clientHeight)/GEOM.size*0.98); }
-// A fresh world is almost all fog, so "fit" means fit what anyone has actually walked.
+function centreOn(x, z, zoom){ const p = MapCore.toPx(x, z); V.centre(p.px, p.py, zoom); }
+// A fresh world is almost all fog, so "fit" means fit what anyone has actually walked, closer
+// than the map does; a fit is the plan's view, so it is saved.
 function fitExplored(){
-  const N = 256, c = document.createElement("canvas");
-  c.width = c.height = N;
-  const g = c.getContext("2d", {willReadFrequently:true});
-  let d;
-  try{ g.drawImage(RASTER.imgs.fog, 0, 0, N, N); d = g.getImageData(0, 0, N, N).data; }
-  catch(e){ return fitWorld(); }
-  let x0 = N, y0 = N, x1 = -1, y1 = -1;
-  for(let y = 0; y < N; y++) for(let x = 0; x < N; x++) if(d[(y*N+x)*4] > 40){
-    if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y;
-  }
-  if(x1 < 0) return fitWorld();
-  const k = GEOM.size/N;
-  V.fitBox(x0*k, y0*k, (x1-x0+1)*k, (y1-y0+1)*k, 1.15, 0);
+  const w = MapCore.walked(RASTER.imgs.fog);
+  if(!w || !w.box) return V.fitWorld();
+  V.fitBox(w.box.x, w.box.y, w.box.w, w.box.h, 1.15, 0);
   draw(); saveSoon();
 }
 let gotFog = false;
 function fogReady(){ if(!gotFog){ gotFog = true; if(!viewFromDoc) fitExplored(); } }
-function scaleBar(){
-  const mpp = GEOM.pixel/V.scale;               // metres per screen pixel
-  let m = 10;
-  while(m/mpp < 60) m *= m.toString()[0] === "1" ? 2.5 : 2;
-  while(m/mpp > 150) m /= m.toString()[0] === "2" ? 2 : 2.5;
-  document.getElementById("scaleBar").style.width = Math.round(m/mpp) + "px";
-  document.getElementById("scaleTxt").textContent = m >= 1000 ? (m/1000) + " km" : Math.round(m) + " m";
+// the readout under the map: the scale, and the middle's coordinates until the pointer gives its own
+function readout(){
+  MapCore.scaleBar(document.getElementById("scaleBar"), document.getElementById("scaleTxt"), GEOM.pixel/V.scale);
   if(!hovered){
     const c = s2w(stage.clientWidth/2, stage.clientHeight/2);
     document.getElementById("posOut").textContent = Math.round(c[0]) + ", " + Math.round(c[1]);
@@ -532,7 +501,6 @@ setTool("pan"); setColour(0); setWidth(0); markStamp();
 // ---------- pointer ----------
 const pts = new Map();
 let last = null, pinch = null, draft = null, panning = false;
-function rel(e){ const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
 
 stage.addEventListener("pointerdown", e => {
   if(e.target.closest(".mapctl") || e.target.closest(".banner")) return;
@@ -540,7 +508,7 @@ stage.addEventListener("pointerdown", e => {
   pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
   if(pts.size === 2){ pinch = pinchState(); draft = null; return; }
   if(pts.size > 2) return;
-  const [sx, sy] = rel(e);
+  const [sx, sy] = V.rel(e);
   const drawTool = !RO && tool !== "pan" && tool !== "measure" && tool !== "erase";
   if(tool === "pan" || e.button === 1 || spaceDown || RO && tool !== "measure"){
     panning = true; last = {x:e.clientX, y:e.clientY}; stage.classList.add("dragging"); return;
@@ -565,7 +533,7 @@ stage.addEventListener("pointerdown", e => {
 });
 
 stage.addEventListener("pointermove", e => {
-  const [sx, sy] = rel(e);
+  const [sx, sy] = V.rel(e);
   const w = s2w(sx, sy);
   hovered = true;
   document.getElementById("posOut").textContent = Math.round(w[0]) + ", " + Math.round(w[1]);
@@ -584,7 +552,7 @@ stage.addEventListener("pointermove", e => {
   if(!draft) return;
   if(draft.t === "pen"){
     const n = draft.p.length;
-    const prev = project(view(), draft.p[n-2], draft.p[n-1]);
+    const prev = project(V, draft.p[n-2], draft.p[n-1]);
     if(Math.hypot(sx - prev[0], sy - prev[1]) < 2.5) return;
     draft.p.push(Math.round(w[0]), Math.round(w[1]));
   } else {
@@ -604,7 +572,7 @@ function endPtr(e){
       let keep;
       if(d.t === "pen") keep = d.p.length >= 4;
       else{
-        const a = project(view(), d.p[0], d.p[1]), b = project(view(), d.p[2], d.p[3]);
+        const a = project(V, d.p[0], d.p[1]), b = project(V, d.p[2], d.p[3]);
         keep = Math.hypot(b[0]-a[0], b[1]-a[1]) > 4;
       }
       if(keep) commit(d); else draw();
@@ -779,7 +747,7 @@ async function exportPNG(){
   const c = document.createElement("canvas");
   c.width = W*pix; c.height = H*pix;
   const g = c.getContext("2d");
-  render(g, W, H, view(), {pix, direct:true});
+  render(g, W, H, V, {pix, direct:true});
   g.setTransform(pix, 0, 0, pix, 0, 0);
   const title = (doc.title || "Untitled plan").slice(0, 60);
   g.font = `700 20px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
@@ -858,8 +826,7 @@ async function tick(){
   const n = (s.players || {}).count != null ? s.players.count : DATA.players.length;
   document.getElementById("worldNote").innerHTML =
     `<b>${MapCore.esc(GEOM.world)}</b> · ${n} online · ${DATA.portals.length} portals, ${DATA.pins.length} pins.<br>Layers are live reference, not part of your plan.`;
-  if(s.rev && s.rev.features && s.rev.features !== FEATURES_REV) fetchFeatures(s.rev.features);
-  await RASTER.sync(s.rev, {pieces: list => { PIECES_ALL = list; refilterPieces(); }});
+  await RASTER.sync(s.rev, {features: list => { FEATURES = list; redraw(); }, pieces: list => { PIECES_ALL = list; refilterPieces(); }});
   draw();
 }
 
@@ -867,7 +834,7 @@ async function tick(){
 async function boot(){
   document.getElementById("buildstamp").textContent = "build " + BUILD;
   V.computeFit();
-  if(!viewFromDoc) fitWorld();
+  if(!viewFromDoc) V.fitWorld();
   RASTER.loadBase();
   try{ await MapCore.fetchConfig(API); }catch(e){}
   await tick();
@@ -908,7 +875,7 @@ start();
 
 // exposed for the headless checks and for whatever comes next
 window.PLAN = {get doc(){ return doc; }, snapshot, encodeDoc, decodeDoc, shareLink, exportPNG,
-               commit, setTool, centreOn, draw, render, view, toPx, toWorld, PALETTE, STAMPS,
+               commit, setTool, centreOn, draw, render, PALETTE, STAMPS,
                get data(){ return DATA; }, get pieces(){ return PIECES; }};
 </script>
 </body>
