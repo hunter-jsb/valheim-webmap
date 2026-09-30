@@ -20,7 +20,8 @@
   the only one with a gate to spare: it goes to the nearest other hub, where before it was
   left out.
 * The upstream fork's Cake build path is gone -- `build.cake`, `build.sh`, the `Dockerfile` and
-  `entrypoint.sh`, and 5 MB of tool binaries that had been committed under `tools/`; the build
+  `entrypoint.sh`, `docker-bake.hcl`, `build/AssemblyPublicizerTool.cake`, a VS Code task that
+  ran Cake, and 5 MB of tool binaries that had been committed under `tools/`; the build
   publicises the game assemblies itself, and `libs/README.md` now says so (and names the
   library folder correctly).
 * BepInEx logs the mod's real version at load, where it had said 2.7.1 since 2.7.1: the build
