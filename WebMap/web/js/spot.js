@@ -1,6 +1,7 @@
 /* spot.js — the spotlight: one figure at a time with a line of context and a small picture, turned
- * every few seconds, held by a hover, stepped by a click. init is handed the element's id, the entries
- * as a function, the pace, when it may turn, and its shape: the sidebar's card or the players' strip.
+ * every few seconds, held by a hover, stepped by a click. The map, the World page and a player's page
+ * each hand init the element's id, their entries as a function, the pace, when it may turn, and its
+ * shape: a card, or the players' strip of fixed height.
  */
 const Spot = (() => {
 "use strict";
@@ -17,12 +18,14 @@ function render(){
   el.hidden = !S.list.length; if(el.hidden) return;
   if(S.i < 0) S.i = Math.floor(Math.random()*S.list.length);
   S.i %= S.list.length;
-  // a page that draws the element afresh (the players page does) has each one wired, and drawn into
+  // a page that draws the element afresh (the players page does) has each one wired, drawn into
+  // and given a whole turn before the next
   if(S.el !== el){
     S.el = el; S.html = "";
     el.classList.toggle("wide", S.wide);
     el.onmouseenter = () => { S.held = true; }; el.onmouseleave = () => { S.held = false; };
     el.onclick = () => show(true);
+    clearInterval(S.timer); S.timer = 0;
   }
   show(false);
   if(!S.timer) S.timer = setInterval(() => { if(!S.held && document.visibilityState === "visible" && S.when()) show(true); }, S.every);

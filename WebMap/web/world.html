@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="site.css">
 <script src="site-config.js"></script>
 <script src="map-core.js"></script>
+<script src="js/spot.js"></script>
 <style>
   body{min-height:100%}
   .wrap{max-width:900px;margin:0 auto;padding:1.3rem .9rem 3rem}
@@ -288,36 +289,14 @@ document.querySelector("#lands thead").addEventListener("click", e => { const th
 document.getElementById("more").addEventListener("click", e => { if(e.target.id === "showAll"){ e.preventDefault(); SHOW_ALL = true; renderLands(); } });
 
 // ---------- the spotlight: the records, one at a time, each against its runners-up
-const SPOT = {i: -1, timer: 0, held: false, html: ""};
-function spotlight(){
-  const el = document.getElementById("spot"), list = RECORDS.filter(r => r.rows && r.rows.length);
-  el.hidden = !list.length; if(el.hidden) return;
-  if(SPOT.i < 0) SPOT.i = Math.floor(Math.random()*list.length);
-  SPOT.i %= list.length;
-  const show = advance => {
-    const L = RECORDS.filter(r => r.rows && r.rows.length); if(!L.length) return;
-    if(advance) SPOT.i = (SPOT.i + 1) % L.length;
-    const r = L[SPOT.i];
-    const html = `<div class="in${advance ? " out" : ""}"><div class="eyebrow"><span>${esc(r.k)}</span><span class="n">${SPOT.i + 1}/${L.length}</span></div>`
-      + `<div class="v">${esc(r.title)}</div><div class="c">${esc(r.figure)}</div>${pic.bars(r.rows)}</div>`
-      + `<div class="dots">${L.map((_, i) => `<i${i === SPOT.i ? ' class="on"' : ""}></i>`).join("")}</div>`;
-    if(!advance && html === SPOT.html) return;
-    el.innerHTML = html; SPOT.html = html;
-    if(advance) requestAnimationFrame(() => requestAnimationFrame(() => { const i = el.querySelector(".in"); if(i) i.classList.remove("out"); SPOT.html = el.innerHTML; }));
-  };
-  show(false);
-  if(!SPOT.timer){
-    SPOT.timer = setInterval(() => { if(!SPOT.held && document.visibilityState === "visible") show(true); }, 7000);
-    el.onmouseenter = () => { SPOT.held = true; }; el.onmouseleave = () => { SPOT.held = false; };
-    el.onclick = () => show(true);
-  }
-}
+Spot.init({id: "spot", every: 7000, entries: () => RECORDS.filter(r => r.rows && r.rows.length)
+  .map(r => ({k: r.k, v: esc(r.title), c: esc(r.figure), svg: pic.bars(r.rows)}))});
 
 let KNOWN_FOG = null, KNOWN_OF = null;
 function render(){
   // what is known moves only with the fog or the features, not with the minute
   if(KNOWN_FOG !== FOG || KNOWN_OF !== FEATURES){ KNOWN.clear(); KNOWN_FOG = FOG; KNOWN_OF = FEATURES; }
-  glance(); bosses(); renderRecords(); biomes(); lands(); spotlight();
+  glance(); bosses(); renderRecords(); biomes(); lands(); Spot.render();
   document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
 }
 async function load(){

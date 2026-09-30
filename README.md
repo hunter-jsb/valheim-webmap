@@ -66,11 +66,12 @@ presets of the legend and the choice of ground: the render, or the flat biome at
 The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
 holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
 page draws from, `map-core.js` the rendering core, `js/card.js` a player as the roster
-reads them (for the players page and the tour), and each page holds only its own. The
-map's own sit in files beside it, one global each, handed what they read by `init`:
+reads them (for the players page and the tour), `js/spot.js` the spotlight's turn (the map,
+the World page and a player's page each hand it their own figures; the map's are in it
+too), and each page holds only its own. The map's own sit in files beside it, one global
+each, handed what they read by `init`:
 
 * `js/layers.js` — the Layers card: legend, presets, details, names and ground, kept per browser
-* `js/spot.js` — the spotlight's turn, and the map's figures in it
 * `js/street.js` — the 3D mode: in and out, the pegman, the View row and `#3d=` links
 * `js/tour.js` — the cinematic: its places, moves, prefetch, caption and player card
 
@@ -469,7 +470,8 @@ accents, the map's own hues for portals, traders and graves, the halos over the 
 radii, shadows, fonts, the bar and sidebar widths), the base, and the components every
 page shares -- `.title .eyebrow .sub .note .section .foot`, `.card .well .glass .stat .dot`,
 `.btn .chip .field .btnrow`, `.stage .mapctl .legend`, `.spot` (a spotlight: one figure, a line of
-context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars),
+context and a small picture from `MapCore.pic` -- a roster strip, a share ring, labelled bars;
+`.spot.wide` the band of fixed height `js/spot.js` makes of it at the head of a player's figures),
 `.cls .mini .radar .viking` (a player as `js/card.js` draws them), the nav and the sidebar shell. A
 page's own `<style>` holds only what that page alone draws, and names no colour of its
 own: every colour is a token, so a restyle is an edit to `:root` and the pages follow.
