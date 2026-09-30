@@ -12,15 +12,17 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
 
 * Explorable map in the browser — wheel zoom, pinch on mobile.
 * Shared fog of war: only what players have actually explored.
-* Live player list and positions, auto-follow, and in-game pings.
+* Live player positions, and who is online.
 * **Structures** — placed pieces drawn in the colour of their material, so bases read as
   bases. Keyed off the piece's creator, so terrain and world-generated ruins never appear.
   The sweep behind it runs only while someone is looking at the map.
 * **Forest and logging** — standing trees shade the terrain and felled ground stops being
   shaded, so clearings show through. Stumps are counted as the record of felling.
 * **Boats and carts**, in explored territory only.
-* **Portals, graves and every placed piece** as JSON, for a front-end of your own. The
-  bundled page does not draw them yet.
+* **Portals, graves and traders**, linked portals joined by a line; up close, builds turn
+  into a floor plan of every placed piece.
+* **The land named** -- landmasses, ranges and peaks, lakes, bays, rivers -- and trails
+  where people walk, and where they died.
 * **World render at the resolution you choose** — `render_size` 4096 halves the metres
   per pixel, and rendering no longer stalls the server.
 * **The world in 3D.** Drop the little figure on any walked spot, as in Street View, and
@@ -28,8 +30,13 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
   water, and every building, tree and rock drawn with the game's own model, under a sky
   lit by the server's clock, and the players online standing there as themselves, in what
   they wear. Look around, walk, or switch to an overview.
+* **A cinematic tour** of the world's places, on the map and in 3D, for a screen left open.
+* **Pages of their own** for the world's records and bosses, a portal atlas, a planning
+  board, and each player's tallies and class.
 * **Server announcements** on every player's screen, for restart warnings and the like.
-* Chat, deaths and joins in the message log; optional Discord notifications.
+* Chat, deaths and joins in the message log; the server going up and down, joins and
+  leaves to a Discord webhook; with a bot of your own, an audit log and chat relayed both
+  ways ([Discord](#discord)).
 * **Sign in with Discord**: members of your Discord server name places and pin the map
   from the browser, and its admins change the settings there. No bot or Discord app needed.
 
@@ -40,7 +47,7 @@ A fork of [h0tw1r3/valheim-webmap] rebuilt for **Valheim 1.0 (Deep North)**.
 2. Start the server once to write a default config.
 3. **Stop the server** before editing that config — BepInEx rewrites it on shutdown, so
    edits made while it runs are discarded.
-4. Open the configured port (default `8080`) and visit `http://your_ip:port`.
+4. Open the configured port (default `3000`) and visit `http://your_ip:port`.
 
 After updating, hard-reload the page (`shift`+reload) to clear cached layers.
 
@@ -274,8 +281,8 @@ to Discord on its own, over the bot API rather than a webhook:
 
 * **The audit log.** Every name, pin and setting change made from the site is posted to
   `discord_log_channel` as it happens (`Discord.Tell`, from the same code that already
-  logs it to the console). Joins, leaves and deaths are unaffected — they keep going out
-  the existing `discord_webhook`.
+  logs it to the console). The server going up and down, joins and leaves are unaffected —
+  they keep going out the existing `discord_webhook`.
 * **Chat, both ways.** With `discord_chat_channel` set and `chat_relay` on (the default),
   in-game chat is posted there as **name**: text, and the mod polls the channel every
   three seconds for the reverse: a human's line (bots, webhooks and the mod's own posts
@@ -343,8 +350,11 @@ defaults are what runs):
 | `/graves` | tombstones still holding gear: owner, position, seconds since the death (JSON) |
 | `/vehicles` | boats and carts, position and type (JSON) |
 | `/stats/players` | per-player tallies: joins, deaths, chat, distance (by biome, the sea as `Ocean`), portal hops, pins, standing pieces/portals/ships, graves, kills, trees felled, rock pieces broken, and `gear`: seconds with each kind of thing in hand and in each weight of chest armour, the set last worn, hits on creatures by kind; `kitchen`: dishes cooked and burnt, meads brewed, honey taken, items smelted and each product's count; and `look` and `yaw`, how the player was last seen, as `/state` carries them; at the top, the world's `kitchen` and its busiest stations (JSON) |
-| `/players`, `/pins`, `/messages` | live state (JSON) |
-| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset). A player the map shows carries `yaw` (degrees clockwise from north) and `look`: `model` (the body), `skin` and `hair` (the colours, 0..1), `slots` (the prefab in each slot) and `parts`, the library parts to draw, body first |
+| `/players`, `/messages` | live state (JSON) |
+| `/pins` (GET) | the pins, a line each: `placer,id,type,owner,x,z,text` (CSV) |
+| `/config` | what the page starts from: world name and start, zoom, texture and pixel size, update interval, explore radius, messages kept, `always_map`, `always_visible` (JSON) |
+| `/` (WebSocket) | `players`, `messages`, `pin`, `rmpin`, `ping` and `reload` frames as they happen; the bundled pages poll `/state` instead |
+| `/state` | all of the small JSON blocks in one document -- players, messages, pins, vehicles, portals, graves, traders, the last 500 deaths with where they happened, the structures and forest stats -- plus a content revision per layer (`rev.fog`, `rev.forest`, `rev.structures`, `rev.pieces`, `rev.chart`, `rev.trails`, `rev.features`, and for the 3D view `rev.objects`, `rev.height`, `rev.models`) so a viewer fetches a layer only when its picture changed; pass the revision as `?v=`. `time` is the game's clock: `{"day", "frac"}`, the fraction of the day the sun goes by (0.25 sunrise, 0.5 noon, 0.75 sunset). A player the map shows carries `yaw` (degrees clockwise from north) and `look`: `model` (the body), `skin` and `hair` (the colours, 0..1), `slots` (the prefab in each slot) and `parts`, the library parts to draw, body first |
 | `/height` | `?cx=&cz=[&step=]`, a 256 m chunk (`cx = floor(x / 256)`, `cz` likewise): (256/step + 1)² little-endian int16, decimetres of world height, `step` metres apart (1, 2, 4, 8 or 16: 257 a side down to 17; default 1, each step cached on its own under the same revision); row 0 is the south edge (`z = cz*256`), column 0 the west, both edges included so neighbours share a seam. Terraforming included; water stands at 30 m. 404 for a chunk nobody has walked; the chunk's terraform revision in `X-Rev` |
 | `/objects` | `?cx=&cz=`, every visible object in the chunk as `OBJ2`, little-endian: `'OBJ2'`, u32 count, u32 prefab count, i32 prefab hashes, then 44 bytes an object -- u16 prefab index, u8 flags (1 = player-built, 2 = pieces mined off), u8 pad, f32 x y z, f32 rotation quaternion x y z w, f32 scale x y z (Unity's frame, y up, z north) -- then the mined rocks: u32 count, and per rock u32 object index, u16 bit count, bits/8 bytes, bit i set when its hit area i is gone. (`OBJ1`, the first cut, was the same without the flag and the table; the page reads both.) 404 for a chunk nobody has walked; its revision in `X-Rev` |
 | `/prefabs` | the model library's index: per prefab hash, its name `n`, category `c`, whether it has a model `m` and its version `v`, bounds `b`, and for foliage the canopy bounds `k`, leaf texture `kt` and tint `kc`; for a rock mined in pieces its kind `rk` (5 MineRock5, 1 MineRock) and `pa`, the hit area of each glTF primitive in order (-1 none, -2 MineRock's whole-rock model); for a live player's part (category `rig`, named as a look's `parts`) the chest and legs paint it lays over the skin, `ct` and `lt` (JSON) |
