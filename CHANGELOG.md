@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.16.1
 
 * The map page's script is split into files with one global each, as `map-core.js` and
   `js/card.js` are: `js/tour.js` the cinematic, `js/street.js` the 3D mode and the pegman,
