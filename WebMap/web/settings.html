@@ -27,7 +27,15 @@
   .set .btnrow .btn{padding:0 .55rem}
   .set .note{margin-top:0}
   #restart{margin-top:.8rem}
-  @media (max-width:560px){ .set{grid-template-columns:1fr} }
+  /* one creature out of place: what and where, when and whose game, and a link to the spot */
+  .spawn{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem 1rem;align-items:start}
+  .spawn .k{font-size:.86rem;color:var(--bright);font-weight:600}
+  .spawn .k .tag{font-weight:500;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;margin-left:.5rem;color:var(--muted)}
+  .spawn .d{font-size:.76rem;color:var(--muted);margin-top:.2rem;line-height:1.45}
+  .spawn .who{font-size:.72rem;color:var(--faint);margin-top:.25rem;line-height:1.45}
+  #spawns .note{margin-top:.2rem}
+  #spawnRows{max-height:28rem;overflow-y:auto}   /* above the settings, so a long list scrolls in its own box */
+  @media (max-width:560px){ .set,.spawn{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -38,6 +46,11 @@
   <p class="sub" id="sub">The map mod's settings, kept by the server. Changes apply at once unless marked, and every change is posted to the Discord.</p>
   <p class="note bad" id="note"></p>
   <div class="card" id="restart" hidden><b>A restart is due.</b> <span class="note">A setting marked <em>restart</em> has changed; it takes effect when the server next restarts.</span></div>
+  <section id="spawns" hidden>
+    <h2 class="eyebrow section">Creatures that appeared out of place</h2>
+    <p class="note">Creatures that appeared where nothing in the game would have put them: not in their own biome's spawns, no raid of theirs near, nobody's tame, young or summons, no spawner of theirs at hand. The game creates a natural spawn through whichever player's game is nearest, so whose game created a creature proves nothing alone: being out of place is the signal.</p>
+    <div class="rows" id="spawnRows"></div>
+  </section>
   <div class="rows" id="rows"></div>
   <p class="foot"><span id="stamp"></span><span class="credits"> · <a class="repo" href="https://github.com/hunter-jsb/xn-valheim">state-as-code</a></span></p>
 </main>
@@ -118,6 +131,31 @@ async function upgradePickers(){
     }
   }catch(e){ /* the plain fields still work */ }
 }
+// The spawn watch's list: what appeared, where, when and whose game created it, said plainly.
+const span = s => s < 60 ? "under a minute" : s < 7200 ? Math.round(s/60) + " min" : s < 172800 ? Math.round(s/3600) + " h" : Math.round(s/86400) + " days";
+function spawnRow(s){
+  const what = (s.count > 1 ? s.count + " × " : "") + esc(s.name || s.prefab)
+    + (s.name && s.name !== s.prefab ? `<span class="tag">${esc(s.prefab)}</span>` : "")
+    + (s.level > 1 ? `<span class="tag">level ${s.level}</span>` : "");
+  const where = [s.biome, s.place, Math.round(s.x) + ", " + Math.round(s.z)].filter(Boolean).map(esc).join(" · ");
+  const how = s.already
+    ? "Already here when the server started" + (s.age_s != null ? `, there for ${span(s.age_s)} of the world's time` : "")
+      + ". The game keeps no record of whose game created what it loads from the save."
+    : `${MapCore.secsAgo(s.t)} · created by ${s.by ? esc(s.by) + "'s game" : "a game not seen joining"} (session ${esc(s.session)})`
+      + (s.near ? ` · nearest player ${esc(s.near)}, ${MapCore.metres(s.near_m)}` : " · no player online")
+      + " · " + (!s.event ? "no raid running" : `raid ${esc(s.event)} running, ` + (s.in_event ? "this kind among its creatures but far from it" : "this kind not among its creatures"));
+  return `<div class="card spawn"><div><div class="k">${what}</div><div class="d">${where}</div><div class="who">${how}</div></div>
+    <a class="btn quiet sm" href="index.html#at=${Math.round(s.x)},${Math.round(s.z)},20" title="The spot on the map">On the map</a></div>`;
+}
+async function loadSpawns(){
+  const box = document.getElementById("spawns"), rows = document.getElementById("spawnRows");
+  // a mod from before the watch answers 404: the section stays away
+  const j = await MapCore.fetchJSON(API, "/spawns", {headers: MapCore.authHeaders()}).catch(e => { if(e.status === 404) return null; throw e; });
+  if(!j) return;
+  box.hidden = false;
+  rows.innerHTML = j.spawns.length ? j.spawns.map(spawnRow).join("") : `<p class="note">None since the watch began.</p>`;
+}
+
 async function load(){
   const me = await MapCore.whoami();
   const note = document.getElementById("note"), rows = document.getElementById("rows");
@@ -126,7 +164,8 @@ async function load(){
   try{
     SETTINGS = await MapCore.fetchJSON(API, "/settings", {headers: MapCore.authHeaders()}); note.textContent = ""; render();
     document.getElementById("stamp").textContent = "read " + new Date().toLocaleTimeString();
-  }catch(e){ note.textContent = e.message === "HTTP 404" ? "This server does not take settings from the site yet (it needs the mod build that does)." : e.message; }
+  }catch(e){ note.textContent = e.message === "HTTP 404" ? "This server does not take settings from the site yet (it needs the mod build that does)." : e.message; return; }
+  loadSpawns().catch(e => { document.getElementById("spawns").hidden = false; document.getElementById("spawnRows").innerHTML = `<p class="note bad">${esc(e.message)}</p>`; });
 }
 document.getElementById("rows").addEventListener("submit", async e => {
   e.preventDefault();
