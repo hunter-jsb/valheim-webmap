@@ -147,7 +147,8 @@ stay dark, as on the map.
 The players online (those the map shows) are drawn as themselves, as every other game draws
 them: the body they chose, their skin and hair colour, their hair and beard, and what they
 wear and hold -- helmet, chest, legs, cape, belt, what is in each hand and what is slung on
-their back -- facing the way they face, their name above. The server runs no animation, so
+their back -- facing the way they face, their name above, shrinking with distance as they do
+but up close no bigger than the bar's own title. The server runs no animation, so
 they all stand in the game's idle pose, the first moment of it: no walking, swinging or
 sitting, and a cape hangs as it was modelled rather than in the wind. A player whose parts
 the library has not exported yet stands as a plain figure until it has.
@@ -509,9 +510,10 @@ headless Chrome started with `--remote-debugging-port=9334` (and, for the 3D vie
 WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names
-flyout, ground and objects in 3D at the world's start, hubs and dial lines, a card per
-player, the plan loading, the tour landing through a resize, a stopped one staying stopped
-and a player's card turning in it until it goes. One line per check, a
+flyout, ground and objects in 3D at the world's start and a name tag up close no bigger
+than the bar's title, hubs and dial lines, a card per player, the plan loading, the tour
+landing through a resize, a stopped one staying stopped and a player's card turning in it
+until it goes. One line per check, a
 non-zero exit on any failure, and a screenshot of each page when given a directory. A
 viewer change is done when that and `npm run lint` are clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome

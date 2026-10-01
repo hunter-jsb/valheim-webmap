@@ -171,6 +171,14 @@ async function view3d() {
   check("3d: #3d stands you on the walked ground at the start", ground, await p.ev(status));
   const things = ground && await p.until(`+document.getElementById("v3d").dataset.objects > 0`, 30000);
   check("3d: the world's objects stand on it", things, await p.ev(status));
+  // a player 3 m ahead, beside whoever is on until the next tick: their tag measured as a sprite is drawn
+  const tag = ground && await p.ev(`(() => { const v = Street.view, cam = v.camera, h = v.me.heading * Math.PI / 180, name = "A Viking close by";
+    v.setPlayers([...((WORLD.state.players || {}).players || []), {name, x: v.me.x + Math.sin(h) * 3, z: v.me.z + Math.cos(h) * 3, yaw: 0}]);
+    return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => { const e = v.players.get(name); if (!e) return r(null);
+      const at = e.label.getWorldPosition(cam.position.clone()), dist = at.distanceTo(cam.position), depth = -at.applyMatrix4(cam.matrixWorldInverse).z;
+      r({dist, text: e.label.scale.y * cam.projectionMatrix.elements[5] / depth * v.canvas.clientHeight / 2 * 28 / 48}); }))); })()`);
+  check("3d: a name tag within 5 m of the camera sets its name no bigger than the bar's title", !!tag && tag.dist < 5 && tag.text <= 16,
+        tag ? `${tag.text.toFixed(1)} px of text at ${tag.dist.toFixed(1)} m` : "no tag drawn");
   await p.click("#v3dExit");
   const back = await p.until(`document.getElementById("v3d").hidden && location.hash.startsWith("#at=")`, 5000);
   check("3d: Map brings the map back where you stood", back, await p.ev("location.hash"));

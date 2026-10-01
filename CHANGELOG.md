@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+* A player's name in the 3D view keeps to a size that reads. It is 0.9 m tall in the world, so
+  it shrinks with distance as the Viking under it does, but up close it grows no bigger on the
+  screen than the bar's own title, 15 px of name, easing into that size from about 25 m in;
+  before, a player 2 m off wore a name 185 px tall in an 848 px view. The tag stands on its foot
+  just over the head, so held small it never covers the Viking it names, and from afar it is as
+  it was. The page check measures a tag 3 m off.
+
 ## 2.16.1
 
 * The map page's script is split into files with one global each, as `map-core.js` and

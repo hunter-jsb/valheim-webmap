@@ -44,8 +44,8 @@ test names the failure it guards against; there is one per failure, not one per 
    never collide; commas in `X-User`; unwalked ground.
 5. **The viewer.** A broken page is seen by everyone at once. **check.mjs** loads every
    page and checks markers, names at a mid zoom, a tapped name opening its place card, the
-   names flyout, hubs and one dial line per tagged unlinked portal, a card per player and a
-   player's rig standing on their page, the plan, and the tour: a flight resized under it, a stopped tour's last stop, a player's card and its turntable stopping as it goes, a cycle drawn from eight kinds or more, a street beat standing on walked ground at eye height, the 3D view's geometries and textures level across two cycles after a warm one, and a stop putting everything back. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
+   names flyout, a name tag in 3D held to the bar title's size up close, hubs and one dial
+   line per tagged unlinked portal, a card per player and a player's rig standing on their page, the plan, and the tour: a flight resized under it, a stopped tour's last stop, a player's card and its turntable stopping as it goes, a cycle drawn from eight kinds or more, a street beat standing on walked ground at eye height, the 3D view's geometries and textures level across two cycles after a warm one, and a stop putting everything back. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
    escaping, ages, distances, the scale bar, vehicles, and the spotlight's figures from an empty world and a full one, and where deaths name their ground. Not reached: anything signed in (renaming, the pin card, hub
    names), the plan's tools and shared links, sorting and the boss board, and drawing
    itself beyond what it leaves behind. **npm run lint** reaches every script, the pages' inline ones

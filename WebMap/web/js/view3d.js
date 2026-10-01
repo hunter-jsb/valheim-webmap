@@ -21,6 +21,9 @@ const NEAR_CAMERA = 700;                 // the overview draws everything around
 const EYE = 1.8;                         // a Viking's eyes above the ground
 const WALK = 5, RUN = 16;                // metres a second; Shift runs
 const FOV = 62, FOV_MIN = 28, FOV_MAX = 78;
+// A name tag is 0.9 m tall in the world, so it shrinks with distance as its Viking does, but up
+// close no taller on screen than sets the name at the bar title's 15 px (the plate is 48 to its 28).
+const TAG_M = 0.9, TAG_PX = 15 * 48 / 28;
 
 export class View3D {
   // api: where the server is ("" for the mod's own origin); phone: a small, weak screen
@@ -692,7 +695,7 @@ if (uFogOn > 0.5) {
       let e = this.players.get(p.name);
       if (!e) {
         const label = makeLabel(p.name, '#6fd8e6');
-        label.position.y = 2.5;
+        label.position.y = 2.05;   // its foot just over the head: held small up close, it never covers the Viking
         const g = new THREE.Group(); g.add(label);
         e = { group: g, label, body: null, key: undefined };
         this.players.set(p.name, e);
@@ -706,6 +709,20 @@ if (uFogOn > 0.5) {
     }
     // the name tag is the player's own; the body's parts are shared and stay in the builder
     for (const [id, e] of this.players) if (!seen.has(id)) { this.playerGroup.remove(e.group); this.players.delete(id); e.label.material.map.dispose(); e.label.material.dispose(); }
+  }
+
+  // Each tag's height for this frame from its depth before the camera: the world's TAG_M or the
+  // screen's TAG_PX, whichever is smaller, eased together where they meet.
+  sizeTags() {
+    const cam = this.camera, ahead = _fwd.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    const perPx = 2 * Math.tan(cam.fov * Math.PI / 360) / (this.canvas.clientHeight || 600);   // metres a pixel spans, a metre out
+    for (const e of this.players.values()) {
+      const l = e.label, at = _v3.copy(e.group.position);
+      at.y += l.position.y;
+      const cap = TAG_PX * perPx * Math.max(cam.near, at.sub(cam.position).dot(ahead));
+      const h = (TAG_M ** -4 + cap ** -4) ** -0.25;
+      l.scale.set(h * l.userData.aspect, h, 1);
+    }
   }
 
   // A player's body: their rig once its parts are in the library, a plain figure until then.
@@ -1160,7 +1177,7 @@ if (uFogOn > 0.5) {
       const c = this.camera.position, gc = this.heightAt(c.x, -c.z);
       if (gc !== null && c.y < Math.max(gc, this.waterLevel) + 3) { c.y = Math.max(gc, this.waterLevel) + 3; this.camera.lookAt(t); }
     }
-    for (const p of this.players.values()) p.label.quaternion.copy(this.camera.quaternion);
+    this.sizeTags();
     // the shadow box stands a little ahead of you, where the eye is
     const target = this.mode === 'street'
       ? _ahead.set(this.me.x + Math.sin(this.me.heading * Math.PI / 180) * 40, this.me.y, -this.me.z - Math.cos(this.me.heading * Math.PI / 180) * 40)
@@ -1266,7 +1283,7 @@ const IDENTITY = new THREE.Matrix4();
 // yaw is degrees clockwise from north, north is -Z here, and a rig stands facing +Z
 const facing = (yaw) => Math.PI - (yaw || 0) * Math.PI / 180;
 
-const _ahead = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _ahead = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _fwd = new THREE.Vector3();
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 // a chunk grid's south, north, west and east edges, t along each
 const EDGES = (n) => [(t) => t, (t) => (n - 1) * n + t, (t) => t * n, (t) => t * n + n - 1];
@@ -1358,7 +1375,9 @@ function makeLabel(text, color) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, toneMapped: false }));
-  sprite.scale.set(w / 48 * 0.9, 0.9, 1);
+  sprite.center.set(0.5, 0);           // stood on its foot, so the plate grows up and away from the head
+  sprite.userData.aspect = w / 48;
+  sprite.scale.set(w / 48 * TAG_M, TAG_M, 1);
   sprite.renderOrder = 999;
   return sprite;
 }
