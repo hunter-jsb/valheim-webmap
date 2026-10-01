@@ -18,6 +18,8 @@
     <NuGetAudit>false</NuGetAudit>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <NoWarn>$(NoWarn);CS0618</NoWarn>
+    <!-- the build has no warnings: one that appears is fixed, not let through -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

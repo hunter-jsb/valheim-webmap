@@ -1,7 +1,8 @@
 # Every push to a branch and every pull request: the mod builds and packages as a
-# tag would publish it, its logic passes dotnet test, and the viewer's core passes
-# node --test. A tag is release.yml's alone. The end-to-end checks want a live
-# server and a Chrome, so they stay a step run by hand (tools/check.mjs).
+# tag would publish it (a C# warning fails it), its logic passes dotnet test, and the
+# viewer passes its lint and its core node --test. A tag is release.yml's alone. The
+# end-to-end checks want a live server and a Chrome, so they stay a step run by hand
+# (tools/check.mjs).
 name: ci
 
 on:
@@ -30,6 +31,11 @@ jobs:
 
       - name: dotnet test
         run: dotnet test WebMap.Tests
+
+      - name: lint
+        run: |
+          npm ci
+          npm run lint
 
       - name: node --test
         run: node --test
