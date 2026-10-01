@@ -208,20 +208,33 @@ namespace WebMap
             fileCache = new System.Collections.Concurrent.ConcurrentDictionary<string, byte[]>();
             fileStamp = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>();
 
-            httpServer.OnGet += (sender, e) =>
+            httpServer.OnGet += (sender, e) => Serve(e, () =>
             {
                 if (ProcessSpecialRoutes(e)) return;
 
                 ServeStaticFiles(e);
-            };
+            });
             // /announce is a POST; without this websocket-sharp answers 501
-            httpServer.OnPost += (sender, e) =>
+            httpServer.OnPost += (sender, e) => Serve(e, () =>
             {
                 if (ProcessSpecialRoutes(e)) return;
 
                 e.Response.StatusCode = 404;
                 e.Response.Close();
-            };
+            });
+        }
+
+        // A browser that goes away mid-reply fails the write with the socket's error, which
+        // websocket-sharp logs as Fatal: a poller leaving, a couple of dozen a day. Every
+        // other fault still reaches its log.
+        private static void Serve(HttpRequestEventArgs e, Action handle)
+        {
+            try { handle(); }
+            catch (IOException ex) when (ex.InnerException is System.Net.Sockets.SocketException || ex.InnerException is ObjectDisposedException)
+            {
+                e.Response.Abort();
+                if (WebMapConfig.DEBUG) ZLog.Log("WebMap: a browser left mid-reply to " + e.Request.RawUrl + ": " + ex.Message);
+            }
         }
 
         // Called only from RefreshPlayerSnapshot, i.e. only on the game thread.
