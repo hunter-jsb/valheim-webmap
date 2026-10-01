@@ -29,6 +29,11 @@
   distance in metres or km and the minute's re-read are `map-core.js`'s once. Nothing a player
   sees changes but one leak: a signed-in name in the Portals page's bar had picked up that
   page's own name style, and now looks as it does on every other page.
+* The status box at the head of the map's sidebar keeps its card once the status is drawn --
+  the background, the border and the edge of light it shows while the page loads, and the
+  card's ink for its line. Drawing the status had set the box's whole class list, so at the
+  first tick the card went, the line turned the links' gold and the sidebar under it rose by
+  the border's two pixels.
 
 ## 2.16.0
 

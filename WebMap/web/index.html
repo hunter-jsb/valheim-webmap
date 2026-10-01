@@ -648,8 +648,10 @@ async function tickStatus(){
 function renderStatus(){
   const head=document.getElementById("stext"), rows=document.getElementById("srows");
   const box=document.getElementById("status"), live = WORLD.live, sum = WORLD.status;
+  // only the state's class changes: the box keeps its card
+  const mark = cls => { box.classList.remove("ok", "warn", "bad"); if(cls) box.classList.add(cls); };
   if(!sum){
-    box.className = "status " + (live===true?"ok":live===false?"bad":"");
+    mark(live===true?"ok":live===false?"bad":"");
     head.textContent = live===true?"Online":live===false?"Offline":"Status unavailable";
     rows.innerHTML = ""; return;
   }
@@ -658,7 +660,7 @@ function renderStatus(){
   let cls = sum.status?.indicator === "none" ? "ok" : "warn";
   // the cron behind Statuspage runs every 15 minutes, so a live failure wins
   if(live === false){ cls="bad"; overall="Server unreachable"; }
-  box.className = "status " + cls;
+  mark(cls);
   head.textContent = overall;
   rows.innerHTML = comps.map(c=>{
     const now = (live===false && /server/i.test(c.name)) ? "major_outage" : c.status;
