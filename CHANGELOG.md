@@ -49,6 +49,9 @@
   public address the mod answered `/auth/me` with a 404, which a page takes for a map without
   sign-in, so a page opened then hid Sign in until it was reloaded. The mod now answers 503 while
   sign-in is on and the address is not yet known, and the page asks again, sooner, then later.
+* Danger by biome is honest about ground died on but never walked, a portal's far side say: the
+  row gives its deaths and says nothing was walked there, where it gave a dash for the rate, or
+  "1 per 0.00 km" for a few metres; such ground is no longer a player's deadliest either.
 
 ## 2.16.1
 

@@ -820,6 +820,7 @@ const BIOME_INK = {"Meadows": "#c2d69a", "Black Forest": "#a6c48a", "Swamp": "#c
 const ord = n => n + (["st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 3 : n % 10 - 1] || "th");
 // Danger by biome, a player's or everyone's ([{biome, m, deaths}]): a row per biome walked 500 m in
 // or died in, the deadliest for its km first -- the name in its ink, the km as a bar, the deaths.
+// Ground died on but not walked (stepped onto through a portal) has no rate to give.
 function biomeRows(list){
   const rows = (list || []).filter(b => num(b.m) >= 500 || num(b.deaths) > 0)
     .sort((a, b) => (num(b.deaths)/(num(b.m) || 1)) - (num(a.deaths)/(num(a.m) || 1)) || num(b.m) - num(a.m));
@@ -828,7 +829,7 @@ function biomeRows(list){
     return `<span class="b"><i style="background:${BIOME_INK[b.biome] || "#9aa093"}"></i>${esc(b.biome)}</span>`
       + `<span class="bar" style="width:${Math.max(1, 100*m/most).toFixed(1)}%" title="${esc(b.biome)}: ${km(m)} km walked, ${plural(d, "death")}"></span>`
       + `<span class="km">${km(m)} km</span>`
-      + `<span class="dx${d ? "" : " safe"}"><b>${d ? "× " + d : "✓"}</b> ${d ? per(d, m) : ""}</span>`; }).join("");
+      + `<span class="dx${d ? "" : " safe"}"><b>${d ? "× " + d : "✓"}</b> ${d ? (m >= 10 ? per(d, m) : "nothing walked") : ""}</span>`; }).join("");
 }
 const pic = {
   strip(list, me, get){

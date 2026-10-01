@@ -361,7 +361,7 @@ const SPOTS = [
   p => kpd(p) ? {k: "Survivor", v: `${kpd(p) >= 10 ? Math.round(kpd(p)) : kpd(p).toFixed(1)} <small>km per death</small>`, c: rankLine(p, kpd, "safest on the roster", "deadliest on the roster"), svg: strip(p, kpd)} : null,
   p => num(p.close_calls) ? {k: "Closest call", v: `${Math.round(num(p.lowest_hp)*100)}% <small>health</small>`, c: `${plural(num(p.close_calls), "close call")}: under a tenth and back`, svg: bars([{frac: num(p.lowest_hp), label: "and lived", colour: "var(--off)"}])} : null,
   p => (p.streak_m || {}).best ? {k: "Best streak", v: `${km(p.streak_m.best)} <small>km without dying</small>`, c: `${km(p.streak_m.now)} km since the last death`, svg: bars([{frac: 1, label: "best"}, {frac: num(p.streak_m.now)/num(p.streak_m.best), label: "since the last"}])} : null,
-  p => { const b = (p.biomes || []).filter(r => num(r.deaths) > 0 && num(r.m) > 0).sort((a, c) => num(c.deaths)/num(c.m) - num(a.deaths)/num(a.m))[0];
+  p => { const b = (p.biomes || []).filter(r => num(r.deaths) > 0 && num(r.m) >= 10).sort((a, c) => num(c.deaths)/num(c.m) - num(a.deaths)/num(a.m))[0];
          return b ? {k: "Deadliest ground", v: esc(b.biome), c: `${per(b.deaths, b.m)} there, ${plural(num(b.deaths), "death")} in ${km(b.m)} km`, svg: bars([{frac: num(b.deaths)/Math.max(1, num(p.deaths)), label: "of all deaths", colour: INK[b.biome]}])} : null; },
   p => { const b = (p.biomes || []).filter(r => num(r.deaths) === 0 && num(r.m) >= 1000).sort((a, c) => num(c.m) - num(a.m))[0];
          return b ? {k: "Safest ground", v: esc(b.biome), c: `${km(b.m)} km there without a death`, svg: bars([{frac: num(b.m)/Math.max(1, num(p.dist_m)), label: "of all km", colour: INK[b.biome]}])} : null; },

@@ -131,6 +131,14 @@ test("a distance keeps three figures or so, and a figure the mod never kept is n
   assert.deepEqual([1234, 12345, 123456, undefined, "x"].map(MapCore.km), ["1.23", "12.3", 123, "0.00", "0.00"]);
 });
 
+test("ground died on but never walked shows its deaths and no rate, neither a dash nor 1 per 0.00 km", () => {
+  for (const m of [0, 3]){
+    const row = MapCore.biomeRows([{biome: "Swamp", m, deaths: 2}]);
+    assert.match(row, /× 2/);
+    assert.doesNotMatch(row, /—|per 0\.00/);
+  }
+});
+
 test("a scale bar is a round length, drawn 60 to 150 px at any zoom, and says its own length", () => {
   for (const mpp of [0.1, 0.37, 1, 4.2, 12, 60]){
     const bar = {style: {}}, label = {};
