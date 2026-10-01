@@ -34,6 +34,9 @@
   card's ink for its line. Drawing the status had set the box's whole class list, so at the
   first tick the card went, the line turned the links' gold and the sidebar under it rose by
   the border's two pixels.
+* The planning board's colour picker has a class of its own, `.colour`, where it shared `.sw`
+  with the legend's swatches: the legend's swatches lose the faint ring the picker's rule gave
+  them, and look as the map's legend does. The picker is unchanged.
 
 ## 2.16.0
 

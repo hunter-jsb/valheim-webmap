@@ -21,8 +21,8 @@
   .bar .sep{width:1px;align-self:stretch;background:var(--line);margin:0 .35rem}
   .bar .grp{display:flex;align-items:center;gap:.25rem}
   .bar .hide{display:none}
-  .sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--stage);cursor:pointer;box-shadow:0 0 0 1px var(--line)}
-  .sw.on{box-shadow:0 0 0 2px var(--gold)}
+  .colour{width:26px;height:26px;border-radius:50%;border:2px solid var(--stage);cursor:pointer;box-shadow:0 0 0 1px var(--line)}
+  .colour.on{box-shadow:0 0 0 2px var(--gold)}
   .wbtn i{display:block;background:var(--ink);border-radius:var(--pill)}
   .wbtn.on i{background:var(--gold)}
   #labelIn{width:150px;height:34px;padding:0 .5rem;font-size:.8rem}
@@ -464,7 +464,7 @@ document.getElementById("tools").innerHTML = TOOLS.map(t =>
 document.getElementById("stamps").innerHTML = STAMPS.map(s =>
   `<button class="btn" data-stamp="${s.k}" title="${s.name}">${svgIcon(s.k)}</button>`).join("");
 document.getElementById("colors").innerHTML = PALETTE.map((c, i) =>
-  `<span class="sw" data-col="${i}" style="background:${c}" title="colour ${i+1}"></span>`).join("");
+  `<span class="colour" data-col="${i}" style="background:${c}" title="colour ${i+1}"></span>`).join("");
 document.getElementById("widths").innerHTML = WIDTHS.map((w, i) =>
   `<button class="btn sq wbtn" data-wid="${i}" title="${i ? "thick" : "thin"}"><i style="width:18px;height:${w}px"></i></button>`).join("");
 
