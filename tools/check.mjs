@@ -88,6 +88,24 @@ async function map() {
   await p.done("map");
 }
 
+// A phone's drawer is its own choice: shut on a first visit, open after a reload once opened,
+// shut again once closed, and a desk's fold in the same browser left as it was.
+async function phone() {
+  const p = await open("/");
+  await p.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  const reload = async () => { await p.ev(`window.__old = true`); await p.send("Page.reload");
+    return p.until(`!window.__old && document.querySelector(".sidebtn") && document.readyState === "complete"`, 20000); };
+  await p.ev(`localStorage.setItem("xnv.side", "closed")`);
+  const open1 = `document.body.classList.contains("side-open")`, seen = [];
+  await reload(); seen.push(await p.ev(open1));
+  await p.click(".sidebtn"); await reload(); seen.push(await p.ev(open1));
+  await p.click(".sideclose"); await reload(); seen.push(await p.ev(open1));
+  const desk = await p.ev(`localStorage.getItem("xnv.side")`);
+  check("phone: the drawer shut at first, open after a reload once opened, shut once closed, the desk's fold kept",
+        seen.join() === "false,true,false" && desk === "closed", `${seen.map(o => o ? "open" : "shut").join(", ")}; the desk's ${desk}`);
+  await p.done("phone");
+}
+
 async function portals() {
   const p = await open("/portals.html");
   const built = await p.until(`HUBS.length && LIST.length && SPOKES.length`);
@@ -288,7 +306,7 @@ async function plan() {
   await p.done("plan");
 }
 
-for (const page of [map, view3d, tour, world, portals, players, plan]) {
+for (const page of [map, phone, view3d, tour, world, portals, players, plan]) {
   try { await page(); } catch (e) { check(`${page.name}: runs`, false, e.message); }
 }
 process.exit(failed ? 1 : 0);

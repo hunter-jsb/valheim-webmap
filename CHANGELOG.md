@@ -8,6 +8,14 @@
   before, a player 2 m off wore a name 185 px tall in an 848 px view. The tag stands on its foot
   just over the head, so held small it never covers the Viking it names, and from afar it is as
   it was. The page check measures a tag 3 m off.
+* A phone remembers its sidebar. The drawer is shut on a first visit, and once opened it is open
+  on the next visit and on the Portals and Plan pages until it is closed, where every load had
+  shut it, the chat and the legend behind the ☰ each time. A phone's choice is kept in
+  `xnv.side.phone`, apart from a desk's in `xnv.side`, which stays as it was, so a browser that
+  is both -- a turned tablet, a narrowed window -- keeps each. The tour still folds it without
+  remembering, and the touch that ends a tour puts back the drawer the tour found rather than
+  closing it as a touch beside the drawer does. The page check reloads a phone with its drawer
+  open, then shut.
 
 ## 2.16.1
 

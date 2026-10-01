@@ -919,29 +919,33 @@ function credits(){
   }
 }
 // The sidebar, folded or not, is one choice for the whole site, kept in this
-// browser; a phone ignores it and starts with its drawer shut. A toggle fires
+// browser: a desk's in xnv.side, open until folded, and a phone's drawer in
+// xnv.side.phone, shut until opened, so a window that is both keeps each. A toggle fires
 // resize so a stage that fills the rest re-measures itself. The tour folds it without
 // remembering: a tab closed mid-tour must not leave every page folded.
 const PHONE = typeof matchMedia === "function" ? matchMedia("(max-width:760px)") : {matches: false};
+const sideKey = () => PHONE.matches ? "xnv.side.phone" : "xnv.side";
 let sideOpen = true;
 function applySide(){
-  try{ sideOpen = PHONE.matches ? false : localStorage.getItem("xnv.side") !== "closed"; }
-  catch(e){ sideOpen = !PHONE.matches; }
+  let kept = null;
+  try{ kept = localStorage.getItem(sideKey()); }catch(e){}
+  sideOpen = PHONE.matches ? kept === "open" : kept !== "closed";
   document.body.classList.toggle("side-open", sideOpen);
 }
 function toggleSide(on, remember = true){
   sideOpen = on === undefined ? !sideOpen : !!on;
   document.body.classList.toggle("side-open", sideOpen);
-  if(remember && !PHONE.matches){ try{ localStorage.setItem("xnv.side", sideOpen ? "open" : "closed"); }catch(e){} }
+  if(remember){ try{ localStorage.setItem(sideKey(), sideOpen ? "open" : "closed"); }catch(e){} }
   dispatchEvent(new Event("resize"));
 }
 if(typeof document !== "undefined"){
   if(PHONE.addEventListener) PHONE.addEventListener("change", () => { applySide(); dispatchEvent(new Event("resize")); });
-  // the drawer's own ×, and a touch on the stage beside it
+  // the drawer's own ×, and a touch on the stage beside it -- taken on the way down, ahead of the
+  // tour's own listener, so the touch that ends a tour keeps the drawer the tour puts back
   document.addEventListener("click", e => { if(e.target.closest(".sideclose")) toggleSide(false); });
   document.addEventListener("pointerdown", e => {
     if(PHONE.matches && sideOpen && !e.target.closest(".sidebar, .nav")) toggleSide(false);
-  });
+  }, true);
 }
 // ---------- who you are ----------
 // The sign-in service signs people in with Discord and sends the page back with a

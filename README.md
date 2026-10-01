@@ -63,14 +63,15 @@ with a class read from their gear, their food and their deeds
 live while they are online, as last seen once they have gone) —
 with a legend that switches each layer and a Layers card, as on Google Maps, holding
 presets of the legend and the choice of ground: the render, or the flat biome atlas.
-The sidebar folds away with the ☰ in the bar, on phones it is a drawer, and the choice
-holds across pages. Its source is `WebMap/web`: `site.css` is the style system every
-page draws from, `map-core.js` the rendering core, `js/card.js` a player as the roster
-reads them (for the players page and the tour), `js/spot.js` the spotlight's turn (the map,
-the World page and a player's page each hand it their own figures; the map's are in it
-too), and each page holds only its own. The map keeps what it knows of the world in one
-object, `WORLD`, which its five-second tick and its layer loads write and everything else
-reads; its own files sit beside it, one global each, handed what they read by `init`:
+The sidebar folds away with the ☰ in the bar, on phones it is a drawer, shut on a first
+visit, and the choice holds across pages and visits, a phone's kept apart from a desk's.
+Its source is `WebMap/web`: `site.css` is the style system every page draws from,
+`map-core.js` the rendering core, `js/card.js` a player as the roster reads them (for the
+players page and the tour), `js/spot.js` the spotlight's turn (the map, the World page and
+a player's page each hand it their own figures; the map's are in it too), and each page
+holds only its own. The map keeps what it knows of the world in one object, `WORLD`, which
+its five-second tick and its layer loads write and everything else reads; its own files sit
+beside it, one global each, handed what they read by `init`:
 
 * `js/layers.js` — the Layers card: legend, presets, details, names and ground, kept per browser
 * `js/street.js` — the 3D mode: in and out, the pegman, the View row and `#3d=` links
@@ -510,12 +511,12 @@ headless Chrome started with `--remote-debugging-port=9334` (and, for the 3D vie
 WebGL, `--use-angle=swiftshader --enable-unsafe-swiftshader`),
 `node tools/check.mjs http://127.0.0.1:8766 9334 [/tmp/shots]` checks every page over it:
 no exceptions, markers and names drawn, a tapped name opening its place card, the names
-flyout, ground and objects in 3D at the world's start and a name tag up close no bigger
-than the bar's title, hubs and dial lines, a card per player, the plan loading, the tour
-landing through a resize, a stopped one staying stopped and a player's card turning in it
-until it goes. One line per check, a
-non-zero exit on any failure, and a screenshot of each page when given a directory. A
-viewer change is done when that and `npm run lint` are clean.
+flyout, a phone's drawer kept across a reload, ground and objects in 3D at the world's start
+and a name tag up close no bigger than the bar's title, hubs and dial lines, a card per
+player, the plan loading, the tour landing through a resize, a stopped one staying stopped
+and a player's card turning in it until it goes. One line per check, a non-zero exit on any
+failure, and a screenshot of each page when given a directory. A viewer change is done when
+that and `npm run lint` are clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome
 and prints ms per frame: 16.7 is the screen's own rate, anything above it is lag.
 

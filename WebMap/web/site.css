@@ -253,7 +253,7 @@ textarea.field{resize:vertical;min-height:74px;font-size:.8rem;line-height:1.45}
 /* A page with a sidebar: the bar, then the sidebar beside a stage that fills the
    rest. The ☰ in the bar folds the sidebar away, one choice for the whole site
    (MapCore.toggleSide). On a phone the sidebar is a drawer over the stage, shut
-   on arrival, with its own ×. */
+   until first opened and then as it was left, with its own ×. */
 .sidebtn{width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:var(--r);
   background:var(--card);color:var(--ink);font-size:1rem;line-height:1;cursor:pointer}
 .sidebtn:hover{border-color:var(--gold);color:var(--gold)}
