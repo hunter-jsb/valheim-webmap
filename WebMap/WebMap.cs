@@ -72,6 +72,7 @@ namespace WebMap
             StaticCoroutine.Start(StructureMap.Loop());
             StaticCoroutine.Start(Announce.Pump());
             StaticCoroutine.Start(PlayerSnapshotLoop());
+            StaticCoroutine.Start(Kitchen.Scan());
             // the 3D view: models exported a few a frame as the sweep meets new prefabs,
             // and the fallback for height sampling should the engine want it on this thread
             if (WebMapConfig.EXPORT_MODELS) StaticCoroutine.Start(Models.ModelStore.Pump());

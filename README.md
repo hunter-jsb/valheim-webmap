@@ -494,8 +494,9 @@ counts on top when the weapon has a backstab bonus and the creature was not yet 
 **Kitchen.** Nobody's inventory reaches the server, but the stations do: every prefab with
 a CookingStation, Fermenter, Beehive or Smelter component (the fires, the iron cooking
 station, the stone oven; the fermenter; the hive; the smelter, blast furnace, kiln,
-windmill, spinning wheel and eitr refinery) is found by the sweep, or by the first slot
-filled on it, and its ZDO is read every five seconds. A player's `kitchen` counts:
+windmill, spinning wheel and eitr refinery) is found by a scan of the save at start or as
+a player builds it, whether or not anyone has the map open, and its ZDO is read every five
+seconds. A player's `kitchen` counts:
 
 * **`cooked`** -- a slot gone done, for whoever put the item on: the station's owner
   broadcasts every slot it fills, and a player who is not the owner asks the owner first,

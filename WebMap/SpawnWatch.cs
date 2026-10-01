@@ -163,6 +163,7 @@ namespace WebMap
                 {
                     zdos++;
                     if (f.zdo == null || f.zdo.m_uid != f.id) continue;   // released to the pool since
+                    Kitchen.Arrived(f.zdo);
                     Kind k = KindOf(f.zdo.GetPrefab());
                     if (k == null) continue;
                     creatures++;

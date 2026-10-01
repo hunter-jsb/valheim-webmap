@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,15 +7,15 @@ namespace WebMap
 {
     // Cooking, brewing, honey and smelting, per player. Nobody's inventory reaches the
     // server, but the stations are world objects whose ZDOs sync: a cooking slot's item
-    // and state, a fermenter's content, a hive's honey, a smelter's queue. The sweep hands
-    // over the stations it walks past, a poll every few seconds diffs them, and each change
-    // is credited to whoever put the thing there.
+    // and state, a fermenter's content, a hive's honey, a smelter's queue. A scan at start,
+    // each new one as a peer builds it and the sweep hand over the stations, a poll every few
+    // seconds diffs them, and each change is credited to whoever put the thing there.
     //
     // A cooking station names its placer: its owner broadcasts every slot it fills, and a
     // player who is not the owner asks it first, through the server. The rest go to the
     // nearest player standing beside the station, as a rock goes to the owner beside it.
     //
-    // Game thread only: the sweep's walk, RouteRPC and the snapshot all run there.
+    // Game thread only: the scan, a peer's batch, the sweep's walk, RouteRPC and the snapshot all run there.
     internal static class Kitchen
     {
         public enum Type { Cook, Brew, Hive, Smelt }
@@ -42,7 +43,7 @@ namespace WebMap
         }
 
         private const int MaxStations = 1024, MaxSlots = 8, MaxQueue = 64;
-        private const float PollS = 5f, AskS = 2f, BesideM = 8f;
+        private const float PollS = 5f, AskS = 2f, BesideM = 8f, ScanMsPerFrame = 2f;
         private static readonly int[] SlotKey = Keys("slot", MaxSlots), StatusKey = Keys("slotstatus", MaxSlots), ItemKey = Keys("item", MaxQueue);
         private static int[] Keys(string stem, int n) { var k = new int[n]; for (int i = 0; i < n; i++) k[i] = (stem + i).GetStableHashCode(); return k; }
 
@@ -68,6 +69,57 @@ namespace WebMap
             {
                 if (!warned) { warned = true; ZLog.LogWarning("WebMap: kitchen: reading a station's prefab failed: " + e); }
             }
+        }
+
+        // A new object from a peer, as the spawn watch reads its batch: a station just built is
+        // watched from its first slot, with nobody looking at the map.
+        public static void Arrived(ZDO zdo)
+        {
+            try
+            {
+                Kind k = KindOf(zdo.GetPrefab());
+                if (k != null && !stations.ContainsKey(zdo.m_uid) && zdo.GetLong(ZDOVars.s_creator, 0L) != 0L) { Vector3 p = zdo.GetPosition(); Watch(zdo.m_uid, k, p.x, p.z); }
+            }
+            catch (Exception e)
+            {
+                if (!warned) { warned = true; ZLog.LogWarning("WebMap: kitchen: reading a new station failed: " + e); }
+            }
+        }
+
+        // At start, the stations already built, so the poll needs no viewer: the save's objects
+        // sector by sector, a couple of ms a frame, a dictionary lookup each.
+        public static IEnumerator Scan()
+        {
+            yield return null;                                 // ZoneSystem.Load runs before the save's objects are read
+            while (ZDOMan.instance == null || ZNetScene.instance == null) yield return new WaitForSeconds(1f);
+            List<ZDO>[] sectors = ZDOMan.instance.m_objectsBySector;
+            if (sectors == null) yield break;
+            var frame = new System.Diagnostics.Stopwatch(); var busy = new System.Diagnostics.Stopwatch(); var wall = System.Diagnostics.Stopwatch.StartNew();
+            int seen = 0, frames = 0, before = stations.Count;
+            double worst = 0;
+            for (int s = 0; s < sectors.Length;)
+            {
+                frame.Restart(); busy.Start();
+                for (; s < sectors.Length && frame.Elapsed.TotalMilliseconds < ScanMsPerFrame; s++)
+                {
+                    List<ZDO> list = sectors[s];
+                    if (list == null) continue;
+                    seen += list.Count;
+                    try
+                    {
+                        foreach (ZDO z in list)
+                            if (z != null && KindOf(z.GetPrefab()) != null && z.GetLong(ZDOVars.s_creator, 0L) != 0L) Found(z, z.GetPrefab(), z.GetPosition());
+                    }
+                    catch (Exception e)
+                    {
+                        if (!warned) { warned = true; ZLog.LogWarning("WebMap: kitchen: the scan at start failed in a sector: " + e); }
+                    }
+                }
+                busy.Stop(); frames++;
+                worst = Math.Max(worst, frame.Elapsed.TotalMilliseconds);
+                yield return null;
+            }
+            ZLog.Log(FormattableString.Invariant($"WebMap: kitchen: {stations.Count - before} stations standing among {seen} objects at start; {busy.ElapsedMilliseconds} ms over {frames} frames, the longest {worst:0.0} ms, {wall.ElapsedMilliseconds} ms wall"));
         }
 
         internal static void Watch(ZDOID id, Kind kind, float x, float z)

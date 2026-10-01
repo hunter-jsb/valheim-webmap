@@ -41,6 +41,10 @@
   queued, so one finished and one loaded between two polls left the count standing and the item
   went uncounted, every loader after it credited one item late; the smelter's bake timer going
   back to nought now says an item was made, whatever the count does.
+* The kitchen counts with nobody looking. Its stations were found only by the minute's sweep,
+  which runs only while someone has the map open, so a fermenter filled or a smelter loaded on
+  a quiet evening after a restart was never watched. A scan of the save at start finds every
+  station already built, and one built later is watched from the moment it arrives.
 
 ## 2.16.1
 
