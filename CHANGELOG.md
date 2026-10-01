@@ -33,6 +33,10 @@
 * A browser that goes away while the mod is still answering it no longer puts a line labelled
   Fatal in the server's log (`Unable to write data to the transport connection`, a couple of
   dozen a day): the mod drops that one connection quietly, and with `debug` on says so.
+* A training dummy is no creature. The game makes it a Character, so a punch on one counted as a
+  hit on a creature, and the dummy is never alerted, so every punch counted as a backstab too
+  (and knocking it down would have been a kill): a player training on dummies came out an
+  Assassin. Hits, backstabs and kills now count creatures alone.
 
 ## 2.16.1
 

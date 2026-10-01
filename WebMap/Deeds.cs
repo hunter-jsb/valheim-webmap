@@ -174,7 +174,7 @@ namespace WebMap
             GameObject go = ZNetScene.instance.GetPrefab(prefab);
             if (go != null)
             {
-                if (go.GetComponent<Character>() != null) { if (go.GetComponent<Player>() == null) k = (int)Deeds.Kind.Kill; }
+                if (go.GetComponent<Character>() != null) { if (IsCreature(go.GetComponent<Player>() != null, go.GetComponent<Piece>() != null)) k = (int)Deeds.Kind.Kill; }
                 else if (go.GetComponent<TreeBase>() != null) k = (int)Deeds.Kind.Tree;
                 else if (go.GetComponent<Destructible>() != null
                          && WorldObjects.ClassifyName(go.name.ToLowerInvariant()) == WorldObjects.Cat.Rock) k = (int)Deeds.Kind.Rock;
@@ -182,5 +182,9 @@ namespace WebMap
             kinds[prefab] = k;
             return k;
         }
+
+        // A Character that is a build piece is the training dummy: never alerted, so every
+        // hit on it read as a backstab, and taking it down read as a kill.
+        internal static bool IsCreature(bool player, bool piece) => !player && !piece;
     }
 }

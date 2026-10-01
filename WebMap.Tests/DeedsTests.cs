@@ -52,5 +52,8 @@ namespace WebMap.Tests
             Assert.Equal(new[] { 0, 1, 1 }, Of(A));
             Assert.Equal(new[] { 1, 0, 0 }, Of(B));
         }
+
+        [Fact]
+        public void ATrainingDummyIsNoCreature() => Assert.False(DeedsGonePatch.IsCreature(player: false, piece: true));
     }
 }
