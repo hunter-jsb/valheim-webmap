@@ -112,6 +112,11 @@ namespace WebMap.Tests
         public void TheAddressAskedAtCountsOnlyOnALan(string peer, string host, string asked) =>
             Assert.Equal(asked.Length == 0 ? new string[0] : new[] { asked }, Auth.Origins(host, IPAddress.Parse(peer), "", "", 3000));
 
+        // just started, the game not yet knowing its public address: not yet, rather than off
+        [Fact]
+        public void SignInOnButNoAddressYetIsNotYetNotOff() =>
+            Assert.Equal((503, 404, 404), (Auth.Closed(Guild, null), Auth.Closed("", null), Auth.Closed(Guild, "104.224.55.78")));
+
         [Theory]
         [InlineData(true, "0", "", true)]                                        // the server's owner
         [InlineData(false, "8", "", true)]                                       // Administrator

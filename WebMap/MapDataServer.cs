@@ -736,7 +736,7 @@ namespace WebMap
                     // A sign-in starts at the service, which sends the person back to `to`
                     // with #session=; the viewer keeps that and sends it as a bearer.
                     {
-                        if (!SignInHere(req, out var origins)) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        if (!SignInHere(req, out var origins)) { NoSignIn(res); return true; }
                         string url = Auth.LoginUrl(WebMapConfig.AUTH_URL, req.QueryString["to"] ?? "", WebMapConfig.DISCORD_GUILD, origins);
                         if (url == null) { Answer(res, 400, "{\"error\":\"bad return address\"}"); return true; }
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
@@ -746,9 +746,9 @@ namespace WebMap
                         return true;
                     }
                 case "/auth/me":
-                    // a 404 keeps the viewer's Sign in hidden where sign-in is off
+                    // a 404 keeps the viewer's Sign in hidden where sign-in is off; a 503 has it ask again
                     {
-                        if (!SignInHere(req, out _)) { Answer(res, 404, "{\"error\":\"sign-in is not configured\"}"); return true; }
+                        if (!SignInHere(req, out _)) { NoSignIn(res); return true; }
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
                         var s = Signed(req, out bool admin);
                         if (s == null) { Answer(res, 401, "{\"error\":\"not signed in\"}"); return true; }
@@ -875,6 +875,12 @@ namespace WebMap
                 ZLog.LogWarning("WebMap: sign-in is off for visitors from outside until the game says its public address; a map reached by a name or through a proxy needs public_url");
             }
             return false;
+        }
+        private static void NoSignIn(HttpListenerResponse res)
+        {
+            int code = Auth.Closed(WebMapConfig.DISCORD_GUILD, publicIp);
+            if (code == 503) res.Headers.Add(HttpResponseHeader.RetryAfter, "15");
+            Answer(res, code, code == 503 ? "{\"error\":\"sign-in starts once the game knows its public address\"}" : "{\"error\":\"sign-in is not configured\"}");
         }
 
         // The server's public address as the game knows it: PlayFab looks it up for a

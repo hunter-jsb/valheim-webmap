@@ -123,6 +123,11 @@ namespace WebMap
             return list;
         }
 
+        // The answer to a caller with no address of the map's to sign in at: 404 where sign-in is
+        // off, 503 while it is on and the game has yet to say its public address, some seconds
+        // after a start, so a page asks again rather than taking sign-in for off.
+        internal static int Closed(string guild, string publicIp) => string.IsNullOrEmpty(guild) || !string.IsNullOrEmpty(publicIp) ? 404 : 503;
+
         // loopback, 10/8, 172.16/12, 192.168/16, fc00::/7
         internal static bool Private(IPAddress a)
         {

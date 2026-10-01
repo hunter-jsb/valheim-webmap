@@ -45,6 +45,10 @@
   which runs only while someone has the map open, so a fermenter filled or a smelter loaded on
   a quiet evening after a restart was never watched. A scan of the save at start finds every
   station already built, and one built later is watched from the moment it arrives.
+* Sign in no longer vanishes after a restart. For the half minute before the game says its
+  public address the mod answered `/auth/me` with a 404, which a page takes for a map without
+  sign-in, so a page opened then hid Sign in until it was reloaded. The mod now answers 503 while
+  sign-in is on and the address is not yet known, and the page asks again, sooner, then later.
 
 ## 2.16.1
 

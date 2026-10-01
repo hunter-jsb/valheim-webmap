@@ -950,7 +950,8 @@ if(typeof document !== "undefined"){
 // ---------- who you are ----------
 // The sign-in service signs people in with Discord and sends the page back with a
 // session token in its hash; the page keeps the token and sends it as a bearer.
-// Where sign-in is off, /auth/me answers 404 and the bar shows nothing.
+// Where sign-in is off, /auth/me answers 404 and the bar shows nothing; a 503 is a map
+// just started that does not know its own address yet, asked again a little later.
 let session = null, me = null;
 try{
   const parts = location.hash.replace(/^#/, "").split("&").filter(Boolean);
@@ -964,11 +965,14 @@ try{
 }catch(e){}
 const authHeaders = () => session ? {authorization: "Bearer " + session} : {};
 const user = () => me;
-let asked = null, signInHere = false;     // the nav's one question a page, and whether this deployment signs in
+let asked = null, signInHere = false, again = null, wait = 15000;   // the nav's one question a page, whether this deployment signs in, asking again while it starts
 async function whoami(){
   let r = null;
   try{ r = await api(cfg.api, "/auth/me", {headers: authHeaders()}); }
-  catch(e){ if(e.status !== 401) return null; }        // no sign-in here, or no answer
+  catch(e){
+    if(e.status === 503 && !again){ again = setTimeout(() => { again = null; asked = whoami(); }, wait); wait = Math.min(wait*2, 300000); }
+    if(e.status !== 401) return null;                    // no sign-in here, not yet, or no answer
+  }
   if(r){ me = await r.json(); }
   else { me = null; if(session){ session = null; try{ localStorage.removeItem("xnv.session"); }catch(e){} } }
   signInHere = true;
