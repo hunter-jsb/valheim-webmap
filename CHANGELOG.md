@@ -37,6 +37,10 @@
   hit on a creature, and the dummy is never alerted, so every punch counted as a backstab too
   (and knocking it down would have been a kill): a player training on dummies came out an
   Assassin. Hits, backstabs and kills now count creatures alone.
+* An item a smelter makes while someone loads it counts. The poll read only how much ore was
+  queued, so one finished and one loaded between two polls left the count standing and the item
+  went uncounted, every loader after it credited one item late; the smelter's bake timer going
+  back to nought now says an item was made, whatever the count does.
 
 ## 2.16.1
 

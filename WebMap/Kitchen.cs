@@ -38,6 +38,7 @@ namespace WebMap
             public string asker; public float askedAt;          // a cross-owner RPC_AddItem, awaiting the owner's slot
             public int value; public string filler;             // a fermenter's content or a hive's level
             public List<string> loaders, ores;                  // a smelter's queue, oldest first
+            public float bake;                                  // a smelter's bake timer, which an item made sets back to 0
         }
 
         private const int MaxStations = 1024, MaxSlots = 8, MaxQueue = 64;
@@ -144,9 +145,10 @@ namespace WebMap
                         case Type.Hive: Hive(st, z.GetInt(ZDOVars.s_level)); break;
                         case Type.Smelt:
                             int q = Math.Min(MaxQueue, Math.Max(0, z.GetInt(ZDOVars.s_queued)));
-                            if (st.seen && q == st.ores.Count) break;
+                            float bake = z.GetFloat(ZDOVars.s_bakeTimer);
+                            if (st.seen && q == st.ores.Count && bake >= st.bake) { st.bake = bake; break; }
                             for (int i = 0; i < q; i++) queue[i] = z.GetString(ItemKey[i]);
-                            Smelt(st, q, queue);
+                            Smelt(st, q, queue, bake);
                             break;
                     }
                 }
@@ -196,7 +198,7 @@ namespace WebMap
             if (!stations.TryGetValue(id, out Station st)) return;
             if (st.kind.type == Type.Brew) Brew(st, value); else Hive(st, value);
         }
-        internal static void Observe(ZDOID id, string[] items) { if (stations.TryGetValue(id, out Station st)) Smelt(st, items.Length, items); }
+        internal static void Observe(ZDOID id, string[] items, float bake = 0f) { if (stations.TryGetValue(id, out Station st)) Smelt(st, items.Length, items, bake); }
 
         // The same item cooks on with its time and status rising; anything else in the slot
         // means the last one was taken out and another put in.
@@ -257,19 +259,16 @@ namespace WebMap
             st.value = level; st.seen = true;
         }
 
-        // A rise is ore loaded by whoever stands there; a fall is the oldest processed.
-        private static void Smelt(Station st, int queued, string[] items)
+        // The oldest are processed first, then what is past the rest is ore loaded by whoever
+        // stands there. A load in the same poll hides an item made from the count alone; the
+        // bake timer going back does not (one item per poll: every product takes over 5 s).
+        private static void Smelt(Station st, int queued, string[] items, float bake)
         {
             int had = st.ores.Count;
-            if (!st.seen || queued > had)
-            {
-                string who = st.seen ? Beside(st.x, st.z) : null;
-                for (int i = had; i < queued; i++) { st.loaders.Add(who); st.ores.Add(items[i] ?? ""); }
-                st.seen = true;
-                return;
-            }
+            int done = st.seen ? Math.Min(had, Math.Max(had - queued, bake < st.bake ? 1 : 0)) : 0;
+            st.bake = bake;
             string near = null; bool looked = false;
-            for (int i = queued; i < had; i++)
+            for (int i = 0; i < done; i++)
             {
                 string who = st.loaders[0], ore = st.ores[0];
                 st.loaders.RemoveAt(0); st.ores.RemoveAt(0);
@@ -277,6 +276,12 @@ namespace WebMap
                 st.kind.to.TryGetValue(ore, out string bar);
                 Credit(st, who, Made.Smelted, bar, 1);
             }
+            if (queued > st.ores.Count)
+            {
+                string who = st.seen ? (looked ? near : Beside(st.x, st.z)) : null;
+                for (int i = st.ores.Count; i < queued; i++) { st.loaders.Add(who); st.ores.Add(items[i] ?? ""); }
+            }
+            st.seen = true;
         }
 
         private static void Credit(Station st, string who, Made what, string item, int n) => Stats.Made(who, what, item, n, st.kind.name, st.x, st.z);

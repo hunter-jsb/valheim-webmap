@@ -81,5 +81,16 @@ namespace WebMap.Tests
             Assert.Equal(1, Of(A).Int("smelted"));
             Assert.Equal(1, Of(A).GetProperty("dishes").Int("Copper"));
         }
+
+        [Fact]
+        public void AnItemMadeInThePollOreIsLoadedStillCounts()
+        {
+            Kitchen.Observe(Furnace, new string[0]);
+            Kitchen.Beside = (x, z) => A; Kitchen.Observe(Furnace, new[] { "CopperOre" }, 3f);
+            Kitchen.Observe(Furnace, new[] { "CopperOre" }, 28f);
+            Kitchen.Beside = (x, z) => B; Kitchen.Observe(Furnace, new[] { "CopperOre" }, 2f);   // A's melts as B loads: the count stands still
+            Kitchen.Observe(Furnace, new string[0], 0f);
+            Assert.Equal((1, 1), (Of(A).Int("smelted"), Of(B).Int("smelted")));
+        }
     }
 }
