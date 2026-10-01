@@ -68,8 +68,9 @@ holds across pages. Its source is `WebMap/web`: `site.css` is the style system e
 page draws from, `map-core.js` the rendering core, `js/card.js` a player as the roster
 reads them (for the players page and the tour), `js/spot.js` the spotlight's turn (the map,
 the World page and a player's page each hand it their own figures; the map's are in it
-too), and each page holds only its own. The map's own sit in files beside it, one global
-each, handed what they read by `init`:
+too), and each page holds only its own. The map keeps what it knows of the world in one
+object, `WORLD`, which its five-second tick and its layer loads write and everything else
+reads; its own files sit beside it, one global each, handed what they read by `init`:
 
 * `js/layers.js` — the Layers card: legend, presets, details, names and ground, kept per browser
 * `js/street.js` — the 3D mode: in and out, the pegman, the View row and `#3d=` links

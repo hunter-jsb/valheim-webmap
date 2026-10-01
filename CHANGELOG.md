@@ -29,6 +29,13 @@
   distance in metres or km and the minute's re-read are `map-core.js`'s once. Nothing a player
   sees changes but one leak: a signed-in name in the Portals page's bar had picked up that
   page's own name style, and now looks as it does on every other page.
+* The map page keeps what it knows of the world in one object, `WORLD`, where some twenty-five
+  loose globals held it: the five-second tick and the layer loads write it, and the markers,
+  the place card, the pins, the feed, the status box, the spotlight, the tour, the 3D view and
+  the Layers card only read it. One tick takes the state in, then draws what it changed in the
+  order it always has -- the status, the 3D view, the tiles and markers, the feed -- then asks
+  for the layers whose revision moved; the page's top-level names go from 93 to 65. Nothing a
+  player sees or does changes.
 * The status box at the head of the map's sidebar keeps its card once the status is drawn --
   the background, the border and the edge of light it shows while the page loads, and the
   card's ink for its line. Drawing the status had set the box's whole class list, so at the
