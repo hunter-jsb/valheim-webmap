@@ -16,7 +16,7 @@ await send("Page.navigate", { url: BASE + "/" }); await new Promise(r => setTime
 // the world fitted, then the thick of the builds at a base's zoom
 const views = {
   world: "fitExplored(true);",
-  base: "{ const c = PIECES.reduce((a, p) => [a[0] + p.px/PIECES.length, a[1] + p.py/PIECES.length], [0, 0]); V.centre(c[0], c[1], 8); }",
+  base: "{ const P = WORLD.piecesShown; const c = P.reduce((a, p) => [a[0] + p.px/P.length, a[1] + p.py/P.length], [0, 0]); V.centre(c[0], c[1], 8); }",
 };
 const ms = (setup, step) => ev(`(async () => {
   ${setup}
@@ -25,7 +25,7 @@ const ms = (setup, step) => ev(`(async () => {
   await new Promise(res => { function f(){ ${step}; if(++n >= 60) res(); else requestAnimationFrame(f); } requestAnimationFrame(f); });
   return +((performance.now() - t0) / n).toFixed(1);
 })()`);
-console.log(await ev("({pieces: PIECES && PIECES.length, markers: document.querySelectorAll('#markers .marker').length})"));
+console.log(await ev("({pieces: WORLD.piecesShown && WORLD.piecesShown.length, markers: document.querySelectorAll('#markers .marker').length})"));
 for (const [name, setup] of Object.entries(views)) {
   const pan = await ms(setup, "V.tx += (n % 2 ? 7 : -7); V.ty += 3; V.request()");
   const zoom = await ms(setup, "V.zoomBy(n < 30 ? 1.03 : 1/1.03)");
