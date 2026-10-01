@@ -574,6 +574,22 @@ namespace WebMap
             if (cx < 0 || cz < 0 || cx >= N || cz >= N) return -1;
             return g.cls[cz * N + cx];
         }
+        // the most particular place a spot lies in, walked or not: for the spawn watch, an admin's
+        public static string PlaceAt(float x, float z)
+        {
+            var g = grids; if (g == null) return null;
+            int cx = (int)Math.Floor(x / g.cell + N / 2f), cz = (int)Math.Floor(z / g.cell + N / 2f);
+            if (cx < 0 || cz < 0 || cx >= N || cz >= N) return null;
+            int i = cz * N + cx;
+            lock (gate)
+                foreach (var layer in new[] { g.water, g.range, g.region, g.land })
+                {
+                    int k = layer[i]; if (k == 0 || k > found.Length) continue;
+                    var f = found[k - 1];
+                    return Given(f.id, out var nm) ? nm.name : generated.TryGetValue(f.id, out var gn) ? gn : null;
+                }
+            return null;
+        }
         public static string BiomeName(byte c)
         {
             if (c == 0) return "Ocean";

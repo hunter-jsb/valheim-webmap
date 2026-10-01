@@ -100,6 +100,16 @@ namespace WebMap.Tests
         }
 
         [Fact]
+        public void TheSpawnWatchAnswersAnAdminAndNoMember()
+        {
+            Assert.Equal(403, Get("/spawns"));
+            Assert.Equal(403, Get("/spawns", Bearer()));
+            Assert.Equal(403, Get("/spawns", ("X-Announce-Token", Token)));
+            Assert.Equal(200, Get("/spawns", Bearer(owner: true)));
+            Assert.Equal(200, Get("/spawns", ("X-Announce-Token", Token), ("X-Admin", "1")));
+        }
+
+        [Fact]
         public void ASessionForAnotherDiscordServerOrAnotherMapIsRefusedAtTheRoute()
         {
             Assert.Equal(403, Post("/pins", Pin, Bearer(guild: "1400000000000000002")));

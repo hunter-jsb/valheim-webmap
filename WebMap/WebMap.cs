@@ -134,6 +134,7 @@ namespace WebMap
             Chart.Load(worldDataPath);
             Features.Load(worldDataPath);
             Portals.Load(worldDataPath);
+            SpawnWatch.Load(worldDataPath);
             // prefabs are the same in every world, so the model library sits beside the worlds
             if (Models.ModelStore.Root == null) Models.ModelStore.Init(mapDataPath);
 
@@ -533,6 +534,7 @@ namespace WebMap
             {
                 Stats.Save();
                 Trails.Save();
+                SpawnWatch.Flush();
                 mapDataServer.Stop();
                 WebMap.instance.NotifyOffline();
             }

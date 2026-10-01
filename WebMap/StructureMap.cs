@@ -153,6 +153,8 @@ namespace WebMap
             WorldObjects.Begin();
             TerrainPatches.Begin();
             Stats.BeginSweep();
+            bool scan = SpawnWatch.Scanning;              // the first walk after boot: what is already there
+            if (scan) SpawnWatch.BeginWalk();
             try { Stats.ObserveKeys(ZoneSystem.instance != null ? ZoneSystem.instance.GetGlobalKeys() : null); } catch { }
             Traders.ScanIfNeeded();                           // once, on the game thread
             Locations.Scan();                                 // where they stand and whether it is walked, as the fog is now
@@ -180,6 +182,7 @@ namespace WebMap
                         int idx = y * size + x;
                         int pref = 0;
                         try { pref = zdo.GetPrefab(); } catch { }
+                        if (scan) SpawnWatch.Walked(zdo, pref);
                         // the 3D view: every visible object in walked ground, and the terraforming under it
                         if (pref == TerrainPatches.CompilerHash) TerrainPatches.Observe(zdo, p);
                         else WorldObjects.Observe(zdo, pref, p, creator);
@@ -226,6 +229,7 @@ namespace WebMap
                 }
             }
             walk.Stop();
+            if (scan) SpawnWatch.EndWalk();
 
             // The walk is over and nothing below reads the game: hand the rest to
             // the pool. The per-sweep lists stay quiet until the pool thread clears

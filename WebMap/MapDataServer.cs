@@ -670,6 +670,14 @@ namespace WebMap
                             : "{\"error\":\"" + JsonEscape(err) + "\"}");
                         return true;
                     }
+                case "/spawns":
+                    // Creatures that appeared out of place, for admins alone: same gate as /settings.
+                    {
+                        if (!Caller(req, out _, out bool admin) || !admin) { Answer(res, 403, "{\"error\":\"forbidden\"}"); return true; }
+                        res.Headers.Add(HttpResponseHeader.CacheControl, "no-store");
+                        Answer(res, 200, SpawnWatch.Json());
+                        return true;
+                    }
                 case "/discord/guilds":
                     // The bot's own guilds, for the settings picker; same gate as /settings.
                     // Empty (never an error) when there is no token yet, so the picker
@@ -1091,6 +1099,7 @@ namespace WebMap
             try
             {
                 Kitchen.Tick(Time.realtimeSinceStartup);    // catches its own, station by station
+                SpawnWatch.Tick();
                 LearnPublicIp();
                 Stats.MaybeSave();
                 Trails.MaybeSave();
