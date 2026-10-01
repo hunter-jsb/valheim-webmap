@@ -52,6 +52,9 @@
 * Danger by biome is honest about ground died on but never walked, a portal's far side say: the
   row gives its deaths and says nothing was walked there, where it gave a dash for the rate, or
   "1 per 0.00 km" for a few metres; such ground is no longer a player's deadliest either.
+* The settings page's restart notice goes when a restart-only setting is set back. Any such
+  change kept it up until the next restart, though the value set back is the one the server is
+  running; it now stands while a restart-only setting differs from what the mod started with.
 
 ## 2.16.1
 

@@ -26,8 +26,9 @@ namespace WebMap
         private static readonly object gate = new object();
         private static readonly Dictionary<string, Given> given = new Dictionary<string, Given>();
         private static readonly Dictionary<string, string> defaults = new Dictionary<string, string>();
+        // what each setting was as the mod started: a restart-only one set back to it needs no restart
+        private static readonly Dictionary<string, string> started = new Dictionary<string, string>();
         private static string dir;
-        private static bool restartDue;
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         private static string F(float v) => v.ToString("0.###", Inv);
@@ -144,6 +145,8 @@ namespace WebMap
                 foreach (var e in entries)
                     if (given.TryGetValue(e.key, out var g) && e.set(g.value) == null) applied++;
                 if (applied > 0) ZLog.Log($"WebMap: {applied} settings from the site applied over the config");
+                started.Clear();
+                foreach (var e in entries) started[e.key] = e.get();
             }
         }
 
@@ -164,7 +167,7 @@ namespace WebMap
                       .Append(",\"default\":\"").Append(Esc(e.secret ? "" : defaults[e.key])).Append("\",\"given\":").Append(g != null ? "true" : "false")
                       .Append(",\"by\":\"").Append(Esc(g != null ? g.by : "")).Append("\",\"t\":").Append(g != null ? g.t : 0).Append('}');
                 }
-                sb.Append("],\"restart\":").Append(restartDue ? "true" : "false").Append('}');
+                sb.Append("],\"restart\":").Append(RestartDue() ? "true" : "false").Append('}');
             }
             return sb.ToString();
         }
@@ -186,7 +189,7 @@ namespace WebMap
                 if (err != null) return err;
                 if (value.Length == 0) given.Remove(key);
                 else given[key] = new Given { value = value, by = by ?? "", t = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-                if (!e.live) { restartDue = true; needsRestart = true; }
+                needsRestart = RestartDue();
                 Save();
                 string shown = e.secret ? (value.Length == 0 ? "off" : "set") : (value.Length == 0 ? defaults[key] + " (the config's own)" : value);
                 log = $"{(string.IsNullOrEmpty(by) ? "someone" : by)} set {key} to {shown}" + (e.live ? "" : ", from the next restart");
@@ -194,6 +197,12 @@ namespace WebMap
                 Discord.Tell(log);
             }
             return null;
+        }
+
+        private static bool RestartDue()  // under gate
+        {
+            foreach (var e in entries) if (!e.live && e.get() != started[e.key]) return true;
+            return false;
         }
 
         private static void Save()        // under gate
@@ -224,6 +233,6 @@ namespace WebMap
         }
 
         // for the tests: a clean slate in a folder of their own
-        internal static void ResetForTests(string mapDataPath) { restartDue = false; Load(mapDataPath); }
+        internal static void ResetForTests(string mapDataPath) => Load(mapDataPath);
     }
 }

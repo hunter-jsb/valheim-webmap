@@ -43,6 +43,17 @@ public class SettingsTests
     }
 
     [Fact]
+    public void ARestartOnlySettingSetBackNeedsNoRestart()
+    {
+        Fresh();
+        Assert.Null(WebMap.Settings.Set("texture_max_size", "256", "tester", out _, out bool due));
+        Assert.True(due);
+        Assert.Null(WebMap.Settings.Set("texture_max_size", "", "tester", out _, out due));
+        Assert.False(due);
+        Assert.Contains("\"restart\":false", WebMap.Settings.Json());
+    }
+
+    [Fact]
     public void ADiscordIdMustBeDigitsAndTheBotTokenIsMasked()
     {
         Fresh();
