@@ -44,6 +44,16 @@
 * The planning board's colour picker has a class of its own, `.colour`, where it shared `.sw`
   with the legend's swatches: the legend's swatches lose the faint ring the picker's rule gave
   them, and look as the map's legend does. The picker is unchanged.
+* The viewer has a lint, `npm run lint` (ESLint, dev only, at the repo root), and CI runs it
+  before `node --test`: every script and the pages' inline ones are held to what the cleanup
+  left -- no name read that was never declared (a window property such as `name` or `status`
+  included), none declared and never read, no `var`, and a classic script defines its one
+  global and nothing else -- with no rules of style. It found a count the 3D view kept and never
+  showed, and three `let`s never reassigned; nothing a player sees changes. The mod's build
+  treats a warning as an error, so it keeps the none it has.
+* `tools/bench.mjs` measured the builds' view through `PIECES`, a name the state object
+  retired: the probe threw in the page, and the bench printed `undefined` for the pieces and
+  empty figures for its base view. It reads `WORLD.piecesShown` now.
 
 ## 2.16.0
 

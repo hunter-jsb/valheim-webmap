@@ -4,7 +4,8 @@
 |---|---|---|
 | `dotnet test WebMap.Tests` | CI, every push and PR | the mod's logic, from the built `WebMap.dll` on .NET 10 |
 | `node --test` | CI, every push and PR | `map-core.js`'s pure functions, the map spotlight's figures |
-| `./package.sh` | CI, every push and PR | the Thunderstore zip, as a tag publishes it |
+| `./package.sh` | CI, every push and PR | the Thunderstore zip, as a tag publishes it; a C# warning fails the build |
+| `npm run lint` | CI, every push and PR | the viewer's scripts, the pages' inline ones, the tests and tools: ESLint, no style rules |
 | `node tools/check.mjs <proxy> <devtools port>` | by hand, over a live server | every page in a headless Chrome |
 
 The .NET layer runs the net48 DLL on CoreCLR. Plain IL runs; anything that reaches the
@@ -47,7 +48,11 @@ test names the failure it guards against; there is one per failure, not one per 
    player's rig standing on their page, the plan, and the tour: a flight resized under it, a stopped tour's last stop, a player's card and its turntable stopping as it goes, a cycle drawn from eight kinds or more, a street beat standing on walked ground at eye height, the 3D view's geometries and textures level across two cycles after a warm one, and a stop putting everything back. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
    escaping, ages, distances, the scale bar, vehicles, and the spotlight's figures from an empty world and a full one, and where deaths name their ground. Not reached: anything signed in (renaming, the pin card, hub
    names), the plan's tools and shared links, sorting and the boss board, and drawing
-   itself beyond what it leaves behind. Live players in 3D: which part a look hangs on
+   itself beyond what it leaves behind. **npm run lint** reaches every script, the pages' inline ones
+   too, for what is wrong before it runs: a name read that was never declared (a window
+   property such as `name` or `status` included, which the browser hands back without a
+   word), one declared and never read, a `var`, a classic script's second global, a read
+   before its `const` is set, a duplicate key or case, code that cannot be reached. Live players in 3D: which part a look hangs on
    which joint and the skin a part's glTF carries, **dotnet test**; when a player is dressed
    again, **node --test**; a rig built on a player's page, **check.mjs**; the standing pose,
    the export and how the rig looks, **nothing**: a running server (`./testserver.sh`, where

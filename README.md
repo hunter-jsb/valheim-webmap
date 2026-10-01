@@ -491,10 +491,15 @@ inks the map sets names in (`NAME_STYLE` in `map-core.js`).
 ```bash
 dotnet test WebMap.Tests     # the mod's logic: builds the mod, then loads WebMap.dll on .NET 10
 node --test                  # map-core.js's pure functions, from the repo root
+npm ci && npm run lint       # the viewer's scripts, the pages' inline ones too, the tests and tools
 ```
 
-The first needs `libs/` set up as for a build. [TESTING.md](TESTING.md) says what each
-layer covers, and what nothing covers yet. CI runs both on every push and pull request.
+The first needs `libs/` set up as for a build; the build treats a warning as an error. The
+lint (ESLint, `eslint.config.js`) holds the viewer to what the cleanup left: no name read that
+was never declared or declared and never read, no `var`, and a classic script defines its one
+global and nothing else; it has no style rules. Its packages are dev tools only, at the repo
+root: the mod ships `WebMap/web` as it stands. [TESTING.md](TESTING.md) says what each layer
+covers, and what nothing covers yet. CI runs all three on every push and pull request.
 
 ### Checking the viewer against a live server
 
@@ -508,7 +513,7 @@ flyout, ground and objects in 3D at the world's start, hubs and dial lines, a ca
 player, the plan loading, the tour landing through a resize, a stopped one staying stopped
 and a player's card turning in it until it goes. One line per check, a
 non-zero exit on any failure, and a screenshot of each page when given a directory. A
-viewer change is done when that is clean.
+viewer change is done when that and `npm run lint` are clean.
 `tools/bench.mjs http://127.0.0.1:8766 9334` pans and zooms the map over the same Chrome
 and prints ms per frame: 16.7 is the screen's own rate, anything above it is lag.
 
