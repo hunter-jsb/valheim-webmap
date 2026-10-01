@@ -1,0 +1,15 @@
+{
+  "name": "valheim-webmap",
+  "private": true,
+  "description": "The viewer's lint and tests, dev only: the mod ships WebMap/web as it stands, no build step.",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint WebMap/web WebMap.Tests/web tools",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-plugin-html": "^8.2.1",
+    "globals": "^17.12.0"
+  }
+}
