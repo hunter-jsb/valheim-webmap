@@ -332,7 +332,7 @@ function streetShot(x, z, heading, o){
   const views = o.path ? [{path: o.path, eye: o.eye}] : [{x, z, street: true, eye: o.eye}];
   const sh = {views, x, z, look: heading, ms: o.ms, path: o.path, pan: o.pan,
     prep: v => {
-      let p = {x, z, h: heading, pan: o.pan};
+      const p = {x, z, h: heading, pan: o.pan};
       // a walk keeps to the stretch nothing stands across; with none, it is a stand at its start
       sh.route = o.path && o.eye < 5 ? clearRun(v, o.path, o.eye) : o.path;
       if(o.path && !sh.route){ const a = headingTo({x, z}, {x: o.path[1][0], z: o.path[1][1]}); p.pan = [a - 45, a + 45]; }
@@ -488,7 +488,7 @@ function coastLine(f, walked){
   const pad = 0.15, pts = shoreIn(f.x - f.w*(.5 + pad), f.z - f.h*(.5 + pad), f.x + f.w*(.5 + pad), f.z + f.h*(.5 + pad), walked);
   if(pts.length < 8) return null;
   pts.sort((a, b) => Math.atan2(a.x - f.x, a.z - f.z) - Math.atan2(b.x - f.x, b.z - f.z));
-  let runs = [[pts[0]]];
+  const runs = [[pts[0]]];
   for(let i = 1; i < pts.length; i++){ const p = pts[i], q = pts[i-1]; if(Math.hypot(p.x - q.x, p.z - q.z) > 80) runs.push([]); runs[runs.length - 1].push(p); }
   const len = r => r.reduce((t, p, i) => i ? t + Math.hypot(p.x - r[i-1].x, p.z - r[i-1].z) : 0, 0);
   const run = runs.sort((a, b) => len(b) - len(a))[0];

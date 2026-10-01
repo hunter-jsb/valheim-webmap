@@ -95,7 +95,7 @@ const SEA = 30;                                              // the game's water
 
 let STATE = null, STATS = null, FEATURES = null, PIECES = null, FOG = null, FOG_BITS = null;
 const LAY = MapCore.layers(API, k => { if(k === "fog"){ FOG = MapCore.explored(LAY.imgs.fog); readFog(); render(); } });
-let REVS = {};
+const REVS = {};
 
 // ---------- the fog, read whole: the walked share of a box, and the walked extremes
 const FOGN = 256;                                            // the map's own sampling, so the share agrees with its tile

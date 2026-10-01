@@ -1253,8 +1253,8 @@ if (uFogOn > 0.5) {
 
   status() {
     if (!this.onStatus) return;
-    let ground = 0, walked = 0, objects = 0;
-    for (const c of this.chunks.values()) { if (c.mesh) ground++; if (!c.missing) walked++; }
+    let ground = 0, objects = 0;
+    for (const c of this.chunks.values()) if (c.mesh) ground++;
     for (const o of this.objChunks.values()) objects += o.count || 0;
     const here = this.chunks.get(Math.floor(this.focus().x / CHUNK) + ',' + Math.floor(this.focus().z / CHUNK));
     this.onStatus({ ground, chunks: this.chunks.size, objects, unwalked: this.mode === 'street' && !!(here && here.missing), library: this.library });
