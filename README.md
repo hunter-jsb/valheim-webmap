@@ -311,6 +311,53 @@ to Discord on its own, over the bot API rather than a webhook:
 
 An empty `discord_bot_token` turns all three off; nothing here touches `discord_webhook`.
 
+### The spawn watch
+
+Valheim never checks what a player's game creates: a client running a spawn mod can put any
+creature anywhere, with no command the server could see. The server does see every new object
+arrive, and each one's id carries the session of the game that made it. The mod notes every
+creature that arrives (a Character with an AI that attacks; fish, birds and deer are left out)
+and lets pass what the game itself makes:
+
+* a kind its spawn tables allow in the biome there, then -- the zone controller's lists and the
+  alternate biomes', read once, against the biomes at the four corners of the spot's zone, which
+  is what the game spawns by, each entry with what it waits on that the server knows: day or
+  night, a persistent event, the distance from the centre, and a boss's key, for a boss down
+  sends its biome's creatures into the other biomes at night (fulings once Yagluth is dead,
+  seekers once the Queen is, the charred once Fader is);
+* anything inside a dungeon, which the game builds 5000 m above its entrance and fills from its
+  own spawners and altar; a boss within its summoning distance of a location, whose altar no
+  object of its own stands for;
+* a kind the running raid spawns, within its range and the 100 m past it where its spawns land;
+* anything tamed, young (a Growup, a Procreation's offspring), hatched (EggGrow, EggHatch) or
+  summoned (tame from the start, or brought by a craftable item's attack: the friendly skeleton,
+  the summoned troll);
+* a kind something within reach makes -- a creature spawner, a spawn area, a boss altar, a
+  creature whose attack summons it (the Elder's roots) -- judged where the creature woke, and
+  across the whole of a location holding one, by the location's size: a draugr village in the
+  Meadows is the game's doing.
+
+The rest are listed for admins, at `/spawns` and under **Creatures that appeared out of place** on
+the settings page: what and how many (a burst of one kind from one game within ten seconds and
+32 m is one entry), its level, where (the biome, the named place, a link to the spot), when,
+whose game created it (the player whose character arrived with that session, kept in
+`sessions.tsv`), the nearest player and whether a raid was running. One log line each, the last
+200 kept in `spawns.tsv`; never in the public feed, `/state` or Discord. The first sweep after a
+start also lists the creatures already in the world that the same rules leave unexplained, as
+"already here at start", each start's list replacing the last. It cannot know the hour or the
+persistent event they came in, so lets both pass; a raid's own pass by the mark the game puts on
+them, and what a creature summons where that creature lives (a Gjall's ticks outlive it). The
+game forgets who made an object as it loads the save, so those carry no creator.
+
+What it does not prove: the game makes a natural spawn through whichever player's game is
+nearest, so a creator is only the game the creature came through. Being out of place is the
+signal; who stood near, and whether one game keeps doing it, is for the admins to weigh. A cheat
+that spawns a kind where it belongs looks like a natural spawn, and one that marks its creature
+tame passes as a tame. The hook is a postfix on `ZDOMan.CreateNewZDO` (a list add for a peer's
+new object) and on `ZDOMan.RPC_ZDOData` (a dictionary lookup per new object, the rules for a
+creature alone); `watch` in `/spawns` says what it has cost. With `debug` on, each creature it
+lets pass is logged with the reason.
+
 ## Configuration
 
 Standard BepInEx config, plus:
@@ -353,6 +400,7 @@ defaults are what runs):
 | `/auth/me` | the signed-in member, `{"id","name","avatar","admin"}`; 401 without a valid session, 404 as `/auth/login` |
 | `/at` | `?x=&z=` in world metres: the biome and height at a walked spot and the places it lies in, with how much of each has been walked and what stands on it; 404 for unwalked ground |
 | `/settings` | `GET` the mod's settings as the site shows them; `POST {"key","value"}` sets one (empty value: back to the config's); needs an admin's session, or `X-Announce-Token` with `X-Admin: 1` |
+| `/spawns` | the creatures that appeared out of place, newest first, the last 200 ([The spawn watch](#the-spawn-watch)): `{"spawns":[{"t","last","prefab","name","count","level","x","z","biome","place","session","by","near","near_m","event","in_event","already","age_s"}],"count","watch"}` -- `session` the game that created it (a string; null for one already here at start), `by` its player, `event` the raid running (null: none), `watch` the hook's cost and the scan at start; same gate as `/settings` |
 | `/discord/guilds` | the bot's guilds, `{"guilds":[{"id","name"}]}`, for the settings picker; same gate as `/settings` |
 | `/discord/channels` | `?guild=` a guild's text and announcement channels, `{"channels":[{"id","name"}]}`; same gate |
 | `/pieces` | every placed piece as `[prefab, x, z, yaw, lit, by]` against a table of prefab footprint and colour and a `players` list: `lit` is a torch's, fire pit's or hearth's fuel, `1` while it burns, `0` once out, `-1` on a piece that does not burn or is not known; `by` who built it, an index into `players` by the name the stats know them by, `-1` for a builder never seen online (JSON, a few hundred KB for a busy world) |

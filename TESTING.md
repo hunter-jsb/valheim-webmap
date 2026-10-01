@@ -19,7 +19,8 @@ test names the failure it guards against; there is one per failure, not one per 
 1. **The Harmony patches on the game's network path** -- `ZRoutedRpcRoutePatch.Prefix`
    and `DeedsRoutePatch.Prefix` (every RPC the server forwards), `DeedsGonePatch.Prefix`
    (every destroy), `ZRoutedRpcPatch`, `DeathWatch.Postfix`, the `ZNet` join and leave
-   patches. A slow path lags everyone, a throw drops chat or deaths, and the
+   patches, and the spawn watch's `SpawnWatchCreatePatch` and `SpawnWatchDataPatch` (every
+   new ZDO a peer sends). A slow path lags everyone, a throw drops chat or deaths, and the
    fake server player the README warns about stops anyone joining. **Nothing covers
    them**; only a running server does (`./testserver.sh`).
 2. **The sweep's game-thread walk** (`StructureMap`): too many ZDOs a frame hitches the
@@ -99,5 +100,11 @@ test names the failure it guards against; there is one per failure, not one per 
     `ChatRelay.LinesToSpeak` directly. The `Timer` loop itself, the Harmony hookup that
     calls `Discord.PostChat`, and the settings picker's two routes: **nothing**; those
     need a running server and a real bot token.
-12. **The version** BepInEx logs at load: `manifest.json`'s, compiled in by the build;
+12. **The spawn watch.** Its rules (`SpawnWatch.Why`, `Reaches`): a kind in its biome, one out
+    of it with no raid, a raid's own near it and nothing else, tamed, young and summoned, a
+    location holding its spawner; a burst as one entry (`Add`); `/spawns` for an admin and no
+    member: **dotnet test**. Reading the spawn tables, the prefabs and the world around a spot,
+    the scan at start: **a running server** (`./testserver.sh` on a copied world, where nobody
+    can log in, so a client's batch is played at `ZDOMan.RPC_ZDOData` by a throwaway plugin).
+13. **The version** BepInEx logs at load: `manifest.json`'s, compiled in by the build;
     **dotnet test** reads it back off the plugin.

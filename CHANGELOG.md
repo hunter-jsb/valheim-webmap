@@ -16,6 +16,23 @@
   remembering, and the touch that ends a tour puts back the drawer the tour found rather than
   closing it as a touch beside the drawer does. The page check reloads a phone with its drawer
   open, then shut.
+* The spawn watch. Valheim never checks what a player's game creates, so a client running a
+  spawn mod can put any creature anywhere; the server now notes every creature a player's game
+  creates, with the session it came from, and lists for admins the ones the game's own rules do
+  not account for -- not in their biome's spawn tables as they stand (a boss down sends its
+  biome's creatures into the others at night: fulings once Yagluth is dead, seekers once the
+  Queen is), no running raid of theirs near, nobody's tame, young, hatchling or summons, not in a
+  dungeon, no spawner, altar or summoning creature of theirs within reach. `GET /spawns` (the settings' gate) and **Creatures that appeared out of place** on the
+  settings page say what appeared, how many, where, when, whose game created it, the nearest
+  player and whether a raid was running; a burst is one entry, each is one log line, and the
+  list (`spawns.tsv`) and the sessions' players (`sessions.tsv`) survive a restart. The first
+  sweep after a start lists the creatures already in the world that the rules leave unexplained,
+  as already here: the game forgets who made what it loads. The page says it plainly: the game
+  makes a natural spawn through whichever player's game is nearest, so being out of place is the
+  signal, not the creator. Nothing of it reaches the public feed, `/state` or Discord.
+* A browser that goes away while the mod is still answering it no longer puts a line labelled
+  Fatal in the server's log (`Unable to write data to the transport connection`, a couple of
+  dozen a day): the mod drops that one connection quietly, and with `debug` on says so.
 
 ## 2.16.1
 
