@@ -33,10 +33,10 @@
 * A browser that goes away while the mod is still answering it no longer puts a line labelled
   Fatal in the server's log (`Unable to write data to the transport connection`, a couple of
   dozen a day): the mod drops that one connection quietly, and with `debug` on says so.
-* A training dummy is no creature. The game makes it a Character, so a punch on one counted as a
-  hit on a creature, and the dummy is never alerted, so every punch counted as a backstab too
-  (and knocking it down would have been a kill): a player training on dummies came out an
-  Assassin. Hits, backstabs and kills now count creatures alone.
+* A training dummy is no creature. The game makes it a Character with a monster's AI, so a punch
+  on one counted as a hit on a creature, and its alert flag reads false as the punches land, so
+  every one counted as a backstab too (and taking it down would have been a kill): a player
+  training on dummies came out an Assassin. Hits, backstabs and kills now count creatures alone.
 * An item a smelter makes while someone loads it counts. The poll read only how much ore was
   queued, so one finished and one loaded between two polls left the count standing and the item
   went uncounted, every loader after it credited one item late; the smelter's bake timer going

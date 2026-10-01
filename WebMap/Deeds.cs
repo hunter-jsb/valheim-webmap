@@ -183,8 +183,8 @@ namespace WebMap
             return k;
         }
 
-        // A Character that is a build piece is the training dummy: never alerted, so every
-        // hit on it read as a backstab, and taking it down read as a kill.
+        // A Character that is a build piece is the training dummy: its alert flag reads false
+        // as the punches land, so every one read as a backstab, and taking it down as a kill.
         internal static bool IsCreature(bool player, bool piece) => !player && !piece;
     }
 }
