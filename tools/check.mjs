@@ -60,15 +60,15 @@ async function map() {
   check("map: draws its markers", drawn, `${await p.ev(`document.querySelectorAll("#markers .marker").length`)} markers`);
 
   // a mid zoom: the walked world fitted, then two steps in, by the map's own buttons
-  const ready = await p.until(`FEATURES && FEATURES.length && LAYERS.ready("fog")`);
+  const ready = await p.until(`WORLD.features && WORLD.features.length && LAYERS.ready("fog")`);
   if (ready) for (const b of ["#zoomFit", "#zoomIn", "#zoomIn"]) await p.click(b);
-  const named = ready && await p.until(`NAMEVIEW && NAMEVIEW.scale === V.scale && NAMEBOXES.length`, 10000);
-  check("map: sets the names at a mid zoom", named, `${await p.ev("NAMEBOXES.length")} names at zoom ${await p.ev("V.scale.toFixed(2)")}`);
+  const named = ready && await p.until(`WORLD.nameView && WORLD.nameView.scale === V.scale && WORLD.nameBoxes.length`, 10000);
+  check("map: sets the names at a mid zoom", named, `${await p.ev("WORLD.nameBoxes.length")} names at zoom ${await p.ev("V.scale.toFixed(2)")}`);
 
   // a name clear of every marker and control, tapped where it was drawn
   const at = named ? await p.ev(`(() => {
-    const r = stage.getBoundingClientRect(), dx = NAMEVIEW.tx - V.tx, dy = NAMEVIEW.ty - V.ty;
-    for (const b of NAMEBOXES) {
+    const r = stage.getBoundingClientRect(), dx = WORLD.nameView.tx - V.tx, dy = WORLD.nameView.ty - V.ty;
+    for (const b of WORLD.nameBoxes) {
       const x = r.left + (b.x0 + b.x1)/2 - dx, y = r.top + (b.y0 + b.y1)/2 - dy;
       const el = document.elementFromPoint(x, y);
       if (el && el.closest("#stage") && !el.closest(".marker, .mapctl, .layers, #mini, #namer")) return {x, y, name: b.f.name};
@@ -79,11 +79,11 @@ async function map() {
   check("map: a tap on a name opens its place card", card, at ? `"${at.name}"` : "no name clear of the controls to tap");
 
   // the kinds of name, as a finger reaches them; one switched off leaves the map
-  const kind = await p.ev(`NAMEBOXES.length ? NAMEBOXES[0].f.kind : null`);
+  const kind = await p.ev(`WORLD.nameBoxes.length ? WORLD.nameBoxes[0].f.kind : null`);
   const group = await p.ev(`(Layers.NAME_GROUPS.flatMap(g => g[1]).find(r => r[2].includes(${JSON.stringify(kind)})) || [])[0]`);
   const opened = await p.click("#lcard") && await p.click("#namesCaret") && await p.until(`getComputedStyle(document.getElementById("namesMenu")).display !== "none"`, 3000);
   const off = opened && !!group && await p.click(`#namesMenu .frow[data-group="${group}"]`)
-    && await p.until(`NAMEVIEW.scale === V.scale && !NAMEBOXES.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
+    && await p.until(`WORLD.nameView.scale === V.scale && !WORLD.nameBoxes.some(b => b.f.kind === ${JSON.stringify(kind)})`, 10000);
   check("map: the names flyout opens on its caret and its switch takes a kind off", off, `${kind} in "${group}"${opened ? "" : ", flyout never opened"}`);
   await p.done("map");
 }
@@ -191,7 +191,7 @@ async function tour() {
   const c = await (await fetch(BASE + "/config")).json();
   const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
   const p = await open("/");
-  await p.until(`FEATURES && FEATURES.length && LAYERS_READY && PIECES_ALL`);
+  await p.until(`WORLD.features && WORLD.features.length && LAYERS_READY && WORLD.pieces`);
   await p.send("Emulation.setDeviceMetricsOverride", { width: 1400, height: 900, deviceScaleFactor: 1, mobile: false });
   await p.ev(`void (Tour.state.on = true, Tour.flyTo(1000, 1000, 4, 2000).then(() => { const q = V.at(stage.clientWidth/2, stage.clientHeight/2); window.__off = Math.hypot(q.px - 1000, q.py - 1000)*4; }))`);
   await sleep(700);
@@ -200,7 +200,7 @@ async function tour() {
   check("tour: a flight resized under it lands on its spot", off !== false && off < 2, `${off.toFixed ? off.toFixed(0) : off} px off`);
   // A stop's place built before it plays, by the view's own measure: the cut waits only a few
   // seconds for it, and under software rendering a place still loading stays on the map.
-  const build = async views => await p.ev(`Street.load().then(v => { Street.feed(LAST_STATE); v.prefetch(${views}); return true; })`)
+  const build = async views => await p.ev(`Street.load().then(v => { Street.feed(WORLD.state); v.prefetch(${views}); return true; })`)
     && await p.until(`Street.view.ready((${views})[0])`, 120000);
   const built = await build(`[{x: ${x}, z: ${z}, dist: 100, pitch: 45}]`);
   await p.ev(`void (Tour.state.on = false, Layers.hidden.add("portal"), Layers.applyHidden(), Tour.start(), Tour.state.run++,
@@ -217,8 +217,8 @@ async function tour() {
   // server remembers no look for is handed the body alone, as on the players page
   const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
   const look = body && { model: +body.n.slice(11), skin: [1, 0.82, 0.68], hair: [0.55, 0.32, 0.14], slots: {}, parts: [body.n] };
-  const who = await p.until(`STATS && STATS.players && STATS.players.length`, 20000) && await p.ev(`(() => {
-    const P = STATS.players, q = P.find(x => x.look && PlayerCard.classify(x, P)) || P.find(x => PlayerCard.classify(x, P)) || P[0];
+  const who = await p.until(`WORLD.stats && WORLD.stats.players && WORLD.stats.players.length`, 20000) && await p.ev(`(() => {
+    const P = WORLD.stats.players, q = P.find(x => x.look && PlayerCard.classify(x, P)) || P.find(x => PlayerCard.classify(x, P)) || P[0];
     if(!q.look) q.look = ${JSON.stringify(look || null)};
     Tour.showCard(q.name); return q.name; })()`);
   const card = `document.getElementById("pcard")`, vk = `Tour.viking`;

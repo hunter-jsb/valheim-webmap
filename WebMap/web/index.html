@@ -430,25 +430,40 @@
 <script>
 // ---------- the view and the scene ----------
 const stage = document.getElementById("stage");
-const inner = document.getElementById("mapCanvas");
-const rctx = inner.getContext("2d");
-const PLAN_ZOOM = MapCore.PLAN_ZOOM, MAX_ZOOM = MapCore.MAX_ZOOM;
+const mapCanvas = document.getElementById("mapCanvas"), mapCtx = mapCanvas.getContext("2d");
 // No committed snapshots: the page reads the game server at the deployment's own
 // API base -- ours a Cloudflare Worker that adds HTTPS + CORS, the mod's viewer
 // same-origin.
 const API = MapCore.cfg.api;
+const esc = MapCore.esc, toPx = MapCore.toPx;
+// The world as this page holds it, and the one place it lives: the tick and the layer loads
+// write it, the draws below and the modules handed it by init only read it.
+const WORLD = {
+  state: null, rev: null,         // the last /state as it came, for the 3D view and the tour; its layer revisions
+  live: null, updated: 0,         // our own 5 s probe, fresher than Statuspage's 15-minute cron; when it last answered
+  status: null,                   // Statuspage's summary, where the deployment has a status page
+  players: {}, messages: [],
+  pins: [], pinsAt: 0,            // when a write last answered with the pins, which the tick then leaves alone
+  vehicles: null,                 // boats and carts; null = not fetched
+  portals: [],                    // portals and the links between connected pairs
+  graves: [],                     // tombstones still standing, i.e. gear still out there
+  traders: [],                    // Haldor, Hildir, the Bog Witch: only those in walked ground
+  deaths: [], deathsAsCame: null, // where people died, newest last; as it came, to spot a change
+  who: null,                      // one player's deaths only, from a link off the players page
+  forest: {},                     // /forest/stats: trees standing, stumps cut
+  stats: null,                    // the tallies behind the roster's figures
+  pieces: null, builders: [],     // every placed piece as a footprint; who built them, by the index each carries (none from an older mod)
+  piecesShown: null,              // those in walked ground, which replace the structures raster once present
+  features: null,                 // the world's geography with its names, by revision
+  nameBoxes: [], nameView: null,  // where the scene set the names, in its window's coordinates, for a tap
+  explored: null, box: null,      // the walked world's share, and its bounds: the fit, the ground's thumbnails, the tour's far shots
+};
 // any layer arriving or refreshing is a redraw; a fresh fog also re-tests which
 // builds stand in ground someone has walked
-const LAYERS = MapCore.layers(API, k => { if(k === "fog" && PIECES_ALL) refilterPieces(); else drawRaster(); Layers.drawThumbs(); });
-// the world as this page holds it, live, for the modules below to read
-const WORLD = {
-  get players(){ return PLAYERS; }, get portals(){ return PORTALS; }, get pieces(){ return PIECES_ALL; }, get builders(){ return PIECE_PLAYERS; },
-  get deaths(){ return DEATHS; }, get graves(){ return GRAVES; }, get traders(){ return TRADERS; }, get vehicles(){ return VEHICLES; },
-  get stats(){ return STATS; }, get features(){ return FEATURES; }, get pins(){ return PINS; }, get explored(){ return EXPLORED; },
-  get box(){ return EXPLORED_BOX; }, get rev(){ return LAST_REV; }, get state(){ return LAST_STATE; }, get forest(){ return FOREST; }};
+const LAYERS = MapCore.layers(API, k => { if(k === "fog" && WORLD.pieces) refilterPieces(); else drawRaster(); Layers.drawThumbs(); });
 // the window onto the map: drag to pan, wheel or pinch to zoom, a tap opens what is there
 const V = MapCore.view(stage, {
-  paint, max: MAX_ZOOM,
+  paint, max: MapCore.MAX_ZOOM,
   guard: ".mapctl, .layers, #mini, #namer, .v3d, #pcard",
   down: () => { if(!namer.hidden && !placing()) closeCard(); },
   tap: (x, y, e, target) => {
@@ -466,15 +481,16 @@ const V = MapCore.view(stage, {
 // It changes with the data or a switch, never with a pan, so it is rendered once
 // per zoom into a window the pans slide over.
 function renderScene(g, v){
+  const shown = WORLD.piecesShown;
   MapCore.drawRasters(g, v, LAYERS.imgs,
     {bg:"#000", ground:Layers.ground, forest:!Layers.hidden.has("forest") && Layers.ground !== "atlas",
-     structures:!Layers.hidden.has("builds") && !PIECES, trails:Layers.details.has("trails")});
-  if(PIECES && !Layers.hidden.has("builds"))
-    MapCore.drawPieces(g, v, PIECES, {plan: v.scale >= PLAN_ZOOM && !Layers.hidden.has("plan")});
-  if(PIECES && Layers.details.has("fires")) MapCore.drawFires(g, v, PIECES);
-  if(Layers.details.has("deaths")) MapCore.drawDeaths(g, v, DEATH_WHO ? DEATHS.filter(d => d.name === DEATH_WHO) : DEATHS);
-  NAMEBOXES = Layers.showDetail("names") ? MapCore.drawNames(g, v, FEATURES, MapCore.explored(LAYERS.imgs.fog), {hide: Layers.hiddenKinds()}) : [];
-  NAMEVIEW = v;
+     structures:!Layers.hidden.has("builds") && !shown, trails:Layers.details.has("trails")});
+  if(shown && !Layers.hidden.has("builds"))
+    MapCore.drawPieces(g, v, shown, {plan: v.scale >= MapCore.PLAN_ZOOM && !Layers.hidden.has("plan")});
+  if(shown && Layers.details.has("fires")) MapCore.drawFires(g, v, shown);
+  if(Layers.details.has("deaths")) MapCore.drawDeaths(g, v, WORLD.who ? WORLD.deaths.filter(d => d.name === WORLD.who) : WORLD.deaths);
+  WORLD.nameBoxes = Layers.showDetail("names") ? MapCore.drawNames(g, v, WORLD.features, MapCore.explored(LAYERS.imgs.fog), {hide: Layers.hiddenKinds()}) : [];
+  WORLD.nameView = v;
 }
 const SCENE = MapCore.viewCache(renderScene, () => V.request());
 // the scene changed: the next frame renders it afresh
@@ -482,8 +498,8 @@ function drawRaster(){ SCENE.invalidate(); V.request(); }
 function paint(){
   if(Street.on) return;             // under the 3D view nobody sees it; leaving asks again
   const W = stage.clientWidth, H = stage.clientHeight;
-  if(inner.width !== W || inner.height !== H){ inner.width = W; inner.height = H; }
-  SCENE.draw(rctx, {scale: V.scale, tx: V.tx, ty: V.ty, w: W, h: H}, "#000");
+  if(mapCanvas.width !== W || mapCanvas.height !== H){ mapCanvas.width = W; mapCanvas.height = H; }
+  SCENE.draw(mapCtx, {scale: V.scale, tx: V.tx, ty: V.ty, w: W, h: H}, "#000");
   // the portal lines see the same window, in texture coordinates
   document.getElementById("portalLinks").setAttribute("viewBox",
     `${(-V.tx/V.scale).toFixed(3)} ${(-V.ty/V.scale).toFixed(3)} ${(W/V.scale).toFixed(3)} ${(H/V.scale).toFixed(3)}`);
@@ -506,46 +522,39 @@ function positionMarkers(){
     if(!crowded) kept.push({x, y});
   });
 }
-function buildMarkers(players, pinList, vehicles){
-  const p = (players||[]).map(m =>
-    `<div class="marker" data-px="${m.px}" data-py="${m.py}">`
-    + `<span class="dot"></span><span class="nm">${esc(m.name)}</span></div>`);
-  const q = (pinList||[]).map(m =>
+function buildMarkers(){
+  // only those who show themselves on the in-game map carry a position
+  const p = ((WORLD.players && WORLD.players.players) || []).filter(m => m.x != null && m.z != null).map(m => { const q = toPx(m.x, m.z);
+    return `<div class="marker" data-px="${q.px}" data-py="${q.py}">`
+    + `<span class="dot"></span><span class="nm">${esc(m.name)}</span></div>`; });
+  const q = (WORLD.pins||[]).map(m =>
     `<div class="marker pin" data-id="${esc(m.id||"")}" data-px="${m.px}" data-py="${m.py}" title="${esc(m.owner||"")}">`
     + `<svg class="ic"><use href="#ic-${MapCore.PIN_ICON[m.type] || "pin-dot"}"></use></svg>`
     + (m.text ? `<span class="nm">${esc(m.text)}</span>` : "") + `</div>`);
   // named on hover only -- a harbour with six boats would be a wall of text.
   // Hull size is drawn to scale so a longship reads as one without a label.
-  const v = (vehicles||[]).map(m => {
+  const v = (WORLD.vehicles||[]).map(m => {
     const st = MapCore.vehicleStyle(m);
     return `<div class="marker veh" data-kind="${st.label.toLowerCase()}" data-px="${m.px}" data-py="${m.py}" title="${esc(st.label)}">`
       + `<svg class="ic" style="width:${st.size}px;height:${st.size}px"><use href="#ic-${st.icon}"></use></svg></div>`;
   });
   // Named, because the name is the whole point of a portal.
-  const w = (PORTALS||[]).map(m =>
-    `<div class="marker portal${HIGHLIGHT.has(m.id)?" hl":""}" data-id="${esc(m.id)}" data-px="${m.px}" data-py="${m.py}" title="${esc(m.name||"unnamed portal")}">`
+  const w = (WORLD.portals||[]).map(m =>
+    `<div class="marker portal${ARRIVAL.portals.has(m.id)?" hl":""}" data-id="${esc(m.id)}" data-px="${m.px}" data-py="${m.py}" title="${esc(m.name||"unnamed portal")}">`
     + `<svg class="ic"><use href="#ic-portal"></use></svg>`
     + (m.name ? `<span class="nm">${esc(m.name)}</span>` : "") + `</div>`);
   // Someone's gear is still lying here; the name matters more than the icon.
-  const g = (GRAVES||[]).map(m =>
+  const g = (WORLD.graves||[]).map(m =>
     `<div class="marker grave" data-px="${m.px}" data-py="${m.py}" title="${esc(m.name||"grave")}${m.age>0?" · "+graveAge(m.age):""}">`
     + `<svg class="ic"><use href="#ic-grave"></use></svg>`
     + (m.name ? `<span class="nm">${esc(m.name)}</span>` : "") + `</div>`);
   // A trader is a place, so it wears its name like a portal does.
-  const t = (TRADERS||[]).map(m =>
+  const t = (WORLD.traders||[]).map(m =>
     `<div class="marker trader" data-px="${m.px}" data-py="${m.py}" title="${esc(m.name)}">`
     + `<svg class="ic"><use href="#ic-trader"></use></svg><span class="nm">${esc(m.name)}</span></div>`);
   document.getElementById("markers").innerHTML = p.concat(q).concat(v).concat(w).concat(g).concat(t).join("");
   drawPortalLinks();
   positionMarkers();
-}
-// Builds arrive as footprints once per revision and are drawn from the parsed
-// list every frame; a fresh fog re-tests which of them stand in walked ground.
-let PIECES_ALL = null;
-function setPieces(list, pj){ PIECES_ALL = list; PIECE_PLAYERS = (pj && Array.isArray(pj.players)) ? pj.players : []; refilterPieces(); }
-function refilterPieces(){
-  PIECES = MapCore.filterExplored(PIECES_ALL, LAYERS.imgs.fog);
-  drawRaster();
 }
 
 // One line per connected pair, drawn once from each end's own record, so a pair
@@ -553,10 +562,10 @@ function refilterPieces(){
 function drawPortalLinks(){
   const svg = document.getElementById("portalLinks");
   if(!svg) return;
-  const by = new Map((PORTALS||[]).map(p=>[p.id,p]));
+  const by = new Map((WORLD.portals||[]).map(p=>[p.id,p]));
   const seen = new Set();
   let out = "";
-  for(const p of PORTALS||[]){
+  for(const p of WORLD.portals||[]){
     if(!p.to) continue;
     const q = by.get(p.to);
     if(!q) continue;
@@ -583,18 +592,22 @@ function graveAge(sec){
 Layers.init({layers: LAYERS, world: WORLD, drawRaster});
 
 // ---------- fitting and the map buttons ----------
-// Zoom to what's actually been explored — a new world is almost entirely fog. The share
-// and the box are kept for the tile, the ground's thumbnails and the tour.
-function fitExplored(doFit = true){
+// the walked world as the fog has it, into WORLD; false while the fog has not decoded
+function takeWalked(){
   const w = MapCore.walked(LAYERS.imgs.fog);
-  if(!w) return V.fitWorld();
-  EXPLORED = w.share;
+  if(!w) return false;
+  WORLD.explored = w.share; WORLD.box = w.box;
+  return true;
+}
+// Zoom to what's actually been explored — a new world is almost entirely fog.
+function fitExplored(doFit = true){
+  if(!takeWalked()) return V.fitWorld();
   renderTiles();
-  EXPLORED_BOX = w.box;
   Layers.drawThumbs();
   if(!doFit) return;
-  if(!EXPLORED_BOX) return V.fitWorld();
-  V.fitBox(EXPLORED_BOX.x, EXPLORED_BOX.y, EXPLORED_BOX.w, EXPLORED_BOX.h);
+  const b = WORLD.box;
+  if(!b) return V.fitWorld();
+  V.fitBox(b.x, b.y, b.w, b.h);
 }
 
 document.getElementById("mini").onclick = () => MapCore.toggleSide(true);   // the phone's drawer
@@ -619,81 +632,61 @@ addEventListener("keydown", e => {
   else if((e.key === "l" || e.key === "L") && !e.ctrlKey && !e.metaKey && !e.altKey) Layers.nextGround();
 });
 
-// ---------- live data (straight from the server) ----------
-// Polling is gated on tab visibility so a forgotten tab costs nothing.
-let VEHICLES = null;      // boats and carts, refreshed on the slow tick; null = not fetched
-let PORTALS = [];         // portals and the links between connected pairs
-let GRAVES = [];          // tombstones still standing, i.e. gear still out there
-let TRADERS = [];         // Haldor, Hildir, the Bog Witch: only those in walked ground
-let DEATHS = [], DEATHS_JSON = null;   // where people died, newest last; as it came, to spot a change
-let DEATH_WHO = null;     // one player's deaths only, from a link off the players page
-let FEATURES = null;      // the world's geography with its names, by revision
-let NAMEBOXES = [], NAMEVIEW = null;   // where the names were drawn, in the scene window's coordinates, for a tap
-let LAST_REV = null;      // the last tick's layer revisions, for a layer asked for later
-let LAST_STATE = null;    // the last tick as it came, for the 3D view and the tour
-let PIECES = null;        // every placed piece as a footprint; replaces the raster when present
-let PIECE_PLAYERS = [];   // who built them, by the index each piece carries; none from an older mod
-let FOREST = {};          // /forest/stats: trees standing, stumps cut
-const BUILD = "2026-09-26b";   // shown in the footer, so a stale page is obvious
-let PLAYERS = {}, PINS = [], EXPLORED = null;
-let EXPLORED_BOX = null;  // the walked world's bounds on the map: the fit, the ground's thumbnails, the tour's far shots
-const GEOM = MapCore.geom;
-
-const esc = MapCore.esc;
+// ---------- the status box ----------
 // Statuspage summary, rendered in the site's own styling rather than their
 // floating widget. Their v2 API is CORS-open, so no proxy is involved. A
 // deployment with no status page keeps the box: it carries the live pill alone.
 const STATUS_JSON = MapCore.cfg.status;
 if(STATUS_JSON){ try{ document.getElementById("status").href = new URL(STATUS_JSON).origin; }catch(e){} }
-let LIVE_UP = null;                        // our own 5s probe: fresher than the 15min cron
-const CLS = {operational:"ok", degraded_performance:"warn", partial_outage:"warn",
-             major_outage:"bad", under_maintenance:"warn"};
-
-function setPill(online){ LIVE_UP = online; renderStatus(); }
-
-let SUMMARY = null;
+const STATUS_CLASS = {operational:"ok", degraded_performance:"warn", partial_outage:"warn",
+                      major_outage:"bad", under_maintenance:"warn"};
 async function tickStatus(){
-  try{ SUMMARY = await fetch(STATUS_JSON, {cache:"no-store"}).then(r=>r.json()); }   // Statuspage's own, not the server: no API base
-  catch(e){ SUMMARY = null; }
+  try{ WORLD.status = await fetch(STATUS_JSON, {cache:"no-store"}).then(r=>r.json()); }   // Statuspage's own, not the server: no API base
+  catch(e){ WORLD.status = null; }
   renderStatus();
 }
 function renderStatus(){
   const head=document.getElementById("stext"), rows=document.getElementById("srows");
-  const box=document.getElementById("status");
-  if(!SUMMARY){
-    box.className = "status " + (LIVE_UP===true?"ok":LIVE_UP===false?"bad":"");
-    head.textContent = LIVE_UP===true?"Online":LIVE_UP===false?"Offline":"Status unavailable";
+  const box=document.getElementById("status"), live = WORLD.live, sum = WORLD.status;
+  if(!sum){
+    box.className = "status " + (live===true?"ok":live===false?"bad":"");
+    head.textContent = live===true?"Online":live===false?"Offline":"Status unavailable";
     rows.innerHTML = ""; return;
   }
-  const comps = (SUMMARY.components||[]).filter(c=>!c.group);
-  let overall = SUMMARY.status?.description || "";
-  let cls = SUMMARY.status?.indicator === "none" ? "ok" : "warn";
+  const comps = (sum.components||[]).filter(c=>!c.group);
+  let overall = sum.status?.description || "";
+  let cls = sum.status?.indicator === "none" ? "ok" : "warn";
   // the cron behind Statuspage runs every 15 minutes, so a live failure wins
-  if(LIVE_UP === false){ cls="bad"; overall="Server unreachable"; }
+  if(live === false){ cls="bad"; overall="Server unreachable"; }
   box.className = "status " + cls;
   head.textContent = overall;
   rows.innerHTML = comps.map(c=>{
-    const live = (LIVE_UP===false && /server/i.test(c.name)) ? "major_outage" : c.status;
-    return `<span class="${CLS[live]||""}"><span class="dot"></span>${esc(c.name)}</span>`;
+    const now = (live===false && /server/i.test(c.name)) ? "major_outage" : c.status;
+    return `<span class="${STATUS_CLASS[now]||""}"><span class="dot"></span>${esc(c.name)}</span>`;
   }).join("");
 }
-const ago = MapCore.ago, toPx = MapCore.toPx;
+// the line under the legend: when the server last answered, or that it did not
+function renderStamp(){
+  document.getElementById("stamp").textContent = WORLD.live === false ? "server unreachable"
+    : "live · updated " + new Date(WORLD.updated).toLocaleTimeString();
+}
 
 // ---------- the spotlight ----------
 // The tallies behind the roster's figures come every five minutes.
-let STATS = null;
 async function tickStats(){
-  try{ STATS = await MapCore.fetchJSON(API, "/stats/players"); }catch(e){}
+  try{ WORLD.stats = await MapCore.fetchJSON(API, "/stats/players"); }catch(e){}
   Spot.render();
 }
 const worldSpots = () => Spot.world(WORLD);
 Spot.init({id: "spot", entries: worldSpots, every: 7000, when: () => !Street.on});
 
+// the figures beside the status, who is on, the phone's pill, the markers and the spotlight
 function renderTiles(){
-  const count = (PLAYERS && PLAYERS.count != null) ? PLAYERS.count : "\u2014";
+  const P = WORLD.players;
+  const count = (P && P.count != null) ? P.count : "\u2014";
   document.getElementById("pcount").textContent = count;
-  document.getElementById("explored").innerHTML = EXPLORED==null ? "\u2014" : (EXPLORED*100).toFixed(1) + "<small>%</small>";
-  const list = (PLAYERS && PLAYERS.players) || [];
+  document.getElementById("explored").innerHTML = WORLD.explored==null ? "\u2014" : (WORLD.explored*100).toFixed(1) + "<small>%</small>";
+  const list = (P && P.players) || [];
   const hiddenCount = list.filter(p=>p.hidden).length;
   let line = list.length ? `<b>Online:</b> ${list.map(p=>esc(p.name)).join(", ")}` : "";
   if(list.length && hiddenCount === list.length)
@@ -702,14 +695,12 @@ function renderTiles(){
   document.getElementById("mini").classList.toggle("on", list.length > 0);
   document.getElementById("miniText").innerHTML = list.length
     ? `<b>${list.length} online</b> · ${esc(list.map(p=>p.name).join(", "))}` : "nobody online";
-  buildMarkers(list.filter(p=>p.x!=null && p.z!=null).map(p=>({name:p.name, ...toPx(p.x,p.z)})),
-               PINS, VEHICLES);
+  buildMarkers();
   Spot.render();
 }
 // Chat is a few lines a day and the joins, leaves and deaths are a few hundred,
 // so a feed showing both is not a chat monitor. The server marks its own lines
 // (ev); on a server too old to say, a line with no speaker is one of them.
-let MESSAGES = [];
 let FEED = "chat";
 try{ const f = localStorage.getItem("xnv.feed"); if(f==="chat"||f==="all") FEED = f; }catch(e){}
 const isEvent = m => m.ev != null ? !!m.ev : (!m.name || m.name==="Server");
@@ -725,58 +716,73 @@ document.getElementById("feedsw").addEventListener("click", e => {
 setFeed(FEED);
 function renderFeed(){
   const el=document.getElementById("feed");
-  const msgs = FEED==="chat" ? MESSAGES.filter(m=>!isEvent(m)) : MESSAGES;
+  const msgs = FEED==="chat" ? WORLD.messages.filter(m=>!isEvent(m)) : WORLD.messages;
   if(!msgs.length){
     el.innerHTML = `<div class="msg sys">${FEED==="chat" ? "nobody has said anything yet" : "nothing yet"}</div>`;
     return;
   }
   el.innerHTML = msgs.slice().reverse().map(m=>{
     const sys = !m.name || m.name==="Server";
-    const when = m.ts ? `<span class="t">${esc(ago(m.ts))}</span>` : "";
+    const when = m.ts ? `<span class="t">${esc(MapCore.ago(m.ts))}</span>` : "";
     return sys ? `<div class="msg sys">${esc(m.message||"")}${when}</div>`
                : `<div class="msg"><span class="who">${esc(m.name)}</span>: ${esc(m.message||"")}${when}</div>`;
   }).join("");
 }
 
+// ---------- the live data ----------
+// Polling is gated on tab visibility so a forgotten tab costs nothing. Each tick WORLD takes
+// the document, the draws that read it follow in this order, then the layers whose revision moved.
 async function tickState(){
   let s;
   try{ s = await MapCore.fetchState(API); }
-  catch(e){
-    setPill(false);
-    document.getElementById("stamp").textContent = "server unreachable";
-    return;
-  }
-  setPill(true);
-  document.getElementById("stamp").textContent = "live · updated " + new Date().toLocaleTimeString();
-  PLAYERS = s.players || {};
-  VEHICLES = ((s.vehicles||{}).vehicles||[]).map(v=>({kind:v.kind, name:v.name, ...toPx(v.x,v.z)}));
-  PORTALS = ((s.portals||{}).portals||[]).map(p=>({id:p.id, name:p.name, to:p.to, ...toPx(p.x,p.z)}));
-  GRAVES = ((s.graves||{}).graves||[]).map(g=>({name:g.name, age:g.age, ...toPx(g.x,g.z)}));
-  TRADERS = ((s.traders||{}).traders||[]).map(t=>({name:t.name, ...toPx(t.x,t.z)}));
-  const dj = JSON.stringify(s.deaths || null);
-  if(dj !== DEATHS_JSON){
-    DEATHS_JSON = dj;
-    DEATHS = ((s.deaths||{}).deaths||[]).map(d=>({name:d.n, t:d.t, ...toPx(d.x,d.z)}));
-    if(Layers.details.has("deaths")) drawRaster();
-  }
-  LAST_REV = s.rev;
-  LAST_STATE = s;
-  if(Street.on || Tour.state.on) Street.feed(s);
-  if(Date.now() - PINS_AT > 3000) PINS = MapCore.parsePins(s.pins);
-  if(s.forest) FOREST = s.forest;
+  catch(e){ WORLD.live = false; renderStatus(); renderStamp(); return; }
+  const moved = takeState(s);
+  renderStatus(); renderStamp();
+  if(moved.deaths && Layers.details.has("deaths")) drawRaster();
+  if(Street.on || Tour.state.on) Street.feed(s);   // the 3D view, while one is up
   renderTiles();
-  if(s.messages){ MESSAGES = s.messages; renderFeed(); }
-  await LAYERS.sync(s.rev, {
-    features: setFeatures,
+  if(moved.messages) renderFeed();
+  await syncLayers(s.rev);
+}
+// one /state into WORLD; which of its slower parts moved, for the draws
+function takeState(s){
+  WORLD.live = true; WORLD.updated = Date.now();
+  WORLD.players = s.players || {};
+  WORLD.vehicles = ((s.vehicles||{}).vehicles||[]).map(v=>({kind:v.kind, name:v.name, ...toPx(v.x,v.z)}));
+  WORLD.portals = ((s.portals||{}).portals||[]).map(p=>({id:p.id, name:p.name, to:p.to, ...toPx(p.x,p.z)}));
+  WORLD.graves = ((s.graves||{}).graves||[]).map(g=>({name:g.name, age:g.age, ...toPx(g.x,g.z)}));
+  WORLD.traders = ((s.traders||{}).traders||[]).map(t=>({name:t.name, ...toPx(t.x,t.z)}));
+  const dj = JSON.stringify(s.deaths || null), deaths = dj !== WORLD.deathsAsCame;
+  if(deaths){
+    WORLD.deathsAsCame = dj;
+    WORLD.deaths = ((s.deaths||{}).deaths||[]).map(d=>({name:d.n, t:d.t, ...toPx(d.x,d.z)}));
+  }
+  WORLD.rev = s.rev;
+  WORLD.state = s;
+  if(Date.now() - WORLD.pinsAt > 3000) WORLD.pins = MapCore.parsePins(s.pins);
+  if(s.forest) WORLD.forest = s.forest;
+  if(s.messages) WORLD.messages = s.messages;
+  return {deaths, messages: !!s.messages};
+}
+// the large layers, each fetched only when its revision moved
+function syncLayers(rev){
+  return LAYERS.sync(rev, {
+    features: takeFeatures,
     chart: true,                    // the atlas ground, and the card's thumbnail of it
     trails: () => Layers.details.has("trails"),
-    pieces: setPieces,
-    structures: () => !PIECES,      // the raster only stands in until the footprints land
+    pieces: takePieces,
+    structures: () => !WORLD.piecesShown,   // the raster only stands in until the footprints land
     onFog: () => setTimeout(()=>fitExplored(false), 60),
   });
 }
-
-function setFeatures(list){ FEATURES = list; drawRaster(); }
+function takeFeatures(list){ WORLD.features = list; drawRaster(); }
+// Builds arrive as footprints once per revision and are drawn from the parsed
+// list every frame; a fresh fog re-tests which of them stand in walked ground.
+function takePieces(list, pj){ WORLD.pieces = list; WORLD.builders = (pj && Array.isArray(pj.players)) ? pj.players : []; refilterPieces(); }
+function refilterPieces(){
+  WORLD.piecesShown = MapCore.filterExplored(WORLD.pieces, LAYERS.imgs.fog);
+  drawRaster();
+}
 
 // ---------- the place card ----------
 // A tap on the map asks the server what is there -- the biome patch, the landmass,
@@ -846,8 +852,8 @@ async function saveName(name){
   note.className = "note"; note.textContent = "saving\u2026";
   try{
     const r = await MapCore.post(API, "/names", {id: f.id, name});
-    if(r && r.rev) await LAYERS.features(r.rev, setFeatures);
-    const fresh = (FEATURES || []).find(g => g.id === f.id);
+    if(r && r.rev) await LAYERS.features(r.rev, takeFeatures);
+    const fresh = (WORLD.features || []).find(g => g.id === f.id);
     if(fresh){ f.name = fresh.name; f.by = fresh.by; }
     c.editing = false; renderCard();
   }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; }
@@ -871,8 +877,9 @@ document.addEventListener("pointerdown", e => { if(!namer.hidden && !e.target.cl
 // a tap, as against a drag: on a name it opens that place; anywhere else, what is there
 function tapName(x, y){
   let f = null;
-  if(NAMEVIEW && NAMEVIEW.scale === V.scale && NAMEBOXES.length)
-    f = MapCore.hitName(NAMEBOXES, x + (NAMEVIEW.tx - V.tx), y + (NAMEVIEW.ty - V.ty));
+  const nv = WORLD.nameView, boxes = WORLD.nameBoxes;
+  if(nv && nv.scale === V.scale && boxes.length)
+    f = MapCore.hitName(boxes, x + (nv.tx - V.tx), y + (nv.ty - V.ty));
   const q = V.at(x, y), t = MapCore.toWorld(q.px, q.py), w = f ? {x: f.x, z: f.z} : t;
   openCard(x, y, w.x, w.z, f, t);
 }
@@ -927,14 +934,13 @@ function renderPin(c){
   }
 }
 function openPin(id, x, y, msg){
-  const pin = PINS.find(p => p.id === id);
+  const pin = WORLD.pins.find(p => p.id === id);
   if(!pin) return closeCard();
   CARD = {pin, x, y, mode: "view", msg: msg || ""};
   renderCard();
 }
 // Each write answers with the pins as they now stand. /state sits on the edge for
 // 2 s, so for a moment after a write that answer is the fresher, and the tick waits.
-let PINS_AT = 0;
 async function writePin(body){
   const note = document.getElementById("nameNote");
   note.className = "note"; note.textContent = "saving\u2026";
@@ -942,7 +948,7 @@ async function writePin(body){
     const r = await MapCore.post(API, "/pins", body);
     // a mod from before site pins answers a POST with its CSV: no answer at all
     if(!r || !r.ok || !r.pins) throw new Error("the server takes pins from the site after its next restart");
-    PINS = MapCore.parsePins(r.pins); PINS_AT = Date.now();
+    WORLD.pins = MapCore.parsePins(r.pins); WORLD.pinsAt = Date.now();
     renderTiles();
     return r;
   }catch(e){ note.className = "note bad"; note.textContent = e.message || "could not save"; return null; }
@@ -964,6 +970,7 @@ async function movePin(c, x, y){
   if(r && CARD === c) openPin(c.pin.id, x, y, "moved");
 }
 
+const BUILD = "2026-09-26b";   // shown in the footer, so a stale page is obvious
 async function boot(){
   document.getElementById("buildstamp").textContent = "build " + BUILD;
   LAYERS.loadBase();
@@ -993,8 +1000,8 @@ Tour.init({stage, V, layers: LAYERS, api: API, world: WORLD, figures: worldSpots
 // #portal=<id> centres on a portal, on both ends when it is linked; #at=<x>,<z>[,<zoom>]
 // on world metres; #3d=<x>,<z>[&look=<degrees>] stands you there in 3D; #layers=a,b,c
 // switches layers on. This is how other pages link in.
-const HIGHLIGHT = new Set();          // portal ids wearing the arrival ring
-let HL_T = 0, LAYERS_READY = false;
+const ARRIVAL = {portals: new Set(), timer: 0};   // portal ids wearing the arrival ring, and the timer that takes it off
+let LAYERS_READY = false;
 let HASH_VIEW = /(^|[#&])(portal|at|3d)=/.test(location.hash);
 function hashParams(){
   const out = {};
@@ -1004,32 +1011,31 @@ function hashParams(){
   }
   return out;
 }
-function centerOn(px, py, z){ V.centre(px, py, z); }
 function applyHash(){
   const p = hashParams();
   if(!p["3d"] && Street.on) Street.leave(true);   // a link elsewhere: the map, as it asks
   const asked = Layers.follow(p);                 // #layers= and #details=, kept as if clicked
-  DEATH_WHO = p.who || null;
+  WORLD.who = p.who || null;
   if(asked || p.who) drawRaster();
-  const by = new Map((PORTALS||[]).map(q=>[q.id,q]));
+  const by = new Map((WORLD.portals||[]).map(q=>[q.id,q]));
   const a = p.portal ? by.get(p.portal) : null;
   let moved = false;
   if(a){
     Layers.showLayer("portal");
     const b = a.to ? by.get(a.to) : null;
-    HIGHLIGHT.clear(); HIGHLIGHT.add(a.id); if(b) HIGHLIGHT.add(b.id);
+    ARRIVAL.portals.clear(); ARRIVAL.portals.add(a.id); if(b) ARRIVAL.portals.add(b.id);
     // a pair only reads with both ends on screen; the floor keeps two portals
     // standing side by side from slamming the view to maximum zoom
     if(b) V.fitBox(Math.min(a.px,b.px), Math.min(a.py,b.py),
                  Math.max(Math.abs(a.px-b.px),8), Math.max(Math.abs(a.py-b.py),8));
-    else centerOn(a.px, a.py, 20);
+    else V.centre(a.px, a.py, 20);
     renderTiles();
-    clearTimeout(HL_T);
-    HL_T = setTimeout(()=>{ HIGHLIGHT.clear(); renderTiles(); }, 3000);
+    clearTimeout(ARRIVAL.timer);
+    ARRIVAL.timer = setTimeout(()=>{ ARRIVAL.portals.clear(); renderTiles(); }, 3000);
     moved = true;
   } else if(p.at){
     const [x,z,zm] = p.at.split(",").map(Number);
-    if(isFinite(x) && isFinite(z)){ const q = toPx(x,z); centerOn(q.px, q.py, zm > 0 ? zm : 20); moved = true; }
+    if(isFinite(x) && isFinite(z)){ const q = toPx(x,z); V.centre(q.px, q.py, zm > 0 ? zm : 20); moved = true; }
   } else if(p["3d"]){
     moved = Street.follow(p);
   }
@@ -1042,7 +1048,7 @@ V.fitWorld();
 // the ground is the whole world and must never show without its fog mask
 LAYERS.whenReady(["base", "fog"], () => {
   LAYERS_READY = true;
-  inner.classList.add("ready");
+  mapCanvas.classList.add("ready");
   fitExplored(!HASH_VIEW);
 });
 boot();
