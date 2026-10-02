@@ -55,6 +55,11 @@
 * The settings page's restart notice goes when a restart-only setting is set back. Any such
   change kept it up until the next restart, though the value set back is the one the server is
   running; it now stands while a restart-only setting differs from what the mod started with.
+* The map served by the mod itself loads as fast as the hosted copy. The JSON layers went out as
+  written -- our world's `/pieces` is 400 KB, nearly six seconds on a slow link, where the hosted
+  copy's proxy zips it to 69 KB -- so the World page sat half drawn, without its players or
+  biomes, while the builds came in. `/pieces`, `/features`, `/locations` and `/stats/players`
+  now go gzipped to a browser that takes it, each compressed once until it changes.
 
 ## 2.16.1
 

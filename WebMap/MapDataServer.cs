@@ -603,15 +603,10 @@ namespace WebMap
                     return true;
                 case "/locations":
                     // the world's locations in walked ground, for the tour
-                    Answer(res, 200, Locations.GetJson());
+                    SendJson(req, res, Locations.GetJson());
                     return true;
                 case "/pieces":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Pieces.GetJson());
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
+                    SendJson(req, res, Pieces.GetJson());
                     return true;
                 case "/state":
                     // One document per tick for a viewer: every small block the page
@@ -640,12 +635,7 @@ namespace WebMap
                         return true;
                     }
                 case "/stats/players":
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Stats.Json(PinsByName()));
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
+                    SendJson(req, res, Stats.Json(PinsByName()));
                     return true;
                 case "/structures/stats":
                     res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
@@ -713,12 +703,7 @@ namespace WebMap
                     }
                 case "/features":
                     // the world's geography with its names; the fog is the viewer's to apply
-                    res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    textBytes = Encoding.UTF8.GetBytes(Features.Json());
-                    res.ContentLength64 = textBytes.Length;
-                    res.Close(textBytes, true);
+                    SendJson(req, res, Features.Json());
                     return true;
                 case "/names":
                     // A name given on the site, by a signed-in member.
@@ -920,6 +905,19 @@ namespace WebMap
         {
             byte[] gz = compressible && TakesGzip(req, body) ? gzipped.GetValue(body, Gzip) : null;
             Send(res, body, gz, contentType);
+        }
+        // The JSON layers too: a busy world's /pieces is 400 KB as written and a sixth of that
+        // zipped, seconds on a slow link. Each layer keeps its document until it changes, so
+        // that string is the key and it is compressed once.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, byte[]> jsonGz =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<string, byte[]>();
+        private static void SendJson(HttpListenerRequest req, HttpListenerResponse res, string json)
+        {
+            res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
+            byte[] raw = null;
+            bool zip = json.Length > 1024 && (req.Headers["Accept-Encoding"] ?? "").IndexOf("gzip", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!zip) raw = Encoding.UTF8.GetBytes(json);
+            Send(res, raw, zip ? jsonGz.GetValue(json, j => Gzip(Encoding.UTF8.GetBytes(j))) : null, "application/json");
         }
         private static void Send(HttpListenerResponse res, byte[] body, byte[] gz, string contentType)
         {

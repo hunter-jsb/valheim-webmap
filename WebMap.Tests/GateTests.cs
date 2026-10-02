@@ -117,5 +117,19 @@ namespace WebMap.Tests
             Assert.Equal(403, Get("/settings", Bearer(owner: true, aud: "http://203.0.113.9:3000")));
             Assert.Empty(server.pins);
         }
+
+        // a busy world's JSON layers run to hundreds of KB: seconds on a slow link as written
+        [Fact]
+        public void ABigJsonLayerGoesGzippedToAClientThatTakesIt()
+        {
+            Stats.Load(Dir);
+            for (int i = 0; i < 40; i++) Stats.Join("Viking number " + i);
+            var req = new HttpRequestMessage(HttpMethod.Get, "/stats/players");
+            req.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip");
+            var r = http.Send(req);
+            Assert.Contains("gzip", r.Content.Headers.ContentEncoding);
+            using var text = new StreamReader(new System.IO.Compression.GZipStream(r.Content.ReadAsStream(), System.IO.Compression.CompressionMode.Decompress));
+            Assert.Contains("Viking number 39", text.ReadToEnd());
+        }
     }
 }
