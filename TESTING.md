@@ -36,8 +36,9 @@ test names the failure it guards against; there is one per failure, not one per 
    port, configured as an operator does (the BepInEx config, `announce.token`) -- no
    credentials; the token and the `X-User` it names; `X-User` and `X-Admin` without it; a
    member's session and an admin's; one for another Discord server or another map;
-   `/announce` by the token alone. Not reached: `/auth/login` and `/auth/me` as routes
-   (their rules are `Auth`'s, tested above).
+   `/announce` by the token alone; a JSON layer gzipped. Not reached: `/auth/login` and
+   `/auth/me` as routes (their rules are `Auth`'s, tested above, the 503 of a map that does not
+   know its address yet too).
 4. **Pins.** The chat commands (`!pin`, `!undoPin`, `!deletePin` in
    `ZRoutedRpcPatch.Observe`, whose per-player trim once deleted other players' pins):
    **nothing**, they read a `ZPackage`. Site writes (`MapDataServer.WritePin`): **dotnet
@@ -47,9 +48,12 @@ test names the failure it guards against; there is one per failure, not one per 
    page and checks markers, names at a mid zoom, a tapped name opening its place card, the
    names flyout, a phone's drawer kept across a reload and apart from a desk's, a name tag in
    3D held to the bar title's size up close, hubs and one dial line per tagged unlinked portal, a card per player and a player's rig standing on their page, the plan, and the tour: a flight resized under it, a stopped tour's last stop, a player's card and its turntable stopping as it goes, a cycle drawn from eight kinds or more, a street beat standing on walked ground at eye height, the 3D view's geometries and textures level across two cycles after a warm one, and a stop putting everything back. **node --test** covers the core: pins, pieces, the view's geometry, name hits,
-   escaping, ages, distances, the scale bar, vehicles, and the spotlight's figures from an empty world and a full one, and where deaths name their ground. Not reached: anything signed in (renaming, the pin card, hub
-   names), the plan's tools and shared links, sorting and the boss board, and drawing
-   itself beyond what it leaves behind. **npm run lint** reaches every script, the pages' inline ones
+   escaping, ages, distances, the scale bar, vehicles, and the spotlight's figures from an empty world and a full one, and where deaths name their ground, and ground died on but never walked. Not reached by
+   either: anything signed in (renaming, the pin card, hub names, settings, sign-out), which was
+   driven once by hand in a headless Chrome against `./testserver.sh` with sessions signed by a
+   key of the tester's (`auth_public_key`), and touch, driven once with CDP touch events; the
+   plan's tools and shared links, sorting and the boss board, and drawing itself beyond what it
+   leaves behind. **npm run lint** reaches every script, the pages' inline ones
    too, for what is wrong before it runs: a name read that was never declared (a window
    property such as `name` or `status` included, which the browser hands back without a
    word), one declared and never read, a `var`, a classic script's second global, a read
@@ -72,15 +76,17 @@ test names the failure it guards against; there is one per failure, not one per 
 8. **Stats** (`Seen`, `Death`, `PublishSweep`, `ObserveKeys`, `stats.tsv`): **dotnet test**
    -- distance against a hop, close calls, the four ends of a corpse run, bosses, metres at
    sea, the save and a file from before kills. **Deeds**' crediting (`Hit`, `AreaBroken`,
-   `Gone`): **dotnet test** -- by kind, the window, the last hitter, the owner standing in.
+   `Gone`): **dotnet test** -- by kind, the window, the last hitter, the owner standing in, a
+   training dummy (a Character and a build piece) no creature.
    Reading hits off the wire and classifying what fell: **nothing**; only a running server.
    **Gear**: an item's data to a hand family and a chest class, a second's tally, the worn
    set, hits by kind and backstab, the save and an older file: **dotnet test**. Reading the
    equipment off a player's ZDO and the prefab behind a hash: **nothing**. The look last
    seen: its save, an older file, and the same look kept without a rebuild, **dotnet test**.
    **Kitchen**: a dish placed across owners, one left to burn, a slot filled before the
-   watch, a fermenter's tap, a smelter's loader, and the save: **dotnet test**. Reading the
-   stations' ZDOs and RPCs, and the component behind a prefab: **nothing**.
+   watch, a fermenter's tap, a smelter's loader, an item made in the poll ore is loaded, and the
+   save: **dotnet test**. Reading the stations' ZDOs and RPCs, the component behind a prefab, the
+   scan at start and a station arriving from a peer: **a running server** (`./testserver.sh`).
    Two faults found:
    - Mistlands is biome class 10, one past `Stats.Biomes = 10`, so metres and deaths there
      are dropped. `AWalkInTheMistlandsCounts` is written and skipped; `Biomes = 11` passes it.
