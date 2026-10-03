@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* The portals page: a hub's panel no longer stands on its hub, where it lay on top of the
+  hub next to it and hid every place within a few kilometres. The hub keeps an icon of its
+  own where it stands, and its panel floats to the clearest air beside it, never over
+  another panel, tied back by a dotted line; with no room for the whole panel it shows its
+  title alone. Labels also take, of the spots free beside their icon, the one the fewest
+  spokes run through.
+
 * A player's name in the 3D view keeps to a size that reads. It is 0.9 m tall in the world, so
   it shrinks with distance as the Viking under it does, but up close it grows no bigger on the
   screen than the bar's own title, 15 px of name, easing into that size from about 25 m in;

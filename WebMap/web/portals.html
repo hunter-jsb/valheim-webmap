@@ -89,6 +89,12 @@
   .node:hover .ic,.node.hl .ic{filter:drop-shadow(0 0 6px var(--portal));opacity:1}
   /* a hub is a panel, not a dot: its name, its gate count, one gate chip each */
   .node.hub{z-index:2}
+  /* the hub's own place: its panel floats beside it, joined by a line */
+  .node.hub .anchor{position:absolute;left:-13px;top:-13px;width:26px;height:26px;pointer-events:auto;border-radius:50%;
+    box-shadow:0 0 0 1.5px var(--portal-line),0 0 10px rgba(111,216,230,.35)}
+  .node.hub .anchor .ic{left:1px;top:1px;width:24px;height:24px}
+  .node.hub.fold .gates{display:none}          /* no air for the whole panel: its title still says which hub */
+  .node.hub.crowd .panel{display:none}         /* no air at all: the icon keeps the place */
   /* the panel's containing block is a zero-width anchor: say max-content or every
      gate wraps onto its own line */
   .panel{position:absolute;width:max-content;min-width:108px;max-width:200px;background:var(--portal-well);
@@ -327,24 +333,21 @@ function paint(){
 }
 
 // Nodes are HTML at screen positions, so a chip is a real link and the text is
-// never scaled. Two passes: the places claim their ground first -- an icon stands
-// where the portal stands -- and the labels then compete for whatever air is left.
+// never scaled. Three passes: every place claims its ground first -- an icon stands
+// where the portal stands, a hub's too -- then each hub's panel floats to the
+// clearest air beside it, never over another panel, and the labels take what is left,
+// as far off the spokes as they can get.
+const PANEL_GAPS = [18, 64, 130, 220, 320];                                   // px from the hub's icon to its panel's edge
+const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
 function layout(v){
   const W = stage.clientWidth, H = stage.clientHeight, EDGE = 180, PAD = 5, DRIFT = 74;
-  const rects = [{x0: 0, y0: 0, x1: 78, y1: 26},          // the rose
-                 {x0: W-46, y0: 0, x1: W, y1: 46},        // the fit button
-                 {x0: 0, y0: H-26, x1: 250, y1: H}];      // the scale bar
+  const ui = [{x0: 0, y0: 0, x1: 78, y1: 26},             // the rose
+              {x0: W-46, y0: 0, x1: W, y1: 46},           // the fit button
+              {x0: 0, y0: H-26, x1: 250, y1: H}];         // the scale bar
+  const rects = ui.slice(), panels = [], icons = [];
   const over = (r, q) => r.x0 < q.x1+PAD && q.x0 < r.x1+PAD && r.y0 < q.y1+PAD && q.y0 < r.y1+PAD;
   const hits = r => rects.some(q => over(r, q));
-  const boxAt = (n, ox, oy) => ({x0: n.sx+ox-n.w/2, y0: n.sy+oy-n.h/2,
-                                 x1: n.sx+ox+n.w/2, y1: n.sy+oy+n.h/2});
-  const put = (n, ox, oy) => {
-    n.box.style.left = Math.round(ox - n.w/2) + "px";
-    n.box.style.top  = Math.round(oy - n.h/2) + "px";
-    n.rect = boxAt(n, ox, oy);
-    n.lead = Math.hypot(ox, oy) > 34 ? {ox, oy} : null;
-    rects.push(n.rect);
-  };
+  const boxAt = (n, ox, oy, w = n.w, h = n.h) => ({x0: n.sx+ox-w/2, y0: n.sy+oy-h/2, x1: n.sx+ox+w/2, y1: n.sy+oy+h/2});
   for(const n of NODES){
     n.sx = v.tx + n.site.px*v.scale;
     n.sy = v.ty + n.site.py*v.scale;
@@ -353,15 +356,52 @@ function layout(v){
     n.el.style.left = Math.round(n.sx) + "px";
     n.el.style.top  = Math.round(n.sy) + "px";
     n.el.classList.toggle("off", !n.vis);
-    n.el.classList.remove("crowd");
+    n.el.classList.remove("crowd", "fold");
   }
-  for(const n of NODES){                       // hubs first: a panel stands on its own ground
+  // the spokes as they will be drawn, to keep text off them
+  const segs = SPOKES.map(s => s.a.node && s.b.node && (s.a.node.vis || s.b.node.vis) ? [s.a.node, s.b.node] : null).filter(Boolean);
+  const crosses = r => segs.reduce((k, [a, b]) => k + (cuts(r, a, b) ? 1 : 0), 0);
+  // the ground: hubs' icons first, then places; a place under another's icon steps out of the way
+  for(const n of NODES){
     if(!n.vis) continue;
-    if(n.kind === "hub"){ if(n.w) put(n, 0, 0); continue; }
-    const ic = {x0: n.sx-13, y0: n.sy-13, x1: n.sx+13, y1: n.sy+13};
-    if(hits(ic)){ n.el.classList.add("off"); n.vis = false; continue; }  // a place already stands here
-    rects.push(ic);
+    const R = n.kind === "hub" ? 15 : 13, ic = {x0: n.sx-R, y0: n.sy-R, x1: n.sx+R, y1: n.sy+R, n};
+    if(n.kind !== "hub" && hits(ic)){ n.el.classList.add("off"); n.vis = false; continue; }
+    n.ic = ic; rects.push(ic); icons.push(ic);
   }
+  // the panels: an opened one first, then the picked hub, then by size; each where it hides
+  // the fewest places and spokes, and keeps the spot it had while that stays as good
+  const hubs = NODES.filter(n => n.vis && n.kind === "hub" && n.w)
+    .sort((a, b) => (b.box.classList.contains("open") - a.box.classList.contains("open")) || ((b.site === FOCUS) - (a.site === FOCUS)) || b.site.portals.length - a.site.portals.length);
+  for(const n of hubs){
+    let best = null;
+    for(const fold of [false, true]){
+      const w = fold ? n.fw : n.w, h = fold ? n.fh : n.h;
+      const cand = [[0, 0]];
+      for(const g of PANEL_GAPS) for(const [dx, dy] of DIRS8) cand.push([dx*(w/2 + g), dy*(h/2 + g)]);
+      cand.forEach(([cx, cy], i) => {
+        const ox = clamp(cx, 6 + w/2 - n.sx, W - 6 - w/2 - n.sx), oy = clamp(cy, 6 + h/2 - n.sy, H - 6 - h/2 - n.sy);
+        const r = boxAt(n, ox, oy, w, h);
+        if(ui.some(q => over(r, q)) || panels.some(q => over(r, q))) return;
+        const hidden = icons.filter(q => q.n !== n && over(r, q)).length;
+        if(i && over(r, n.ic)) return;                     // floated off, it leaves its own icon in sight
+        const cost = 100*hidden + 3*crosses(r) + .04*Math.hypot(ox, oy) + (fold ? 60 : 0);
+        if(!best || cost < best.cost) best = {cost, i, fold, ox, oy, r, w, h};
+        if(n.prev && n.prev.i === i && n.prev.fold === fold) n.prev.now = {cost, i, fold, ox, oy, r, w, h};
+      });
+      if(best && !fold) break;                             // the whole panel fits somewhere
+    }
+    if(n.prev && n.prev.now && best && n.prev.now.cost <= best.cost + 25) best = n.prev.now;
+    if(n.prev) delete n.prev.now;
+    if(!best){ n.el.classList.add("crowd"); n.prev = null; continue; }   // no air at all: the icon keeps the place
+    n.prev = {i: best.i, fold: best.fold};
+    n.el.classList.toggle("fold", best.fold);
+    n.box.style.left = Math.round(best.ox - best.w/2) + "px";
+    n.box.style.top  = Math.round(best.oy - best.h/2) + "px";
+    n.rect = best.r; n.lead = best.i ? {ox: best.ox, oy: best.oy} : null;
+    panels.push(best.r); rects.push(best.r);
+    for(const q of icons) if(q.n !== n && q.n.kind !== "hub" && over(best.r, q)){ q.n.el.classList.add("off"); q.n.vis = false; }
+  }
+  // the labels: each beside its icon, stepping away when something is in the way
   for(const n of NODES){
     if(!n.vis || n.kind === "hub" || !n.w) continue;
     // an icon off the edge keeps its spoke, but a label out there belongs to nothing
@@ -379,24 +419,55 @@ function layout(v){
         if(Math.abs(oy) > DRIFT) break;
       }
     }
-    let done = false;
+    // of the spots that are free, the one the fewest spokes run through; the order breaks a tie
+    let best = null;
     for(const c of cand){
       const ox = clamp(c[0], 6 + n.w/2 - n.sx, W - 6 - n.w/2 - n.sx);
       const oy = clamp(c[1], 6 + n.h/2 - n.sy, H - 6 - n.h/2 - n.sy);
-      if(hits(boxAt(n, ox, oy))) continue;
-      put(n, ox, oy); done = true; break;
+      const r = boxAt(n, ox, oy);
+      if(hits(r)) continue;
+      const k = crosses(r);
+      if(!best || k < best.k){ best = {k, ox, oy, r}; if(!k) break; }
     }
-    if(!done) n.el.classList.add("crowd");
+    if(!best){ n.el.classList.add("crowd"); continue; }
+    n.box.style.left = Math.round(best.ox - n.w/2) + "px";
+    n.box.style.top  = Math.round(best.oy - n.h/2) + "px";
+    n.rect = best.r;
+    n.lead = Math.hypot(best.ox, best.oy) > 34 ? {ox: best.ox, oy: best.oy} : null;
+    rects.push(best.r);
   }
+}
+// whether a straight run between two places passes through a box (Liang-Barsky)
+function cuts(r, a, b){
+  let t0 = 0, t1 = 1;
+  const dx = b.sx - a.sx, dy = b.sy - a.sy;
+  const p = [-dx, dx, -dy, dy], q = [a.sx - r.x0, r.x1 - a.sx, a.sy - r.y0, r.y1 - a.sy];
+  for(let i = 0; i < 4; i++){
+    if(p[i] === 0){ if(q[i] < 0) return false; continue; }
+    const t = q[i]/p[i];
+    if(p[i] < 0){ if(t > t1) return false; if(t > t0) t0 = t; }
+    else{ if(t < t0) return false; if(t < t1) t1 = t; }
+  }
+  return true;
 }
 // a label that had to step away from its icon says which icon it belongs to
 function drawLeads(v){
   const g = ctx;
   g.setTransform(v.pix, 0, 0, v.pix, 0, 0);
   g.setLineDash([]); g.lineWidth = 1; g.strokeStyle = "rgba(167,182,189,.5)";
+  g.save();
+  g.lineWidth = 1.6; g.lineCap = "round"; g.setLineDash([1, 4]); g.strokeStyle = "rgba(111,216,230,.75)";
+  g.beginPath();
+  for(const n of NODES){                       // a hub's panel standing off: a dotted tie back to its icon
+    if(!n.vis || !n.lead || n.kind !== "hub" || !n.rect) continue;
+    const r = n.rect, px = clamp(n.sx, r.x0, r.x1), py = clamp(n.sy, r.y0, r.y1), L = Math.hypot(px - n.sx, py - n.sy) || 1;
+    g.moveTo(n.sx + (px - n.sx)/L*16, n.sy + (py - n.sy)/L*16);
+    g.lineTo(px, py);
+  }
+  g.stroke(); g.restore();
   g.beginPath();
   for(const n of NODES){
-    if(!n.vis || !n.lead) continue;
+    if(!n.vis || !n.lead || n.kind === "hub") continue;
     const s = n.lead.oy >= 0 ? 1 : -1;
     g.moveTo(n.sx, n.sy + s*13);
     g.lineTo(n.sx + n.lead.ox, n.sy + n.lead.oy - s*n.h/2);
@@ -433,7 +504,7 @@ function drawSpokes(v){
 // leave from the panel's edge, or from just clear of the icon
 function edge(n, u, sgn){
   const d = {x: u.x*sgn, y: u.y*sgn}, r = n.kind === "hub" ? n.rect : null;
-  let t = 13;
+  let t = n.kind === "hub" ? 16 : 13;
   if(r && n.sx > r.x0 && n.sx < r.x1 && n.sy > r.y0 && n.sy < r.y1){
     t = Infinity;
     if(d.x >  1e-6) t = Math.min(t, (r.x1 + 3 - n.sx)/d.x);
@@ -450,6 +521,7 @@ function measure(){
     n.box = n.el.querySelector(".panel") || n.el.querySelector(".lb");
     n.w = n.box ? n.box.offsetWidth : 0;
     n.h = n.box ? n.box.offsetHeight : 0;
+    if(n.kind === "hub" && n.box){ n.el.classList.add("fold"); n.fw = n.box.offsetWidth; n.fh = n.box.offsetHeight; n.el.classList.remove("fold"); }
   }
 }
 
@@ -794,7 +866,8 @@ function render(list){
   for(const site of sites){
     const sps = touching.get(site) || [], p0 = site.portals[0];
     if(site.portals.length > 1){
-      nodes.push({site, kind: "hub", pri: 0, d: 0, html: panel(site, hubSpokes.get(site) || [])});
+      nodes.push({site, kind: "hub", pri: 0, d: 0, html: `<a class="anchor" href="${link(p0.id)}" tabindex="-1" data-go="${siteKey(site)}" title="${esc(site.label)} &#183; close up"><svg class="ic"><use href="#ic-portal"></use></svg></a>`
+        + panel(site, hubSpokes.get(site) || [])});
       continue;
     }
     const ico = `<svg class="ic"><use href="#ic-portal"></use></svg>`;

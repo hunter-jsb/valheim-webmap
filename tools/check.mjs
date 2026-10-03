@@ -120,6 +120,22 @@ async function portals() {
     return {loose: loose.length, wrong: wrong.map(q => q.name)}; })()`);
   check("portals: one dashed spoke for each tagged portal standing unlinked", built && d && !d.wrong.length,
         d ? `${d.loose} standing unlinked` + (d.wrong.length ? `; wrong: ${d.wrong.join(", ")}` : "") : "");
+  // hub panels never sit on one another: on a phone, with the biggest hub's linked gates opened
+  await p.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await p.ev(`(fitAll(), true)`);
+  const opened = await p.click(".panel.big .gate.sum");
+  await sleep(600);
+  const o = await p.ev(`(() => {
+    const r = NODES.filter(n => n.kind === "hub" && n.vis && n.rect && !n.el.classList.contains("crowd")).map(n => [n.site.label, n.rect]);
+    const bad = [];
+    for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) {
+      const a = r[i][1], b = r[j][1];
+      if (a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1) bad.push(r[i][0] + " on " + r[j][0]);
+    }
+    return {panels: r.length, bad}; })()`);
+  await p.send("Emulation.clearDeviceMetricsOverride");
+  check("portals: no hub's panel lies on another's, even opened on a phone", built && o && !o.bad.length,
+        o ? `${o.panels} panels${opened ? ", the biggest opened" : ""}` + (o.bad.length ? `; overlapping: ${o.bad.join(", ")}` : "") : "");
   // a spoke row: the click opens the far side close up with the gate you arrive at lit
   const t = await p.ev(`(() => {
     const row = document.querySelector(".spokes a.go[data-go]"); if(!row) return null;
