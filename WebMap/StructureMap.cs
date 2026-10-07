@@ -166,7 +166,13 @@ namespace WebMap
             var byPrefab = new Dictionary<int, int>();
 
             List<ZDO> all = snapshot;
-            try { all.Clear(); all.AddRange(ZDOMan.instance.m_objectsByID.Values); }
+            try
+            {
+                var zdos = ZDOMan.instance.m_objectsByID.Values;
+                all.Clear();
+                if (all.Capacity < zdos.Count) all.Capacity = zdos.Count + zdos.Count / 16;   // a growing world: not doubled to 20 MB
+                all.AddRange(zdos);
+            }
             catch { all = null; }
             if (all == null) { sweeping = false; yield break; }
 
