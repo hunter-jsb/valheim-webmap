@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* A map sweep leaves the server's garbage collector a seventh of what it did: 3 MB a sweep on a
+  world of 1.2 million objects, where it was 24. Its copy of every object (9 MB), the forest's
+  blur and the sort behind its density figures (11 MB), the trails' picture while anyone walks
+  (27 MB) and the pieces' and locations' JSON, rebuilt though nothing had changed (8 MB), were
+  made afresh each minute; the buffers are now kept, and an unchanged answer with them. Mono
+  collects the whole heap whenever enough has been allocated since the last time, and the sweep
+  was most of that: on the test server, with a map open, the server allocated 28 MB a minute
+  where it was 49, and one sweep in eleven met a collection where two or three did. The sweep's
+  log line and `/structures/stats` (`heap_mb`) give the managed heap after it, beside them.
 * The portals page: a hub's panel no longer stands on its hub, where it lay on top of the
   hub next to it and hid every place within a few kilometres. The hub keeps an icon of its
   own where it stands, and its panel floats to the clearest air beside it, never over

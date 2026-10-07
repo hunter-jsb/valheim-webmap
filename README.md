@@ -425,8 +425,8 @@ everything after the walk runs on a pool thread. It runs only while someone is r
 arms it for two minutes, sweeps start at least a minute apart, and an idle server does
 none at all. `/config`, `/players`, `/map`, `/pins` and `/messages` do not arm it, so a
 monitor probing those keeps the game idle. `/structures/stats` reports the last sweep —
-ZDOs walked, game-thread milliseconds, frames, wall time, gen-2 collections — so the cost
-can be read rather than guessed.
+ZDOs walked, game-thread milliseconds, frames, wall time, gen-2 collections and the managed
+heap after it (`heap_mb`) — so the cost can be read rather than guessed.
 
 ## Notes for developers
 

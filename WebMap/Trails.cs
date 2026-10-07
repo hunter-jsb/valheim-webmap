@@ -23,6 +23,8 @@ namespace WebMap
         private static int lastSave = Environment.TickCount;
         private static volatile byte[] png;
         public static volatile int Rev;                                        // content revision of the PNG
+        // the sweep's copy of the counts and the picture drawn from it, 24 MB together: kept between sweeps
+        private static byte[] copy, alpha, rgba;
 
         public static void Load(string worldDataPath)
         {
@@ -70,15 +72,18 @@ namespace WebMap
         // a road is solid, and nothing pins early.
         public static void Finish()
         {
+            int size = TEXTURE_SIZE;
             byte[] v;
             lock (gate)
             {
                 if (!dirty || visits == null) return;
-                v = (byte[])visits.Clone();
+                if (copy == null || copy.Length != visits.Length) { copy = new byte[visits.Length]; alpha = new byte[size * size]; rgba = new byte[size * size * 4]; }
+                Buffer.BlockCopy(visits, 0, copy, 0, visits.Length);
+                v = copy;
                 dirty = false;
             }
-            int size = TEXTURE_SIZE;
-            var alpha = new byte[size * size];
+            Array.Clear(alpha, 0, alpha.Length);
+            Array.Clear(rgba, 0, rgba.Length);
             for (int i = 0; i < v.Length; i++)
             {
                 int c = v[i]; if (c == 0) continue;
@@ -93,7 +98,6 @@ namespace WebMap
                         if (alpha[j] < aj) alpha[j] = (byte)aj;
                     }
             }
-            var rgba = new byte[size * size * 4];
             for (int i = 0; i < alpha.Length; i++)
             {
                 if (alpha[i] == 0) continue;

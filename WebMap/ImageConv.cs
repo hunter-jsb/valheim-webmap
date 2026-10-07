@@ -20,6 +20,14 @@ namespace WebMap
             if (s != null) for (int i = 0; i < s.Length; i++) { h ^= (byte)s[i]; h ^= (byte)(s[i] >> 8); h *= 16777619; }
             return unchecked((int)(h & 0x7fffffff));
         }
+        // 64-bit, value by value: whether a sweep's list came out as the last one did
+        public const ulong Seed = 14695981039346656037UL;
+        public static ulong Mix(ulong h, long v)
+        {
+            for (int i = 0; i < 8; i++) { h ^= (byte)(v >> (i * 8)); h = unchecked(h * 1099511628211UL); }
+            return h;
+        }
+        public static ulong Mix(ulong h, float f) => Mix(h, BitConverter.DoubleToInt64Bits(f));
     }
 
     // Calls UnityEngine.ImageConversion via reflection so the mod need not reference

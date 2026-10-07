@@ -30,6 +30,8 @@ namespace WebMap
         private static readonly Dictionary<int, Kind> kindCache = new Dictionary<int, Kind>();
 
         private static byte[] rgba;
+        // the blur's density, its result and the percentiles' sort: a few MB each, so kept between sweeps
+        private static float[] dens = new float[0], blur = new float[0], sorted = new float[0];
         private static volatile byte[] png;
         public static volatile int Rev;                    // content revision of the PNG
         private static volatile string statsJson = "{\"trees\":0,\"stumps\":0}";
@@ -110,7 +112,9 @@ namespace WebMap
             maxX = Mathf.Min(size - 1, maxX + R); maxY = Mathf.Min(size - 1, maxY + R);
             int w = maxX - minX + 1, h = maxY - minY + 1;
 
-            var dens = new float[w * h];
+            int n = w * h;
+            if (dens.Length < n) { dens = new float[n]; blur = new float[n]; sorted = new float[n]; }
+            else System.Array.Clear(dens, 0, n);
             foreach (var kv in cells)
             {
                 int x = kv.Key % size - minX, y = kv.Key / size - minY;
@@ -118,7 +122,6 @@ namespace WebMap
                 dens[y * w + x] = kv.Value.trees;
             }
 
-            var blur = new float[w * h];
             float norm = (2 * R + 1) * (2 * R + 1);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
@@ -157,22 +160,23 @@ namespace WebMap
             png = bytes; Rev = Fnv.Of(bytes);
             statsJson = "{\"trees\":" + LastTrees + ",\"stumps\":" + LastStumps
                       + ",\"cells\":" + cells.Count
-                      + ",\"density\":" + Percentiles(blur) + "}";
+                      + ",\"density\":" + Percentiles(blur, n) + "}";
         }
 
         // Where the shading curve is actually spending its range. Tuning it by
         // eye means guessing at the tree counts behind the picture; these say so.
-        private static string Percentiles(float[] blur)
+        private static string Percentiles(float[] blur, int n)
         {
-            var v = new List<float>();
-            foreach (float f in blur) if (f > 0.02f) v.Add(f);
-            if (v.Count == 0) return "{}";
-            v.Sort();
-            System.Func<float, float> q = p => v[Mathf.Clamp((int)(p * v.Count), 0, v.Count - 1)];
+            int count = 0;
+            for (int i = 0; i < n; i++) if (blur[i] > 0.02f) sorted[count++] = blur[i];
+            if (count == 0) return "{}";
+            System.Array.Sort(sorted, 0, count);
+            float[] v = sorted;
+            System.Func<float, float> q = p => v[Mathf.Clamp((int)(p * count), 0, count - 1)];
             return "{\"p50\":" + q(0.50f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
                  + ",\"p90\":" + q(0.90f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
                  + ",\"p99\":" + q(0.99f).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
-                 + ",\"max\":" + v[v.Count - 1].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "}";
+                 + ",\"max\":" + v[count - 1].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "}";
         }
 
         public static string GetStats() => statsJson;

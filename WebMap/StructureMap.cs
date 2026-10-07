@@ -32,6 +32,10 @@ namespace WebMap
         private static readonly Dictionary<int, Cell> cells = new Dictionary<int, Cell>();
         private static readonly Dictionary<int, Color32> paletteCache = new Dictionary<int, Color32>();
         private static byte[] rgba;                       // render target, reused between sweeps
+        // The walk's copy of every ZDO, 10 MB for a world of a million: kept, so a sweep is no
+        // large allocation for Mono's collector to answer, and emptied once the walk is done.
+        private static readonly List<ZDO> snapshot = new List<ZDO>();
+        private static readonly List<KeyValuePair<int, Color32>> spill = new List<KeyValuePair<int, Color32>>();
         private static volatile string statsJson = "{\"total\":0,\"prefabs\":[]}";
         private static volatile byte[] png;
         public static volatile int Rev;                    // content revision of the PNG
@@ -161,9 +165,9 @@ namespace WebMap
 
             var byPrefab = new Dictionary<int, int>();
 
-            List<ZDO> all = null;
-            try { all = new List<ZDO>(ZDOMan.instance.m_objectsByID.Values); }
-            catch { }
+            List<ZDO> all = snapshot;
+            try { all.Clear(); all.AddRange(ZDOMan.instance.m_objectsByID.Values); }
+            catch { all = null; }
             if (all == null) { sweeping = false; yield break; }
 
             int found = 0, seen = 0;
@@ -245,6 +249,7 @@ namespace WebMap
             try
             {
                 var finish = Stopwatch.StartNew();
+                snapshot.Clear();                             // the walk is over: no ZDO held until the next
                 Render(size);
                 var bytes = ImageConv.EncodeRgbaToPNG(rgba, size, size);
                 png = bytes; Rev = Fnv.Of(bytes);
@@ -261,13 +266,15 @@ namespace WebMap
                 finish.Stop();
 
                 int gc2 = GC.CollectionCount(2) - gcBefore;
-                string sweep = FormattableString.Invariant($"{{\"at\":{started},\"zdos\":{seen},\"walk_ms\":{walkMs},\"finish_ms\":{finish.ElapsedMilliseconds},\"frames\":{frames},\"wall_ms\":{wall.ElapsedMilliseconds},\"gc2\":{gc2}}}");
+                // Mono's collector runs when enough has been allocated since the last, so the heap says how near the next one is
+                long heapMb = GC.GetTotalMemory(false) / 1048576;
+                string sweep = FormattableString.Invariant($"{{\"at\":{started},\"zdos\":{seen},\"walk_ms\":{walkMs},\"finish_ms\":{finish.ElapsedMilliseconds},\"frames\":{frames},\"wall_ms\":{wall.ElapsedMilliseconds},\"gc2\":{gc2},\"heap_mb\":{heapMb}}}");
                 statsJson = BuildStats(byPrefab, found, seen, sweep);
                 pendingLog = $"WebMap: structures sweep -> {found} placed pieces from {seen} zdos; "
                            + $"forest {ForestMap.LastTrees} trees / {ForestMap.LastStumps} stumps; "
                            + $"3D {WorldObjects.Total} objects in walked ground ({objectChunks} chunks changed), {TerrainPatches.Count} terraformed zones, {Models.ModelStore.QueueLength} models to export; "
                            + $"walk {walkMs} ms over {frames} frames + finish {finish.ElapsedMilliseconds} ms off-thread, "
-                           + $"{wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc";
+                           + $"{wall.ElapsedMilliseconds} ms wall, {gc2} gen2 gc, heap {heapMb} MB";
             }
             catch (Exception e)
             {
@@ -296,7 +303,7 @@ namespace WebMap
             }
             // Spill dense cells into their neighbours: at 12m per pixel a longhouse
             // is only a few pixels, so bases need mass to read as shapes.
-            var spill = new List<KeyValuePair<int, Color32>>();
+            spill.Clear();
             foreach (var kv in cells)
             {
                 var c = kv.Value;

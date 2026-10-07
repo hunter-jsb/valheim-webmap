@@ -27,6 +27,10 @@ namespace WebMap
         private static readonly Regex Fire = new Regex("torch|fire_pit|bonfire|hearth|brazier|sconce|fairylight|candle|lantern", RegexOptions.Compiled);
         private static volatile string json = "{\"prefabs\":[],\"pieces\":[],\"count\":0}";
         public static volatile float[] Positions = new float[0];   // x, z pairs of every piece, for what stands on a place
+        // A sweep that finds the pieces as the last one did keeps its JSON: rebuilt, it was 7 MB of
+        // garbage a minute for an unchanged answer. by is the builders' column, kept with it.
+        private static ulong written;
+        private static int[] by = new int[0];
 
         private static string Inv(System.FormattableString f) => f.ToString(CultureInfo.InvariantCulture);
 
@@ -80,6 +84,27 @@ namespace WebMap
         // raster, so unexplored builds are hidden the same way that layer is.
         public static void Finish()
         {
+            // who built each, as the stats name them: an index into players, -1 for a builder never seen online
+            var players = new List<string>();
+            var byName = new Dictionary<string, int>();
+            var byCreator = new Dictionary<long, int>();
+            if (by.Length < found.Count) by = new int[found.Count];
+            ulong h = Fnv.Mix(Fnv.Mix(Fnv.Seed, order.Count), found.Count);
+            for (int i = 0; i < found.Count; i++)
+            {
+                var e = found[i];
+                if (!byCreator.TryGetValue(e.creator, out int b))
+                {
+                    string n = e.creator != 0L ? Stats.NameOf(e.creator) : null;
+                    if (n == null) b = -1;
+                    else if (!byName.TryGetValue(n, out b)) { b = players.Count; byName[n] = b; players.Add(n); h = Fnv.Mix(h, Fnv.Of(n)); }
+                    byCreator[e.creator] = b;
+                }
+                by[i] = b;
+                h = Fnv.Mix(Fnv.Mix(Fnv.Mix(Fnv.Mix(Fnv.Mix(Fnv.Mix(h, e.kind), e.x), e.z), Mathf.RoundToInt(e.yaw)), e.lit), b);
+            }
+            if (h == written) return;
+            written = h;
             var sb = new StringBuilder(found.Count * 24 + 4096);
             sb.Append("{\"prefabs\":[");
             for (int i = 0; i < order.Count; i++)
@@ -87,23 +112,6 @@ namespace WebMap
                 var k = order[i];
                 if (i > 0) sb.Append(',');
                 sb.Append(Inv($"{{\"n\":\"{k.name}\",\"w\":{k.w:0.##},\"d\":{k.d:0.##},\"c\":\"{k.colour}\"}}"));
-            }
-            // who built each, as the stats name them: an index into players, -1 for a builder never seen online
-            var players = new List<string>();
-            var byName = new Dictionary<string, int>();
-            var byCreator = new Dictionary<long, int>();
-            var by = new int[found.Count];
-            for (int i = 0; i < found.Count; i++)
-            {
-                long c = found[i].creator;
-                if (!byCreator.TryGetValue(c, out int b))
-                {
-                    string n = c != 0L ? Stats.NameOf(c) : null;
-                    if (n == null) b = -1;
-                    else if (!byName.TryGetValue(n, out b)) { b = players.Count; byName[n] = b; players.Add(n); }
-                    byCreator[c] = b;
-                }
-                by[i] = b;
             }
             sb.Append("],\"players\":[");
             for (int i = 0; i < players.Count; i++)

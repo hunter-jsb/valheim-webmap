@@ -99,7 +99,10 @@ test names the failure it guards against; there is one per failure, not one per 
    on synthetic grids. The generator sampling (`Build`) and `names.tsv` loading (`Load`
    starts a coroutine) are not reached.
 10. **The cosmetic layers** -- `Pieces`, `Trails`, `ForestMap`, the structures raster,
-    `Chart`: **nothing**. A regression is a wrong picture, seen at once.
+    `Chart`: **nothing**. A regression is a wrong picture, seen at once. Only the pieces'
+    builders, and a sweep that finds the same pieces keeping its JSON yet naming a builder
+    seen since: **dotnet test**. What a sweep allocates: `/structures/stats`'s `heap_mb` and
+    `gc2` on a running server.
 11. **Discord.** The REST client's retry-once-on-429 and the message parser (display
     name priority, bot/webhook detection): **dotnet test**, against a faked
     `Discord.Transport`. The relay's skip and its five-a-poll cap: **dotnet test**, on
