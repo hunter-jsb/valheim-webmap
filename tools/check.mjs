@@ -16,6 +16,13 @@ import { writeFileSync } from "node:fs";
 const [BASE, PORT, OUT] = process.argv.slice(2);
 if (!BASE || !PORT) { console.error("usage: node tools/check.mjs <proxy base> <devtools port> [screenshot dir]"); process.exit(2); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// The data comes from wherever the pages get it: the site's own origin behind the proxy,
+// or, for a hosted copy, the API its site-config.js names (Cloudflare refuses a bare client).
+const API = await (async () => {
+  try { const m = /api:\s*"([^"]+)"/.exec(await (await fetch(BASE + "/site-config.js")).text()); if (m) return m[1]; } catch (e) {}
+  return BASE;
+})();
+const data = async path => (await fetch(API + path, { headers: { "user-agent": "Mozilla/5.0 (check.mjs)" } })).json();
 let failed = 0;
 const check = (name, ok, detail = "") => { if (!ok) failed++; console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? " -- " + detail : ""}`); };
 
@@ -155,7 +162,7 @@ async function world() {
 }
 
 async function players() {
-  const want = (await (await fetch(BASE + "/stats/players")).json()).players.length;
+  const want = (await data("/stats/players")).players.length;
   const p = await open("/players.html");
   const loaded = await p.until(`LOADED`);
   const got = await p.ev(`document.querySelectorAll("#list .player").length`);
@@ -167,7 +174,7 @@ async function players() {
   check("players: a row opens the player's page", loaded && (!name || (opened && t.shown && t.head.startsWith(name) && t.figs > 0)), name ? `${name}, ${t ? t.figs : 0} figures` : "no rows");   // the head carries a class pill after the name
   // a player with a look, live or remembered, stands above the pentagon; with none on the
   // server, the page is handed one shaped like RigExporter.LookJson's, of the body alone
-  const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
+  const body = Object.values((await data("/prefabs")).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
   const look = body && { model: +body.n.slice(11), skin: [1, 0.82, 0.68], hair: [0.55, 0.32, 0.14], slots: {}, parts: [body.n] };
   const who = loaded && body ? await p.ev(`(() => {
     const live = q => q.online && (ONLINE.find(o => o.name === q.name) || {}).look;
@@ -193,7 +200,7 @@ async function players() {
 // the #3d link and by the pegman, out by the Map button. WebGL in a headless Chrome
 // wants --use-angle=swiftshader --enable-unsafe-swiftshader.
 async function view3d() {
-  const c = await (await fetch(BASE + "/config")).json();
+  const c = await data("/config");
   const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
   const p = await open("/");
   await p.until(`document.querySelectorAll("#markers .marker").length && LAYERS_READY`);
@@ -230,7 +237,7 @@ async function view3d() {
 // walked ground or off eye height, a 3D view that keeps what the tour has left, and a stop
 // that leaves anything behind.
 async function tour() {
-  const c = await (await fetch(BASE + "/config")).json();
+  const c = await data("/config");
   const [x, , z] = String(c.world_start_pos || "0,0,0").split(",").map(Number);
   const p = await open("/");
   await p.until(`WORLD.features && WORLD.features.length && LAYERS_READY && WORLD.pieces`);
@@ -257,7 +264,7 @@ async function tour() {
   await p.ev(`Tour.stop()`);
   // a player's card, built for a roster entry directly since nobody need be online; one the
   // server remembers no look for is handed the body alone, as on the players page
-  const body = Object.values((await (await fetch(BASE + "/prefabs")).json()).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
+  const body = Object.values((await data("/prefabs")).prefabs || {}).find(e => e.c === "rig" && /^Player@body\d+$/.test(e.n));
   const look = body && { model: +body.n.slice(11), skin: [1, 0.82, 0.68], hair: [0.55, 0.32, 0.14], slots: {}, parts: [body.n] };
   const who = await p.until(`WORLD.stats && WORLD.stats.players && WORLD.stats.players.length`, 20000) && await p.ev(`(() => {
     const P = WORLD.stats.players, q = P.find(x => x.look && PlayerCard.classify(x, P)) || P.find(x => PlayerCard.classify(x, P)) || P[0];
