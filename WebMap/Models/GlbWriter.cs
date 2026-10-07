@@ -42,6 +42,16 @@ namespace WebMap.Models
         private readonly List<Primitive> prims = new List<Primitive>();
         public void Add(Primitive p) { if (p != null && p.indices != null && p.indices.Length >= 3) prims.Add(p); }
         public int Count => prims.Count;
+        // the geometry's bytes as written, near enough: what Write's time goes with
+        public long Bytes
+        {
+            get
+            {
+                long n = 0;
+                foreach (var p in prims) n += 4L * (p.positions.Length + (p.normals?.Length ?? 0) + (p.uvs?.Length ?? 0) + p.indices.Length);
+                return n;
+            }
+        }
 
         public byte[] Write(string name, out float[] bounds)
         {

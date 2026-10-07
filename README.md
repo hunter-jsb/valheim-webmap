@@ -174,7 +174,8 @@ down from high. The overview stops down as it climbs, so the land sits below a b
 ### The model library
 
 The first time the sweep meets a prefab, the mod exports it as a glTF model on the game
-thread, within `export_ms_per_frame` a frame. The dedicated server cannot read most
+thread, within `export_ms_per_frame` a frame; a big model's file, a player's part and the
+library's index are written on a pool thread. The dedicated server cannot read most
 textures, or about one mesh in eight, so a background thread then reads those straight out
 of the game's own asset files, once per game version, and the models that wanted them are
 exported again. The log says so:

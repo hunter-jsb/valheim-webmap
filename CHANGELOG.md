@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+* A model export no longer holds a server frame for 30 to 80 ms. The library's index, its
+  texture list and `/prefabs` were written on the game thread at the end of every export (17 to
+  32 ms on the test server), a big model's glTF too (a 3 MB rock, 43 ms), and a player's first
+  part after a start took the standing pose and its glTF in one frame (30 ms). The index and the
+  glTF of a model over 256 KB or of a player's part are now written on a pool thread, the pose
+  takes a frame of its own and a camp's two searches of its whole hierarchy a step each; the
+  library's check each minute for newly extracted textures, a file lookup for every texture
+  every model wants (12 to 19 ms), goes to the pool too. The same exports' longest frame on the
+  test server is 13 ms, from 46; what is left is a step that cannot be split, one mesh read and
+  laid out.
 * `/state`, which every open map asks for every five seconds, goes gzipped to a browser that
   takes it: on the test server's world 6.3 KB as written, 2.0 KB zipped. It is built and zipped
   once and kept while none of its blocks has moved, so viewers polling in the same second share

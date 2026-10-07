@@ -47,6 +47,7 @@ namespace WebMap.Models
                 if (posed != null) bounds = posed;
                 return glb;
             }
+            public long Bytes => writer != null ? writer.Bytes : 0;
             public int renderers, unreadable, foliageSkipped;
             public List<string> wants = new List<string>();   // texture names the materials reference (present or not)
             public List<string> meshWants = new List<string>();     // keys of locked meshes (MeshCache.Key) this prefab uses
@@ -144,7 +145,8 @@ namespace WebMap.Models
             var off = new HashSet<Transform>();
             var merged = loc != null ? new Dictionary<string, List<GlbWriter.Primitive>>() : null;
             var types = new List<Type>();
-            if (loc != null) LocationOff(prefab, off);
+            // a camp's whole hierarchy is searched here and again for its LODs: a step each
+            if (loc != null) { LocationOff(prefab, off); yield return null; }
 
             // renderers hidden by a LODGroup (any LOD but the first)
             var hidden = new HashSet<Renderer>();
@@ -160,6 +162,7 @@ namespace WebMap.Models
                             if (r != null) { if (i == 0) lodZero.Add(r); else hidden.Add(r); }
             }
             foreach (var r in lodZero) hidden.Remove(r);
+            if (loc != null) yield return null;
 
             // A mineable rock loses pieces as it is mined, and the world keeps a health per hit
             // area. The areas are the colliders, counted as the game counts them: MineRock5 all

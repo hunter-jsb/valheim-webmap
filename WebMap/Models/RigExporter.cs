@@ -91,6 +91,10 @@ namespace WebMap.Models
             return p;
         }
 
+        // whether the standing pose is taken; Pose takes it, a frame of its own for the export
+        public static bool Ready => player != null && player.model != null;
+        public static void Pose() => Posed();
+
         // the Player's idle: IdleTweaked, else the plainest clip named for idling
         private static AnimationClip Idle(RuntimeAnimatorController ctrl)
         {

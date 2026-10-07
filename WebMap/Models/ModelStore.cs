@@ -149,11 +149,11 @@ namespace WebMap.Models
 
         // Models that still lack a texture one of their materials wants, when that file now exists
         // (the extractor ran while the server was up): queue them for re-export. Returns the count.
-        public static int RescanTextures()
+        // forget: false off the game thread, whose the exporter's texture cache is; the caller forgets then.
+        public static int RescanTextures(bool forget = true)
         {
             if (!WebMapConfig.EXTRACT_TEXTURES) return 0;
             int again = 0;
-            var missing = new HashSet<string>();
             foreach (var i in index.Values)
             {
                 // a rig part names its body paint rather than drawing it: any texture turned up since sends it again
@@ -174,7 +174,7 @@ namespace WebMap.Models
                 }
                 if (needs) { Request(i.hash, i.cat, force: true); again++; }
             }
-            if (again > 0) PrefabExporter.ForgetMissingTextures();
+            if (again > 0 && forget) PrefabExporter.ForgetMissingTextures();
             return again;
         }
         // texture names the models reference that have no file yet
@@ -204,6 +204,7 @@ namespace WebMap.Models
         // The extractor (and the manual tool) read this to know what to pull out of the game files.
         public static void WriteTexturesJson()
         {
+            lock (saveGate)
             try
             {
                 var names = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -260,18 +261,13 @@ namespace WebMap.Models
             {
                 if (job == null && QueueLength == 0)
                 {
-                    if (indexDirty)
-                    {
-                        sw.Restart();
-                        SaveIndex(); WriteTexturesJson(); Rebuild(); indexDirty = false;
-                        runFrameMs = Math.Max(runFrameMs, sw.Elapsed.TotalMilliseconds);
-                    }
+                    if (indexDirty && Saved()) { indexDirty = false; SaveSoon(textures: true); }
                     // a sweep queues prefabs as it meets them, so a run ends after a quiet spell, not at the first empty queue
                     if (run != null && ++quiet >= 15)
                     {
                         string slowest = index.TryGetValue(runStepHash, out var si) && si.name != null ? si.name : "#" + runStepHash;
                         ZLog.Log($"WebMap: model export done: {Exported - runStart} prefabs in {runBusy:0}s; "
-                               + $"{Readable} with a model, {Unreadable} waiting on locked meshes, library {LibraryMB():0.0} MB; "
+                               + $"{Readable} with a model, {Unreadable} waiting on locked meshes, library {libraryMb:0.0} MB; "
                                + $"longest frame {runFrameMs:0.0} ms, slowest step {runStepMs:0.0} ms ({slowest})");
                         run = null;
                     }
@@ -282,18 +278,26 @@ namespace WebMap.Models
                     else if (meshDone) { meshDone = false; int n = RescanMeshes(); Rebuild(); ZLog.Log($"WebMap: {n} models to re-export with newly extracted meshes"); }
                     else if (tick == 5 || tick % 60 == 59)
                     {
-                        int again = RescanTextures() + RescanMeshes();
-                        if (again > 0) ZLog.Log($"WebMap: {again} models to re-export with newly extracted textures or meshes");
-                        else if (WebMapConfig.EXTRACT_TEXTURES && !TextureExtractor.Running && !MeshExtractor.Running)
+                        // the library's files looked at on the pool: a File.Exists for every texture every
+                        // model wants was 12-19 ms on the game thread each minute
+                        int textures = 0, again = 0; List<string> texMissing = null, meshMissing = null;
+                        var look = Task.Run(() =>
                         {
-                            var missing = MissingTextures();
-                            if (missing.Count > 0) TextureExtractor.Start(missing, root, Math.Max(64, WebMapConfig.TEXTURE_MAX_SIZE), () => extractDone = true);
-                        }
-                        // locked meshes next, once textures are settled
-                        if (WebMapConfig.EXTRACT_MESHES && !TextureExtractor.Running && !MeshExtractor.Running)
+                            textures = RescanTextures(forget: false); again = textures + RescanMeshes();
+                            if (again == 0 && WebMapConfig.EXTRACT_TEXTURES) texMissing = MissingTextures();
+                            if (WebMapConfig.EXTRACT_MESHES) meshMissing = MissingMeshes();
+                        });
+                        while (!look.IsCompleted) yield return null;
+                        if (look.Exception != null) ZLog.LogWarning("WebMap: model library not checked: " + look.Exception.GetBaseException().Message);
+                        else
                         {
-                            var missing = MissingMeshes();
-                            if (missing.Count > 0) MeshExtractor.Start(missing, root, () => meshDone = true);
+                            if (textures > 0) PrefabExporter.ForgetMissingTextures();
+                            if (again > 0) ZLog.Log($"WebMap: {again} models to re-export with newly extracted textures or meshes");
+                            else if (WebMapConfig.EXTRACT_TEXTURES && !TextureExtractor.Running && !MeshExtractor.Running && texMissing.Count > 0)
+                                TextureExtractor.Start(texMissing, root, Math.Max(64, WebMapConfig.TEXTURE_MAX_SIZE), () => extractDone = true);
+                            // locked meshes next, once textures are settled
+                            if (WebMapConfig.EXTRACT_MESHES && !TextureExtractor.Running && !MeshExtractor.Running && meshMissing.Count > 0)
+                                MeshExtractor.Start(meshMissing, root, () => meshDone = true);
                         }
                     }
                     yield return new WaitForSeconds(1f);
@@ -332,14 +336,35 @@ namespace WebMap.Models
                     runBusy = run.Elapsed.TotalSeconds;
                     lock (queue) queued.Remove(jobHash);
                 }
-                if (Exported != before && Exported % 50 == 0 && indexDirty) { SaveIndex(); Rebuild(); }
+                if (Exported != before && Exported % 50 == 0 && indexDirty && Saved()) SaveSoon(textures: false);
                 runFrameMs = Math.Max(runFrameMs, sw.Elapsed.TotalMilliseconds);
                 yield return null;
             }
         }
 
+        // The index, textures.json and /prefabs, written on the pool: 17-32 ms of JSON and files
+        // on the game thread at the end of every export run.
+        private static Task saving;
+        private static readonly object saveGate = new object();
+        private static double libraryMb;
+        private static void SaveSoon(bool textures) =>
+            saving = Task.Run(() => { SaveIndex(); if (textures) WriteTexturesJson(); Rebuild(); libraryMb = LibraryMB(); });
+        // game thread: whether the last save is done, saying so once if it failed
+        private static bool Saved()
+        {
+            if (saving == null) return true;
+            if (!saving.IsCompleted) return false;
+            if (saving.Exception != null) ZLog.LogWarning("WebMap: model library index not saved: " + saving.Exception.GetBaseException().Message);
+            saving = null;
+            return true;
+        }
+
+        // A glTF bigger than this is written on the pool: a 3 MB rock took 43 ms on the game thread,
+        // where one of 250 KB takes under 2.
+        private const long WriteOnPoolBytes = 256 * 1024;
+
         // Steps like PrefabExporter.Export, yielding Wait while a location's prefab loads and while a
-        // location's glTF is written on the pool: a camp is too big for the game thread's budget.
+        // location's or a big model's glTF is written on the pool: a camp is too big for the game thread's budget.
         private static IEnumerator ExportOne(int hash, string cat)
         {
             var info = new Info { hash = hash, cat = cat };
@@ -375,7 +400,7 @@ namespace WebMap.Models
                     string file = Path.Combine(root, FileName(hash));
                     Action write = () => { glb = r.Write(); if (glb != null) { File.WriteAllBytes(file, glb); ver = Fnv.Of(glb); } };
                     Exception wrote = null;
-                    if (!failed && r.location)
+                    if (!failed && (r.location || r.Bytes > WriteOnPoolBytes))
                     {
                         var task = Task.Run(write);
                         while (!task.IsCompleted) yield return PrefabExporter.Wait;
@@ -402,22 +427,30 @@ namespace WebMap.Models
             Record(hash, info);
         }
 
-        // A live player's rig part: RigExporter's glTF, its body paint named beside it.
+        // A live player's rig part: RigExporter's glTF, its body paint named beside it. The standing pose,
+        // a clone of the Player's rig played through once a start, takes a frame of its own; the glTF and
+        // its file are written on the pool: together they were a 30 ms frame.
         private static IEnumerator ExportRig(int hash)
         {
             rigNames.TryGetValue(hash, out string name);
             var info = new Info { hash = hash, cat = Rig.Cat, name = name ?? ("#" + hash) };
             if (name != null && WebMapConfig.EXPORT_MODELS)
             {
+                if (!RigExporter.Ready) { RigExporter.Pose(); yield return PrefabExporter.Wait; }
                 var r = new PrefabExporter.Result { category = Rig.Cat };
-                try
+                bool made = false;
+                try { made = RigExporter.Export(name, root, r); }
+                catch (Exception e) { ZLog.LogWarning($"WebMap: model export of {name} failed: {e.Message}"); }
+                if (made)
                 {
-                    if (RigExporter.Export(name, root, r))
+                    byte[] glb = null; string file = Path.Combine(root, FileName(hash));
+                    var task = Task.Run(() => { glb = r.Write(); if (glb != null) File.WriteAllBytes(file, glb); });
+                    while (!task.IsCompleted) yield return PrefabExporter.Wait;
+                    if (task.Exception != null) ZLog.LogWarning($"WebMap: model export of {name} failed: {task.Exception.GetBaseException().Message}");
+                    else
                     {
-                        byte[] glb = r.Write();
                         if (glb != null)
                         {
-                            File.WriteAllBytes(Path.Combine(root, FileName(hash)), glb);
                             info.ok = true; info.tris = r.triangles; info.bounds = r.bounds; info.tex = r.textured; info.ver = Fnv.Of(glb);
                             Readable++;
                         }
@@ -426,10 +459,8 @@ namespace WebMap.Models
                         info.ct = r.overlayChest; info.lt = r.overlayLegs; info.tp = Present(r.wants);
                     }
                 }
-                catch (Exception e) { ZLog.LogWarning($"WebMap: model export of {name} failed: {e.Message}"); }
             }
             Record(hash, info);
-            yield break;
         }
 
         private static void Record(int hash, Info info)
@@ -489,6 +520,7 @@ namespace WebMap.Models
 
         private static void SaveIndex()
         {
+            lock (saveGate)
             try
             {
                 var j = new JsonWriter(index.Count * 120 + 64);
@@ -535,6 +567,10 @@ namespace WebMap.Models
         }
 
         private static void Rebuild()
+        {
+            lock (saveGate) RebuildLocked();
+        }
+        private static void RebuildLocked()
         {
             int next = rev + 1;
             try
