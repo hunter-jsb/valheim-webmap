@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* `/state`, which every open map asks for every five seconds, goes gzipped to a browser that
+  takes it: on the test server's world 6.3 KB as written, 2.0 KB zipped. It is built and zipped
+  once and kept while none of its blocks has moved, so viewers polling in the same second share
+  it; a viewer alone has it built and zipped for each poll, which costs the server's HTTP thread
+  about 0.4 ms more than the plain answer did, never the game's.
 * A map sweep leaves the server's garbage collector a seventh of what it did: 3 MB a sweep on a
   world of 1.2 million objects, where it was 24. Its copy of every object (9 MB), the forest's
   blur and the sort behind its density figures (11 MB), the trails' picture while anyone walks

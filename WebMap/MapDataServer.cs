@@ -615,23 +615,11 @@ namespace WebMap
                     // already built; this is concatenation. The tallies are not among
                     // them: no page reads them here, and /stats/players has them.
                     {
-                        string pinsJson = PinsJson();
-                        string state = "{\"now\":" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                            + ",\"rev\":{\"fog\":" + fogRev + ",\"pieces\":" + Pieces.Rev + ",\"forest\":" + ForestMap.Rev
-                            + ",\"structures\":" + StructureMap.Rev + ",\"chart\":" + Chart.Rev + ",\"trails\":" + Trails.Rev
-                            + ",\"features\":" + Features.Rev + ",\"objects\":" + WorldObjects.Rev + ",\"height\":" + TerrainPatches.Rev
-                            + ",\"models\":" + Models.ModelStore.Rev + "}"
-                            + ",\"time\":" + timeJson
-                            + ",\"players\":" + playersJson + ",\"messages\":" + messagesJson + ",\"pins\":" + pinsJson
-                            + ",\"vehicles\":" + Vehicles.GetJson() + ",\"portals\":" + Portals.GetJson() + ",\"graves\":" + Graves.GetJson()
-                            + ",\"traders\":" + Traders.Json() + ",\"deaths\":" + Stats.DeathsJson()
-                            + ",\"structures\":" + StructureMap.GetStats() + ",\"forest\":" + ForestMap.GetStats() + "}";
+                        var doc = State();
                         res.Headers.Add(HttpResponseHeader.CacheControl, "no-cache");
-                        res.ContentType = "application/json";
-                        res.StatusCode = 200;
-                        textBytes = Encoding.UTF8.GetBytes(state);
-                        res.ContentLength64 = textBytes.Length;
-                        res.Close(textBytes, true);
+                        byte[] gz = null;
+                        if (TakesGzip(req, doc.raw)) gz = doc.gz ??= Gzip(doc.raw);   // two at once zip it twice at worst
+                        Send(res, doc.raw, gz, "application/json");
                         return true;
                     }
                 case "/stats/players":
@@ -798,6 +786,39 @@ namespace WebMap
             }
 
             return false;
+        }
+
+        // /state as last built, its bytes and their gzip: every open map asks for it every five
+        // seconds, so while none of its blocks has moved it is neither built nor zipped again.
+        private sealed class StateDoc { public string[] parts; public byte[] raw, gz; }
+        private volatile StateDoc stateDoc;               // unlocked: two polls at once build it twice at worst
+        private StateDoc State()
+        {
+            string[] p =
+            {
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), fogRev.ToString(), Pieces.Rev.ToString(), ForestMap.Rev.ToString(),
+                StructureMap.Rev.ToString(), Chart.Rev.ToString(), Trails.Rev.ToString(), Features.Rev.ToString(), WorldObjects.Rev.ToString(),
+                TerrainPatches.Rev.ToString(), Models.ModelStore.Rev.ToString(), timeJson, playersJson, messagesJson, PinsJson(),
+                Vehicles.GetJson(), Portals.GetJson(), Graves.GetJson(), Traders.Json(), Stats.DeathsJson(), StructureMap.GetStats(), ForestMap.GetStats(),
+            };
+            var d = stateDoc;
+            if (d != null && Same(d.parts, p)) return d;
+            string state = "{\"now\":" + p[0]
+                + ",\"rev\":{\"fog\":" + p[1] + ",\"pieces\":" + p[2] + ",\"forest\":" + p[3]
+                + ",\"structures\":" + p[4] + ",\"chart\":" + p[5] + ",\"trails\":" + p[6]
+                + ",\"features\":" + p[7] + ",\"objects\":" + p[8] + ",\"height\":" + p[9]
+                + ",\"models\":" + p[10] + "}"
+                + ",\"time\":" + p[11]
+                + ",\"players\":" + p[12] + ",\"messages\":" + p[13] + ",\"pins\":" + p[14]
+                + ",\"vehicles\":" + p[15] + ",\"portals\":" + p[16] + ",\"graves\":" + p[17]
+                + ",\"traders\":" + p[18] + ",\"deaths\":" + p[19]
+                + ",\"structures\":" + p[20] + ",\"forest\":" + p[21] + "}";
+            return stateDoc = new StateDoc { parts = p, raw = Encoding.UTF8.GetBytes(state) };
+        }
+        private static bool Same(string[] a, string[] b)
+        {
+            for (int i = 0; i < a.Length; i++) if (!string.Equals(a[i], b[i])) return false;
+            return true;
         }
 
         // A write from the site. False when this has already answered 403.

@@ -36,7 +36,8 @@ test names the failure it guards against; there is one per failure, not one per 
    port, configured as an operator does (the BepInEx config, `announce.token`) -- no
    credentials; the token and the `X-User` it names; `X-User` and `X-Admin` without it; a
    member's session and an admin's; one for another Discord server or another map;
-   `/announce` by the token alone; a JSON layer gzipped. Not reached: `/auth/login` and
+   `/announce` by the token alone; a JSON layer gzipped; `/state` gzipped, a pin placed in the
+   very next one. Not reached: `/auth/login` and
    `/auth/me` as routes (their rules are `Auth`'s, tested above, the 503 of a map that does not
    know its address yet too).
 4. **Pins.** The chat commands (`!pin`, `!undoPin`, `!deletePin` in

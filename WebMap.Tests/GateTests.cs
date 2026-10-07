@@ -131,5 +131,24 @@ namespace WebMap.Tests
             using var text = new StreamReader(new System.IO.Compression.GZipStream(r.Content.ReadAsStream(), System.IO.Compression.CompressionMode.Decompress));
             Assert.Contains("Viking number 39", text.ReadToEnd());
         }
+
+        // every open map polls /state: built and zipped once while nothing in it moves, and never a write behind
+        [Fact]
+        public void StateGoesGzippedAndShowsAPinTheMomentItIsPlaced()
+        {
+            for (int i = 0; i < 20; i++) server.pins.Add($"web,w{i},dot,Someone,{i}.00,0.00,a pin with a few words on it");
+            string State()
+            {
+                var req = new HttpRequestMessage(HttpMethod.Get, "/state");
+                req.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip");
+                var r = http.Send(req);
+                Assert.Contains("gzip", r.Content.Headers.ContentEncoding);
+                using var text = new StreamReader(new System.IO.Compression.GZipStream(r.Content.ReadAsStream(), System.IO.Compression.CompressionMode.Decompress));
+                return text.ReadToEnd();
+            }
+            Assert.DoesNotContain("Gonk", State());
+            Assert.Equal(200, Post("/pins", Pin, ("X-Announce-Token", Token), ("X-User", "Gonk")));
+            Assert.Contains("Gonk", State());
+        }
     }
 }
